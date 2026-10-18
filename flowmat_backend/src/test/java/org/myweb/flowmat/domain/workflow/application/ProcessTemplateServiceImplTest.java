@@ -13,7 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessTemplateCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessTemplateResponse;
 import org.myweb.flowmat.domain.workflow.domain.entity.ProcessTemplate;
@@ -42,7 +41,7 @@ class ProcessTemplateServiceImplTest {
     private IdGenerator idGenerator;
 
     @Mock
-    private ProjectAccessService projectAccessService;
+    private WorkflowAccessService workflowAccess;
 
     @Mock
     private PermissionService permissionService;

@@ -20,7 +20,7 @@ export function LoadTimeline({ rows, start, from, to }: { rows: EquipmentLoadRow
         </div>
         {rows.map((row) => {
           const name = row.equipmentCode ?? row.equipmentName
-          const { bars, lanes } = timelineBars(row.orders, from, to, row.concurrentWorkOrders ?? false)
+          const { bars, lanes } = timelineBars(row.orders, from, to, row.concurrentWorkOrders ?? false, row.concurrentLimit ?? null)
           const status = new Map(row.orders.map((one) => [one.workOrderId, one.workOrderStatus]))
           return (
             <Fragment key={row.equipmentId}>

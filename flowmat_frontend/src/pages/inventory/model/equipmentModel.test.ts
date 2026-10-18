@@ -12,7 +12,7 @@ describe('detailsForm', () => {
   it('shows recorded details as text and missing ones as empty', () => {
     expect(detailsForm(details)).toEqual({
       manufacturer: 'Acme', modelName: 'M-200', serialNo: '', capacityPerHour: '120.5', powerKwh: '0', waterLiter: '', location: 'Line 1',
-      efficiencyPercent: '', concurrentWorkOrders: false,
+      efficiencyPercent: '', concurrentWorkOrders: false, concurrentLimit: '',
     })
     expect(detailsForm({ ...details, efficiencyPercent: 85 }).efficiencyPercent).toBe('85')
     expect(detailsForm(undefined)).toEqual(EMPTY_DETAILS_FORM)
@@ -22,7 +22,8 @@ describe('detailsForm', () => {
 describe('detailsPayload', () => {
   it('trims text, reads numbers and clears empty fields', () => {
     expect(detailsPayload({ ...detailsForm(details), manufacturer: '  ', location: ' Line 2 ', waterLiter: ' 3 ' })).toEqual({
-      details: { ...details, manufacturer: null, location: 'Line 2', waterLiter: 3, efficiencyPercent: null, concurrentWorkOrders: false },
+      details: { ...details, manufacturer: null, location: 'Line 2', waterLiter: 3, efficiencyPercent: null, concurrentWorkOrders: false,
+        concurrentLimit: null },
       error: null,
     })
   })
@@ -47,6 +48,17 @@ describe('side by side', () => {
     expect(detailsForm({ ...details, concurrentWorkOrders: true }).concurrentWorkOrders).toBe(true)
     expect(detailsPayload({ ...EMPTY_DETAILS_FORM, concurrentWorkOrders: true }).details?.concurrentWorkOrders).toBe(true)
     expect(detailsPayload(EMPTY_DETAILS_FORM).details?.concurrentWorkOrders).toBe(false)
+  })
+
+  it('carries at most how many at once, only while side by side (E16)', () => {
+    expect(detailsForm({ ...details, concurrentWorkOrders: true, concurrentLimit: 3 }).concurrentLimit).toBe('3')
+    expect(detailsPayload({ ...EMPTY_DETAILS_FORM, concurrentWorkOrders: true, concurrentLimit: ' 3 ' }).details?.concurrentLimit).toBe(3)
+    expect(detailsPayload({ ...EMPTY_DETAILS_FORM, concurrentWorkOrders: true }).details?.concurrentLimit).toBeNull()
+    expect(detailsPayload({ ...EMPTY_DETAILS_FORM, concurrentLimit: '3' }).details?.concurrentLimit).toBeNull()
+    for (const wrong of ['1', '100', '2.5', 'two']) {
+      expect(detailsPayload({ ...EMPTY_DETAILS_FORM, concurrentWorkOrders: true, concurrentLimit: wrong }).error)
+        .toBe('At most at once is a whole number from 2 to 99.')
+    }
   })
 })
 

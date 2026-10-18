@@ -10,10 +10,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessConnectionCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessConnectionUpdateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessConnectionResponse;
@@ -53,16 +51,15 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
     private final WorkflowRepository workflowRepository;
     private final ProcessRepository processRepository;
     private final ProcessIoRepository processIoRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final EntityManager entityManager;
     private final IdGenerator idGenerator;
     private final GraphSyncService graphSyncService;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @Override
     public List<ProcessConnectionResponse> listConnections(String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         return processConnectionRepository.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, NOT_DELETED)
             .stream()
             .map(ProcessConnectionServiceImpl::toResponse)
@@ -73,7 +70,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
     @Transactional
     public ProcessConnectionResponse createConnection(ProcessConnectionCreateRequest request) {
         WorkflowText.requireStorable(request.workflowId(), "workflowId");
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(request.workflowId());
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(request.workflowId());
         WorkflowText.requireStorable(request.fromProcessId(), "fromProcessId");
         WorkflowText.requireStorable(request.toProcessId(), "toProcessId");
         WorkflowText.requireStorable(request.fromIoId(), "fromIoId");
@@ -86,8 +83,8 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         WorkflowText.requireStorable(request.unit(), "unit");
         WorkflowText.requireStorable(request.conditionExpr(), "conditionExpr");
         lockWorkflow(workflow);
-        Process fromProcess = projectAccessService.requireProcessWriteAccess(request.fromProcessId());
-        Process toProcess = projectAccessService.requireProcessWriteAccess(request.toProcessId());
+        Process fromProcess = workflowAccess.requireProcessWriteAccess(request.fromProcessId());
+        Process toProcess = workflowAccess.requireProcessWriteAccess(request.toProcessId());
         validateProcessMembership(workflow, fromProcess, toProcess);
 
         ProcessConnection connection = new ProcessConnection();
@@ -109,9 +106,16 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         connection.setFailurePolicy(normalizeFailurePolicy(request.failurePolicy()));
         connection.setUnit(trimToNull(request.unit()));
         connection.setDelayTimeSec(defaultIfNull(request.delayTimeSec(), BigDecimal.ZERO));
+        requireDelay(connection.getDelayTimeSec());
         connection.setLossRate(defaultIfNull(request.lossRate(), BigDecimal.ZERO));
+        requireLossRate(connection.getLossRate());
         connection.setPriority(request.priority() != null ? request.priority() : 0);
         connection.setDefaultRouteYn(Boolean.TRUE.equals(request.defaultRoute()) ? "Y" : "N");
+        if (request.splitKind() != null) {
+            applySplit(connection, request.splitKind(), request.splitValue());
+        } else if (request.splitValue() != null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "splitValue needs splitKind.");
+        }
         connection.setDeletedYn(NOT_DELETED);
         connection.setVersion(1);
         connection.setVersionNonce(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
@@ -121,17 +125,63 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         return response;
     }
 
+    /** A connection's delay is 0 or more seconds (docs/architecture/adr/ADR-010-connection-delay.md decision 8). */
+    private static void requireDelay(BigDecimal delayTimeSec) {
+        if (delayTimeSec.signum() < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "delayTimeSec is 0 or more seconds.");
+        }
+    }
+
+    /** A connection loses a fraction of what it carries, 0 up to but not 1 (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 2). */
+    private static void requireLossRate(BigDecimal lossRate) {
+        if (lossRate.signum() < 0 || lossRate.compareTo(BigDecimal.ONE) >= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "lossRate is a fraction of at least 0 and below 1 (0.05 is 5%).");
+        }
+    }
+
+    /**
+     * A Split gateway's share on the connection (docs/architecture/adr/ADR-008-quantity-split.md decision 2): a percent
+     * above 0 and at most 100 with up to 2 decimals, a fixed quantity above 0 with up to 4, or the rest without a value.
+     */
+    private static void applySplit(ProcessConnection connection, String kind, BigDecimal value) {
+        String normalized = kind.trim().toLowerCase(Locale.ROOT);
+        switch (normalized) {
+            case "share" -> {
+                if (value == null || value.signum() <= 0 || value.compareTo(BigDecimal.valueOf(100)) > 0
+                    || value.stripTrailingZeros().scale() > 2) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST,
+                        "A share split takes a percent above 0 and at most 100, with up to 2 decimals.");
+                }
+            }
+            case "fixed" -> {
+                if (value == null || value.signum() <= 0 || value.stripTrailingZeros().scale() > 4
+                    || value.precision() - value.scale() > 15) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST,
+                        "A fixed split takes a quantity above 0 with up to 4 decimals.");
+                }
+            }
+            case "rest" -> {
+                if (value != null) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "A rest split takes no splitValue.");
+                }
+            }
+            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "splitKind is share, fixed or rest.");
+        }
+        connection.setSplitKind(normalized);
+        connection.setSplitValue(value);
+    }
+
     @Override
     public ProcessConnectionResponse getConnection(String connectionId) {
-        ProcessConnection connection = projectAccessService.requireConnectionReadAccess(connectionId);
-        projectAccessService.requireWorkflowReadAccess(connection.getWorkflowId());
+        ProcessConnection connection = workflowAccess.requireConnectionReadAccess(connectionId);
+        workflowAccess.requireWorkflowReadAccess(connection.getWorkflowId());
         return toResponse(connection);
     }
 
     @Override
     @Transactional
     public ProcessConnectionResponse updateConnection(String connectionId, ProcessConnectionUpdateRequest request) {
-        ProcessConnection connection = projectAccessService.requireConnectionWriteAccess(connectionId);
+        ProcessConnection connection = workflowAccess.requireConnectionWriteAccess(connectionId);
         WorkflowText.requireStorable(request.fromIoId(), "fromIoId");
         WorkflowText.requireStorable(request.toIoId(), "toIoId");
         WorkflowText.requireStorable(request.itemId(), "itemId");
@@ -140,8 +190,8 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         WorkflowText.requireStorable(request.connectionType(), "connectionType");
         WorkflowText.requireStorable(request.conditionExpr(), "conditionExpr");
         lockWorkflowForConnection(connection);
-        Process fromProcess = projectAccessService.requireProcessWriteAccess(connection.getFromProcessId());
-        Process toProcess = projectAccessService.requireProcessWriteAccess(connection.getToProcessId());
+        Process fromProcess = workflowAccess.requireProcessWriteAccess(connection.getFromProcessId());
+        Process toProcess = workflowAccess.requireProcessWriteAccess(connection.getToProcessId());
         String previousFromIoId = connection.getFromIoId();
         String previousToIoId = connection.getToIoId();
 
@@ -197,16 +247,30 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         if (request.delayTimeSec() != null) {
             connection.setDelayTimeSec(defaultIfNull(decimalOrNull(request.delayTimeSec(), "delayTimeSec",
                 MAX_DELAY_TIME_SEC, 2, "numeric(10,2)"), BigDecimal.ZERO));
+            requireDelay(connection.getDelayTimeSec());
         }
         if (request.lossRate() != null) {
             connection.setLossRate(defaultIfNull(decimalOrNull(request.lossRate(), "lossRate",
                 MAX_LOSS_RATE, 4, "numeric(5,4)"), BigDecimal.ZERO));
+            requireLossRate(connection.getLossRate());
         }
         if (request.priority() != null) {
             connection.setPriority(integerOrZero(request.priority()));
         }
         if (request.defaultRoute() != null) {
             connection.setDefaultRouteYn(request.defaultRoute() ? "Y" : "N");
+        }
+        boolean clearSplit = Boolean.TRUE.equals(request.clearSplit());
+        if (clearSplit && (request.splitKind() != null || request.splitValue() != null)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "splitKind and splitValue cannot be supplied with clearSplit.");
+        }
+        if (clearSplit) {
+            connection.setSplitKind(null);
+            connection.setSplitValue(null);
+        } else if (request.splitKind() != null) {
+            applySplit(connection, request.splitKind(), request.splitValue());
+        } else if (request.splitValue() != null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "splitValue needs splitKind.");
         }
         connection.setVersion(connection.getVersion() + 1);
         connection.setVersionNonce(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
@@ -219,7 +283,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
     @Override
     @Transactional
     public void deleteConnection(String connectionId) {
-        ProcessConnection connection = projectAccessService.requireConnectionWriteAccess(connectionId);
+        ProcessConnection connection = workflowAccess.requireConnectionWriteAccess(connectionId);
         lockWorkflowForConnection(connection);
         String workflowId = connection.getWorkflowId();
         connection.setDeletedYn(DELETED);
@@ -228,7 +292,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
     }
 
     private void lockWorkflowForConnection(ProcessConnection connection) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(connection.getWorkflowId());
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(connection.getWorkflowId());
         lockWorkflow(workflow);
         entityManager.refresh(connection);
         if (!NOT_DELETED.equals(connection.getDeletedYn())) {
@@ -366,7 +430,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         for (String unit : new String[] {source == null ? null : source.getUnit(),
             target == null ? null : target.getUnit(), connection.getUnit()}) {
             if (unit != null && !unit.isBlank()) {
-                unitMasterRepository.findByUnitCodeIgnoreCase(unit).ifPresent(master -> types.add(master.getUnitType()));
+                catalogQuery.findUnitType(unit).ifPresent(types::add);
             }
         }
         if (types.size() > 1) {
@@ -378,12 +442,12 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         if (!hasText(itemId)) {
             return null;
         }
-        Item item = itemRepository.findByItemIdAndDeletedYn(itemId, NOT_DELETED)
+        CatalogItemView item = catalogQuery.findActiveItem(itemId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!projectId.equals(item.getProjectId())) {
+        if (!projectId.equals(item.projectId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        return item.getItemId();
+        return item.itemId();
     }
 
     private static void validateProcessMembership(Workflow workflow, Process fromProcess, Process toProcess) {
@@ -416,6 +480,8 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
             connection.getCapacity(),
             connection.getFailurePolicy(),
             connection.isDefaultRoute(),
+            connection.getSplitKind(),
+            connection.getSplitValue(),
             connection.getVersion(),
             connection.getVersionNonce()
         );

@@ -15,7 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.dto.PresenceMessage;
 import org.myweb.flowmat.domain.workflow.collab.dto.AnnotationPresencePayload;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -35,7 +35,7 @@ class PresenceControllerTest {
     private WorkflowSessionRegistry sessionRegistry;
 
     @Mock
-    private ProjectAccessService projectAccessService;
+    private WorkflowAccessService workflowAccess;
 
     @InjectMocks
     private PresenceController presenceController;
@@ -94,7 +94,7 @@ class PresenceControllerTest {
     @Test
     void rejectsNonMemberBeforeRelaying() {
         doThrow(new BusinessException(ErrorCode.FORBIDDEN))
-            .when(projectAccessService).requireWorkflowReadAccess("workflow-1", "user-1");
+            .when(workflowAccess).requireWorkflowReadAccess("workflow-1", "user-1");
         assertThatThrownBy(() -> presenceController.relay("workflow-1",
             new PresenceMessage(PresenceMessage.Type.JOIN, null, "client-1", null, null, null, null, null, 0),
             principal(), SimpMessageHeaderAccessor.create()))

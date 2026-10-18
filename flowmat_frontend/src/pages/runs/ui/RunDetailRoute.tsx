@@ -27,6 +27,7 @@ import { RunExpectedOutputs } from './RunExpectedOutputs'
 import { useBomRequirementsQuery } from '../../../entities/bom/api/useBoms'
 import { finishByProductNote, finishOutput } from '../../inventory/model/bomLineTypeModel'
 import { ChecklistFinishNote, RunInstructionChecklist } from './RunInstructionChecklist'
+import { RunStepsPanel } from './RunStepsPanel'
 import { RunStatusBadge, formatQty, isRunOpen } from './runDisplay'
 import { ItemScanInput } from '../../inventory/ui/ItemScanInput'
 import { stagingPlacesFor } from '../../inventory/model/warehouseTaskModel'
@@ -337,6 +338,7 @@ export function RunDetailRoute() {
                 madeQty={run.runStatus.toLowerCase() === 'finished' ? Number(run.actualOutputQty ?? 0) : null}
                 onRecord={fillFromOutput}
               />
+              <RunStepsPanel runId={runId} open={isRunOpen(run.runStatus)} />
               <RunInstructionChecklist projectId={projectId} runId={runId} />
             </section>
 

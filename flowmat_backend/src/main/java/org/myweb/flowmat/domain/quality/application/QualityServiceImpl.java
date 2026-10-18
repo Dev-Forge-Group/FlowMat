@@ -8,26 +8,20 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
 import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
-import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
-import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
-import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
-import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
+import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunQuery;
+import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectResolveRequest;
@@ -54,18 +48,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class QualityServiceImpl implements QualityService {
 
-    private static final String NOT_DELETED = "N";
     private static final Set<String> SEVERITIES = Set.of("minor", "major", "critical");
 
     private final QualityInspectionRepository inspectionRepository;
     private final DefectLogRepository defectLogRepository;
     private final ProjectAccessService projectAccessService;
-    private final ProductionRunRepository productionRunRepository;
-    private final ProductionRunItemRepository productionRunItemRepository;
-    private final LotMasterRepository lotMasterRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
-    private final InventoryRepository inventoryRepository;
+    private final ProductionRunQuery productionRunQuery;
+    private final LotQuery lotQuery;
+    private final CatalogQuery catalogQuery;
+    private final StockRecordQuery stockRecordQuery;
     private final InventoryCommandService inventoryCommandService;
     private final IdGenerator idGenerator;
     private final InspectionStandardService inspectionStandardService;
@@ -109,7 +100,7 @@ public class QualityServiceImpl implements QualityService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Pick what was inspected: a LOT, a run or an item.");
         }
         if (standard != null) {
-            if (target.item() == null || !standard.getItemId().equals(target.item().getItemId())) {
+            if (target.item() == null || !standard.getItemId().equals(target.item().itemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "This standard is for a different item.");
             }
             request = InspectionStandardService.applyTo(standard, request);
@@ -126,9 +117,9 @@ public class QualityServiceImpl implements QualityService {
         QualityInspection inspection = new QualityInspection();
         inspection.setInspectionId(idGenerator.generate());
         inspection.setProjectId(projectId);
-        inspection.setProductionRunId(target.run() == null ? null : target.run().getProductionRunId());
-        inspection.setItemId(target.item() == null ? null : target.item().getItemId());
-        inspection.setLotId(target.lot() == null ? null : target.lot().getLotId());
+        inspection.setProductionRunId(target.run() == null ? null : target.run().productionRunId());
+        inspection.setItemId(target.item() == null ? null : target.item().itemId());
+        inspection.setLotId(target.lot() == null ? null : target.lot().lotId());
         inspection.setInspectionType(request.inspectionType().trim());
         inspection.setResultStatus(result);
         inspection.setMeasuredValue(request.measuredValue());
@@ -203,9 +194,9 @@ public class QualityServiceImpl implements QualityService {
         defect.setDefectLogId(idGenerator.generate());
         defect.setProjectId(projectId);
         defect.setInspectionId(inspection == null ? null : inspection.getInspectionId());
-        defect.setProductionRunId(target.run() == null ? null : target.run().getProductionRunId());
-        defect.setItemId(target.item().getItemId());
-        defect.setLotId(target.lot() == null ? null : target.lot().getLotId());
+        defect.setProductionRunId(target.run() == null ? null : target.run().productionRunId());
+        defect.setItemId(target.item().itemId());
+        defect.setLotId(target.lot() == null ? null : target.lot().lotId());
         defect.setDefectType(request.defectType().trim());
         defect.setQuantity(request.quantity());
         defect.setSeverity(severity);
@@ -256,16 +247,15 @@ public class QualityServiceImpl implements QualityService {
         if (quantity.signum() <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Scrap more than 0.");
         }
-        Inventory row = inventoryRepository.findByInventoryIdAndDeletedYn(inventoryId, NOT_DELETED)
-            .filter(found -> defect.getProjectId().equals(found.getProjectId()))
+        StockRecordQuery.StockIdentity row = stockRecordQuery.findProjectStock(defect.getProjectId(), inventoryId)
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The stock record to scrap was not found in this project."));
-        if (!defect.getItemId().equals(row.getItemId())
-            || (defect.getLotId() != null && !defect.getLotId().equals(row.getLotId()))) {
+        if (!defect.getItemId().equals(row.itemId())
+            || (defect.getLotId() != null && !defect.getLotId().equals(row.lotId()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Scrap from stock of the defective item"
                 + (defect.getLotId() != null ? " and LOT" : "") + ".");
         }
         inventoryCommandService.apply(new InventoryMovement(
-            row.getInventoryId(),
+            row.inventoryId(),
             InventoryTransactionType.ADJUSTMENT,
             quantity.negate(),
             BigDecimal.ZERO,
@@ -275,60 +265,57 @@ public class QualityServiceImpl implements QualityService {
             null,
             projectAccessService.requireCurrentUserId()
         ));
-        return "scrapped " + plain(quantity) + " from " + (row.getLocation() == null ? "no location" : row.getLocation());
+        return "scrapped " + plain(quantity) + " from " + (row.location() == null ? "no location" : row.location());
     }
 
     // ---- target ----
 
-    private record Target(ProductionRun run, LotMaster lot, Item item) {
+    private record Target(ProductionRunView run, LotView lot, CatalogItemView item) {
     }
 
     /** Checks that the run, LOT and item are in the project and fit together; the item follows from the LOT. */
     private Target resolveTarget(String projectId, String productionRunId, String lotId, String itemId) {
-        ProductionRun run = null;
+        ProductionRunView run = null;
         if (trimToNull(productionRunId) != null) {
-            run = productionRunRepository.findByProductionRunIdAndDeletedYn(productionRunId.trim(), NOT_DELETED)
-                .filter(found -> projectId.equals(found.getProjectId()))
+            run = productionRunQuery.findProjectRun(projectId, productionRunId.trim())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The run was not found in this project."));
         }
-        LotMaster lot = null;
+        LotView lot = null;
         if (trimToNull(lotId) != null) {
-            lot = lotMasterRepository.findById(lotId.trim())
-                .filter(found -> projectId.equals(found.getProjectId()))
+            lot = lotQuery.findProjectLot(projectId, lotId.trim())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The LOT was not found in this project."));
         }
         String requestedItemId = trimToNull(itemId);
-        if (lot != null && requestedItemId != null && !requestedItemId.equals(lot.getItemId())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.getLotNo() + " is a LOT of a different item.");
+        if (lot != null && requestedItemId != null && !requestedItemId.equals(lot.itemId())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.lotNo() + " is a LOT of a different item.");
         }
-        String effectiveItemId = requestedItemId != null ? requestedItemId : lot == null ? null : lot.getItemId();
-        Item item = null;
+        String effectiveItemId = requestedItemId != null ? requestedItemId : lot == null ? null : lot.itemId();
+        CatalogItemView item = null;
         if (effectiveItemId != null) {
-            item = itemRepository.findByItemIdAndDeletedYn(effectiveItemId, NOT_DELETED)
-                .filter(found -> projectId.equals(found.getProjectId()))
+            item = catalogQuery.findProjectItem(projectId, effectiveItemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The item was not found in this project."));
         }
         if (run != null && lot != null && !lotInRun(run, lot)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                "LOT " + lot.getLotNo() + " was not used or made by run " + run.getRunNumber() + ".");
+                "LOT " + lot.lotNo() + " was not used or made by run " + run.runNumber() + ".");
         }
         if (run != null && lot == null && item != null && !itemInRun(run, item)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                "Item " + item.getItemCode() + " was not used or made by run " + run.getRunNumber() + ".");
+                "Item " + item.itemCode() + " was not used or made by run " + run.runNumber() + ".");
         }
         return new Target(run, lot, item);
     }
 
-    private boolean lotInRun(ProductionRun run, LotMaster lot) {
-        return run.getProductionRunId().equals(lot.getProductionRunId())
-            || productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc(run.getProductionRunId()).stream()
-                .anyMatch(recording -> !recording.isCancelled() && lot.getLotId().equals(recording.getLotId()));
+    private boolean lotInRun(ProductionRunView run, LotView lot) {
+        return run.productionRunId().equals(lot.productionRunId())
+            || productionRunQuery.findRecordings(run.productionRunId()).stream()
+                .anyMatch(recording -> lot.lotId().equals(recording.lotId()));
     }
 
-    private boolean itemInRun(ProductionRun run, Item item) {
-        return item.getItemId().equals(run.getTargetItemId())
-            || productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc(run.getProductionRunId()).stream()
-                .anyMatch(recording -> !recording.isCancelled() && item.getItemId().equals(recording.getItemId()));
+    private boolean itemInRun(ProductionRunView run, CatalogItemView item) {
+        return item.itemId().equals(run.targetItemId())
+            || productionRunQuery.findRecordings(run.productionRunId()).stream()
+                .anyMatch(recording -> item.itemId().equals(recording.itemId()));
     }
 
     /** A defect found by an inspection is about what that inspection looked at; a different value is a mistake. */
@@ -371,19 +358,19 @@ public class QualityServiceImpl implements QualityService {
     }
 
     /** Quarantines the whole LOT through the stock command path, pointing the movement at the inspection. */
-    private void quarantine(LotMaster lot, QualityInspection inspection, String actor) {
-        if (LotStatus.QUARANTINED.code().equals(lot.getLotStatus())) {
+    private void quarantine(LotView lot, QualityInspection inspection, String actor) {
+        if (LotStatus.QUARANTINED.code().equals(lot.lotStatus())) {
             return;
         }
-        if (LotStatus.CLOSED.code().equals(lot.getLotStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.getLotNo() + " is closed, so it cannot be quarantined.");
+        if (LotStatus.CLOSED.code().equals(lot.lotStatus())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.lotNo() + " is closed, so it cannot be quarantined.");
         }
-        List<Inventory> rows = inventoryRepository.findAllByLotIdAndDeletedYn(lot.getLotId(), NOT_DELETED);
+        List<String> rows = stockRecordQuery.findLotStockIds(lot.lotId());
         if (rows.isEmpty()) {
-            throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.getLotNo() + " has no stock record to quarantine.");
+            throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.lotNo() + " has no stock record to quarantine.");
         }
         inventoryCommandService.apply(new InventoryMovement(
-            rows.get(0).getInventoryId(),
+            rows.get(0),
             InventoryTransactionType.QUARANTINE,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
@@ -398,38 +385,34 @@ public class QualityServiceImpl implements QualityService {
     // ---- responses ----
 
     private record Names(
-        Map<String, ProductionRun> runs,
-        Map<String, Item> items,
-        Map<String, LotMaster> lots,
-        Map<String, String> unitCodes
+        Map<String, ProductionRunView> runs,
+        Map<String, CatalogItemView> items,
+        Map<String, LotView> lots
     ) {
     }
 
     private Names names(Stream<String> runIds, Stream<String> itemIds, Stream<String> lotIds) {
-        Map<String, ProductionRun> runs = byId(productionRunRepository.findAllById(distinct(runIds)), ProductionRun::getProductionRunId);
-        Map<String, Item> items = byId(itemRepository.findAllById(distinct(itemIds)), Item::getItemId);
-        Map<String, LotMaster> lots = byId(lotMasterRepository.findAllById(distinct(lotIds)), LotMaster::getLotId);
-        Map<String, String> unitCodes = StreamSupport.stream(
-                unitMasterRepository.findAllById(distinct(items.values().stream().map(Item::getUnitId))).spliterator(), false)
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode, (first, second) -> first));
-        return new Names(runs, items, lots, unitCodes);
+        Map<String, ProductionRunView> runs = productionRunQuery.findRuns(distinct(runIds));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(distinct(itemIds));
+        Map<String, LotView> lots = lotQuery.findLots(distinct(lotIds));
+        return new Names(runs, items, lots);
     }
 
     private QualityInspectionResponse toResponse(QualityInspection inspection, Names names) {
-        ProductionRun run = names.runs().get(inspection.getProductionRunId());
-        Item item = names.items().get(inspection.getItemId());
-        LotMaster lot = names.lots().get(inspection.getLotId());
+        ProductionRunView run = names.runs().get(inspection.getProductionRunId());
+        CatalogItemView item = names.items().get(inspection.getItemId());
+        LotView lot = names.lots().get(inspection.getLotId());
         return new QualityInspectionResponse(
             inspection.getInspectionId(),
             inspection.getProjectId(),
             inspection.getProductionRunId(),
-            run == null ? null : run.getRunNumber(),
+            run == null ? null : run.runNumber(),
             inspection.getItemId(),
-            item == null ? null : item.getItemCode(),
-            item == null ? null : item.getItemName(),
+            item == null ? null : item.itemCode(),
+            item == null ? null : item.itemName(),
             inspection.getLotId(),
-            lot == null ? null : lot.getLotNo(),
-            lot == null ? null : lot.getLotStatus(),
+            lot == null ? null : lot.lotNo(),
+            lot == null ? null : lot.lotStatus(),
             inspection.getInspectionType(),
             inspection.getResultStatus(),
             inspection.getMeasuredValue(),
@@ -444,23 +427,23 @@ public class QualityServiceImpl implements QualityService {
     }
 
     private DefectResponse toResponse(DefectLog defect, Names names) {
-        ProductionRun run = names.runs().get(defect.getProductionRunId());
-        Item item = names.items().get(defect.getItemId());
-        LotMaster lot = names.lots().get(defect.getLotId());
+        ProductionRunView run = names.runs().get(defect.getProductionRunId());
+        CatalogItemView item = names.items().get(defect.getItemId());
+        LotView lot = names.lots().get(defect.getLotId());
         return new DefectResponse(
             defect.getDefectLogId(),
             defect.getProjectId(),
             defect.getInspectionId(),
             defect.getProductionRunId(),
-            run == null ? null : run.getRunNumber(),
+            run == null ? null : run.runNumber(),
             defect.getItemId(),
-            item == null ? null : item.getItemCode(),
-            item == null ? null : item.getItemName(),
+            item == null ? null : item.itemCode(),
+            item == null ? null : item.itemName(),
             defect.getLotId(),
-            lot == null ? null : lot.getLotNo(),
+            lot == null ? null : lot.lotNo(),
             defect.getDefectType(),
             defect.getQuantity(),
-            item == null ? null : names.unitCodes().get(item.getUnitId()),
+            item == null ? null : item.unitCode(),
             defect.getSeverity(),
             defect.getReason(),
             defect.isResolved(),
@@ -470,11 +453,6 @@ public class QualityServiceImpl implements QualityService {
             defect.getResolvedBy(),
             defect.getResolvedAt()
         );
-    }
-
-    private static <T> Map<String, T> byId(Iterable<T> found, Function<T, String> id) {
-        return StreamSupport.stream(found.spliterator(), false)
-            .collect(Collectors.toMap(id, Function.identity(), (first, second) -> first));
     }
 
     private static Collection<String> distinct(Stream<String> ids) {

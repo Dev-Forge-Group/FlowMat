@@ -41,7 +41,10 @@ public record WorkInstructionResponse(
          * current: the step's limits are the standard's; changed: the standard's limits changed since (a draft takes them
          * when released); inactive: the standard is no longer an active production standard. Null without a standard.
          */
-        String standardStatus
+        String standardStatus,
+        /** The process the step belongs to and its name (ADR-011 decision 6); null for the whole run. */
+        String processId,
+        String processName
     ) {
     }
 }

@@ -1,10 +1,10 @@
 # 재고 이동 원장 (Movements 탭)
 
-상태: **구현(2026-09-24), 서버 쪽 거르기·쪽 나누기 추가(2026-09-25).** 기존 `GET /inventory-transactions?projectId=`는 그대로 두고, 원장은 새 검색 API를 씁니다.
+상태: **구현(2026-09-24), 서버 쪽 거르기·쪽 나누기 추가(2026-09-25).** 기존 `GET /inventory-transactions?projectId=`는 그대로 둔다. 원장은 새 검색 API를 쓴다.
 
 ## API
 
-`GET /inventory-transactions/search` — 프로젝트 읽기 권한
+`GET /inventory-transactions/search`. 프로젝트 읽기 권한이 필요하다.
 
 | 매개변수 | 뜻 |
 |---|---|
@@ -15,14 +15,14 @@
 | `limit` | 1~500, 기본 100. 벗어나면 400 |
 | `cursor` | 앞 페이지의 `nextCursor`. 잘못된 값은 400 |
 
-응답: `{ items: [...], nextCursor }`. 순서는 `(created_at, id)` 최신순입니다.
-- **키셋 페이징**입니다. 커서는 앞 페이지 마지막 행의 `(시각, id)`이므로, 페이지 사이에 새 이동이 기록돼도 행이 중복되거나 밀리지 않습니다.
-- 총 건수는 세지 않습니다.
-- 공용 `PageResponse`는 offset·총계 방식이라 쓰지 않았습니다.
+응답은 `{ items: [...], nextCursor }`이고, 순서는 `(created_at, id)` 최신순이다.
+- **키셋 페이징**이다. 커서는 앞 페이지 마지막 행의 `(시각, id)`다. 그래서 페이지 사이에 새 이동이 기록돼도 행이 겹치거나 밀리지 않는다.
+- 총 건수는 세지 않는다.
+- 공용 `PageResponse`는 offset·총계 방식이라 쓰지 않았다.
 
 ## 목적
 
-지금까지 재고 이력은 **행 하나씩**(Stock 탭 → History)만 볼 수 있었습니다. 원장은 프로젝트의 **모든 재고 이동**을 한 목록에서 걸러 보고 CSV로 내보내는 화면입니다. 다음 확인에 씁니다:
+지금까지 재고 이력은 **행 하나씩**(Stock 탭 → History)만 볼 수 있었다. 원장은 프로젝트의 **모든 재고 이동**을 한 목록에서 걸러 보고 CSV로 내보내는 화면이다. 다음을 확인할 때 쓴다.
 - 감사: 누가, 언제
 - 실사 대조
 - 이동·보정 추적
@@ -32,61 +32,71 @@
 재고 → **Movements** 탭
 
 - **거르기**
-  - 유형(목록에 실제로 있는 유형만 보여 줌), 품목, 기간(From–To, 현지 날짜 기준 양 끝 포함)
+  - 유형(목록에 실제로 있는 유형만 보임), 품목, 기간(From–To, 현지 날짜 기준, 양 끝 포함)
   - 검색: 메모, 참조 유형·ID, 기록자
-  - **Clear**로 한 번에 풀기
+  - **Clear**는 한 번에 푼다
 - **목록**
   - 열: 시각, 유형, 품목, 위치(LOT), 수량 변화(예약 변화), 이후 수량, 참조, 메모, 기록자
-  - 최신순이고 200건씩 보여 주며, **Show more**로 더 봅니다.
+  - 최신순으로 200건씩 보인다. **Show more**로 더 본다.
 - **Download CSV (N)**
-  - **지금 걸러진 그대로** 받습니다. 파일 이름은 `stock-movements-YYYY-MM-DD.csv`입니다.
+  - **지금 걸러진 그대로** 받는다. 파일 이름은 `stock-movements-YYYY-MM-DD.csv`다.
   - 열: `time,type,item,lot,place,quantity_change,reserved_change,quantity_after,reference_type,reference_id,note,recorded_by`
-  - RFC 4180 따옴표 규칙을 따르고(쉼표·따옴표·줄바꿈이 든 값은 감싸고 `"`는 `""`로), 스프레드시트가 한글을 바로 읽도록 BOM을 붙입니다.
-  - `time`은 서버 시각(ISO-8601) 그대로입니다.
+  - 따옴표는 RFC 4180 규칙을 따른다. 쉼표·따옴표·줄바꿈이 든 값은 감싸고, `"`는 `""`로 쓴다. 스프레드시트가 한글을 바로 읽도록 BOM을 붙인다.
+  - `time`은 서버 시각(ISO-8601) 그대로다.
 
-재고를 바꾸는 모든 화면 동작이 `['inventory-transactions']`를 새로 고치고, 원장 조회 키(`['inventory-transactions', 'project', projectId]`)가 그 아래에 있어 함께 갱신됩니다.
+재고를 바꾸는 화면 동작은 모두 `['inventory-transactions']`를 새로 고친다. 원장 조회 키(`['inventory-transactions', 'project', projectId]`)가 그 아래에 있어 함께 갱신된다.
 
 ## 과거 시점 재고 (Stock on a date)
 
-`GET /inventory-snapshots?projectId=&at=` — 프로젝트 읽기 권한. `at`(ISO 일시)이 없으면 400입니다.
+`GET /inventory-snapshots?projectId=&at=`. 프로젝트 읽기 권한이 필요하다. `at`(ISO 일시)이 없으면 400이다.
 
 **계산**
-- 모든 이동은 그 뒤 수량(`quantity_after`, `reserved_after`)을 남깁니다. 그래서 어떤 재고 행의 `at` 시점 재고는 **그때까지의 마지막 이동이 남긴 수량**입니다.
-- 한 번도 움직이지 않은 행(원장 이전 행, 직접 넣은 행)은 만들어진 뒤로 지금 수량 그대로입니다(`fromLedger=false`).
-- 그 뒤 삭제된 행도, 그 시점에 재고가 있었으면 나옵니다.
-- 보유와 예약이 모두 0인 행은 뺍니다.
-- 금액은 **오늘 단가**로 계산합니다. 단가 이력이 없기 때문입니다. 단가가 없는 품목은 합계에서 빠지고 `valueComplete=false`입니다.
-- 행마다 마지막 이동은 DB에서 `DISTINCT ON (inventory_id) … ORDER BY inventory_id, created_at DESC, inventory_transaction_id DESC`로 한 줄씩 골라 옵니다(원장 전체를 불러오지 않음). 같은 순간의 이동은 ID로 갈리며, 임의지만 늘 같은 결과입니다. 이력이 아주 많아지면 `(project_id, inventory_id, created_at)` 인덱스(새 마이그레이션)가 다음 후보입니다.
+- 모든 이동은 그 뒤 수량(`quantity_after`, `reserved_after`)을 남긴다. 그래서 재고 행의 `at` 시점 재고는 **그때까지 마지막 이동이 남긴 수량**이다.
+- 한 번도 움직이지 않은 행(원장 이전 행, 직접 넣은 행)은 만들어진 뒤로 지금 수량 그대로다(`fromLedger=false`).
+- 그 뒤 삭제된 행도 그 시점에 재고가 있었으면 나온다.
+- 보유와 예약이 모두 0인 행은 뺀다.
+- 금액은 **오늘 단가**로 계산한다. 단가 이력이 없기 때문이다. 단가가 없는 품목은 합계에서 빠지고 `valueComplete=false`다.
+- 행마다 마지막 이동은 DB에서 `DISTINCT ON (inventory_id) … ORDER BY inventory_id, created_at DESC, inventory_transaction_id DESC`로 한 줄씩 골라 온다. 원장 전체를 불러오지 않는다. 같은 순간의 이동은 ID로 갈린다. 임의지만 늘 같은 결과다. 이력이 아주 많아지면 `(project_id, inventory_id, created_at)` 인덱스(새 마이그레이션)가 다음 후보다.
 
 **화면:** Movements 탭 위의 **Ledger / Stock on a date** 전환
-- 날짜를 고르면 그날 **현지 기준 하루 끝(23:59:59.999)**의 재고를 보여 줍니다. 오늘을 고르면 지금까지입니다.
-  - 시각이 날짜로만 정해지므로 조회 키가 렌더링마다 바뀌지 않습니다.
+- 날짜를 고르면 그날 **현지 기준 하루 끝(23:59:59.999)**의 재고가 나온다. 오늘을 고르면 지금까지다.
+  - 시각을 날짜로만 정하므로 조회 키가 렌더링마다 바뀌지 않는다.
 - 요약: 행 수, 품목 수, 금액 합계.
-- **Group by:** item(기본, 품목별 행 수·보유·예약·금액), item group(품목 그룹별 행 수·품목 수·금액, [품목 상세](item-details.md)의 그룹, 그룹 없는 품목은 맨 끝 `no group`), location(위치별 행 수·품목 수·금액, 품목마다 단위가 달라 수량 합은 없음, 위치 없는 행은 맨 끝), record(행별 위치·LOT). 그룹은 지금 품목의 그룹으로 묶습니다(그룹 변경 이력은 없음). `snapshotModel.test.ts`의 `totalsByLocation`·`totalsByItemGroup`.
-- **Download CSV**: `stock-on-YYYY-MM-DD.csv`, 열 `item_code,item_name,location,lot,quantity,reserved,unit,value`. 원장 CSV와 같은 따옴표 규칙과 BOM을 씁니다.
+- **Group by:**
+  - item(기본): 품목별 행 수·보유·예약·금액
+  - item group: 품목 그룹별 행 수·품목 수·금액. 그룹은 [품목 상세](item-details.md)의 그룹이고, 그룹 없는 품목은 맨 끝 `no group`
+  - location: 위치별 행 수·품목 수·금액. 품목마다 단위가 달라 수량 합은 없다. 위치 없는 행은 맨 끝
+  - record: 행별 위치·LOT
+  - 그룹은 지금 품목의 그룹으로 묶는다. 그룹 변경 이력은 없다. `snapshotModel.test.ts`의 `totalsByLocation`·`totalsByItemGroup`.
+- **Download CSV**: `stock-on-YYYY-MM-DD.csv`, 열 `item_code,item_name,location,lot,quantity,reserved,unit,value`. 따옴표 규칙과 BOM은 원장 CSV와 같다.
 
 ## 기간 수불 (Summary by item)
 
-`GET /stock-movement-summary?projectId=&from=&to=` — 읽기 권한. `from`·`to`(ISO 일시)가 없거나 `from ≥ to`면 400.
+`GET /stock-movement-summary?projectId=&from=&to=`. 읽기 권한이 필요하다. `from`·`to`(ISO 일시)가 없거나 `from ≥ to`면 400이다.
 
-- **기초(opening):** `from` 시점 재고(위 "과거 시점 재고"와 같은 계산)의 품목별 합.
+- **기초(opening):** `from` 시점 재고의 품목별 합. 계산은 위 "과거 시점 재고"와 같다.
 - **기말(closing):** `to` 시점 재고의 품목별 합.
-- **그 사이(`from` 초과 ~ `to` 이하) 원장 이동을 종류별로:** 입고(`receipt`), 생산 산출(`production_output`), 출고(`issue`, 양수로), 생산 투입(`production_input`, 양수로), 이동(`transfer_in` − `transfer_out`, 품목 안에서는 0), 보정(`adjustment`·`reversal`, 부호 그대로). 예약·해제·격리처럼 수량이 안 바뀌는 이동은 뺍니다.
-- **unexplained** = 기말 − (기초 + 입고 + 산출 − 출고 − 투입 + 이동 + 보정). 원장이 모든 변경을 담고 있으면 0입니다. 원장 이전 행처럼 원장 밖에서 바뀐 행이 있을 때만 0이 아닙니다.
-- 모든 값이 0인 품목은 뺍니다. 품목 코드순입니다.
+- **그 사이(`from` 초과 ~ `to` 이하)의 원장 이동을 종류별로 더한다.**
+  - 입고(`receipt`), 생산 산출(`production_output`)
+  - 출고(`issue`, 양수로), 생산 투입(`production_input`, 양수로)
+  - 이동(`transfer_in` − `transfer_out`). 품목 안에서는 0이다
+  - 보정(`adjustment`·`reversal`, 부호 그대로)
+  - 예약·해제·격리처럼 수량이 바뀌지 않는 이동은 뺀다.
+- **unexplained** = 기말 − (기초 + 입고 + 산출 − 출고 − 투입 + 이동 + 보정). 원장이 모든 변경을 담으면 0이다. 원장 이전 행처럼 원장 밖에서 바뀐 행이 있을 때만 0이 아니다.
+- 모든 값이 0인 품목은 뺀다. 순서는 품목 코드순이다.
 - 화면: Movements 탭 → **Summary by item**
-  - 기간은 From–To 날짜이며 양 끝 날을 포함합니다(현지 0시 ~ 23:59:59.999). 기본값은 이번 달 1일부터 오늘까지입니다.
-  - 표에서 0은 `-`로 보이고, 들어온 것은 초록, 나간 것은 빨강입니다.
-  - 맞지 않는 품목이 있으면 경고 줄과 기말 옆 `*`를 표시하고, 툴팁에 차이를 보여 줍니다.
+  - 기간은 From–To 날짜이고 양 끝 날을 포함한다(현지 0시 ~ 23:59:59.999). 기본값은 이번 달 1일부터 오늘까지다.
+  - 표에서 0은 `-`로 보인다. 들어온 것은 초록, 나간 것은 빨강이다.
+  - 맞지 않는 품목이 있으면 경고 줄과 기말 옆 `*`가 나온다. 툴팁에 차이가 보인다.
   - **Download CSV:** `stock-summary-<from>-to-<to>.csv`, 열 `item_code,item_name,unit,opening,received,produced,issued,consumed,transferred,corrected,closing`.
 
 ## 한계
 
-- 목록은 100건씩, **Show more**로 다음 페이지를 불러옵니다.
-- 검색어는 입력이 300ms 멈추면 서버에 보냅니다.
-- CSV는 현재 거르기의 **모든 페이지**를 500건씩 받아 만듭니다. 25,000건을 넘으면 최신 25,000건만 받고, 화면에 거르기를 좁히라고 안내합니다.
-- **V44**(2026-10-03): `idx_inventory_transaction_project_created (project_id, created_at, inventory_transaction_id)`. 이동 검색의 키셋 페이지(최신순, 같은 시각은 id), 기간 수불, 과거 시점 재고, 분석 기간처럼 프로젝트 안에서 시각 범위로 읽는 질의에 쓴다. 단일 열 `project_id` 인덱스는 그대로 둔다. 세션 DB에서 트랜잭션 안에 먼저 만들어 보고 롤백한 뒤 적용했고, 이동 검색·기간 수불·과거 시점·분석 통합 테스트가 새 DB에서 통과했다
-- 위치 열은 재고 행의 **지금** 위치입니다. 행 삭제 뒤에는 비어 보입니다.
+- 목록은 100건씩이다. **Show more**로 다음 페이지를 불러온다.
+- 검색어는 입력이 300ms 멈추면 서버에 보낸다.
+- CSV는 현재 거르기의 **모든 페이지**를 500건씩 받아 만든다. 25,000건을 넘으면 최신 25,000건만 받고, 화면에 거르기를 좁히라고 안내한다.
+- **V44**(2026-10-03): `idx_inventory_transaction_project_created (project_id, created_at, inventory_transaction_id)`. 프로젝트 안에서 시각 범위로 읽는 질의에 쓴다. 이동 검색의 키셋 페이지(최신순, 같은 시각은 id), 기간 수불, 과거 시점 재고, 분석 기간이 그렇다. 단일 열 `project_id` 인덱스는 그대로 둔다. 세션 DB에서 트랜잭션 안에 먼저 만들어 보고 롤백한 뒤 적용했다. 이동 검색·기간 수불·과거 시점·분석 통합 테스트가 새 DB에서 통과했다
+- 위치 열은 재고 행의 **지금** 위치다. 행을 지운 뒤에는 비어 보인다.
 
 ## 검증
 

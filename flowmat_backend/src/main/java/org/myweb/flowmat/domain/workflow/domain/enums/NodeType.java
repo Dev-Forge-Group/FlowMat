@@ -10,7 +10,11 @@ public enum NodeType {
     INPUT,
     OUTPUT,
     /** A gateway that does no work: the server passes it at once to one of its connections (ADR-006). */
-    EXCLUSIVE;
+    EXCLUSIVE,
+    /** A gateway that waits for the branches that can still reach it, then the server passes it on once (ADR-007). */
+    JOIN,
+    /** A gateway that divides the quantity that arrives between its connections; the server passes it at once (ADR-008). */
+    SPLIT;
 
     public static String normalize(String value) {
         if (value == null || value.isBlank()) {

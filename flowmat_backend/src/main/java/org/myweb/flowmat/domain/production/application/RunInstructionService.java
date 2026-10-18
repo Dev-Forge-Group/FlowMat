@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.production.application;
 
 import java.time.OffsetDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -186,6 +187,33 @@ public class RunInstructionService {
             throw new BusinessException(ErrorCode.CONFLICT, "Confirm the required work instruction steps first ("
                 + checklist.requiredDone() + " of " + checklist.requiredSteps() + " done).");
         }
+    }
+
+    /**
+     * A process's required work instruction steps and how many are confirmed (docs/architecture/adr/ADR-011-production-steps.md
+     * decision 7); {@code missing} are their step numbers, {@code blocksFinish} whether the instruction blocks finishing.
+     */
+    public record NodeChecklist(int required, int done, List<Integer> missing, boolean blocksFinish) {
+    }
+
+    /** The run's checklist by process: one entry for each process a required step names; none without an instruction. */
+    public Map<String, NodeChecklist> byNode(ProductionRun run) {
+        RunInstructionResponse checklist = response(run);
+        if (checklist.instruction() == null) {
+            return Map.of();
+        }
+        Set<String> confirmed = checklist.checks().stream().map(RunInstructionResponse.Check::stepId).collect(Collectors.toSet());
+        Map<String, List<WorkInstructionResponse.Step>> byProcess = checklist.instruction().steps().stream()
+            .filter(step -> step.required() && step.processId() != null)
+            .collect(Collectors.groupingBy(WorkInstructionResponse.Step::processId));
+        Map<String, NodeChecklist> nodes = new HashMap<>();
+        byProcess.forEach((processId, steps) -> {
+            List<Integer> missing = steps.stream().filter(step -> !confirmed.contains(step.stepId()))
+                .map(WorkInstructionResponse.Step::stepNo).sorted().toList();
+            nodes.put(processId, new NodeChecklist(steps.size(), steps.size() - missing.size(), missing,
+                checklist.instruction().blocksFinish()));
+        });
+        return nodes;
     }
 
     private RunInstructionResponse response(ProductionRun run) {

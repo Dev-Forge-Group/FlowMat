@@ -2,6 +2,8 @@ import type {
   DowntimeType,
   EquipmentAvailabilityDto,
   EquipmentCalendarInput,
+  EquipmentCalendarVersionDto,
+  EquipmentCalendarVersionLineDto,
   EquipmentDayDto,
   EquipmentDayInput,
   EquipmentDowntimeDto,
@@ -47,7 +49,15 @@ export const EMPTY_DOWNTIME_FORM: DowntimeForm = { downtimeType: 'maintenance', 
 
 /** The saved shifts as a form, or a weekday day shift to start from. */
 export function calendarForm(schedule: EquipmentScheduleDto | undefined): CalendarForm {
-  const shifts = schedule?.calendar?.shifts ?? []
+  return shiftsForm(schedule?.calendar?.shifts ?? [])
+}
+
+/** A saved calendar version in the form, to change one that has not started (ADR-014). */
+export function versionForm(version: EquipmentCalendarVersionDto): CalendarForm {
+  return shiftsForm(version.shifts)
+}
+
+function shiftsForm(shifts: EquipmentShiftDto[]): CalendarForm {
   return shifts.length > 0
     ? { shifts: shifts.map((shift) => ({
       shiftStart: shift.shiftStart.slice(0, 5), shiftEnd: shift.shiftEnd.slice(0, 5), workDays: [...shift.workDays],
@@ -292,4 +302,36 @@ export function equipmentChoices(equipment: EquipmentDto[], currentId: string | 
 export function equipmentLabel(equipment: EquipmentDto): string {
   const name = equipment.equipmentCode ? `${equipment.equipmentCode} · ${equipment.equipmentName}` : equipment.equipmentName
   return equipment.equipmentStatus === 'active' ? name : `${name} (${equipment.equipmentStatus})`
+}
+
+/** A calendar version that has not started yet; only those can be changed or deleted (docs/architecture/adr/ADR-014-equipment-calendar-history.md). */
+export function versionUpcoming(line: { effectiveFrom: string | null }, today: string): boolean {
+  return line.effectiveFrom !== null && line.effectiveFrom > today
+}
+
+/** A version's line: from the start or a date, around the clock without shifts, and whether it applies now, is ahead or is history. */
+export function versionText(line: EquipmentCalendarVersionLineDto, today: string): string {
+  const from = line.effectiveFrom === null ? 'From the start' : `From ${line.effectiveFrom}`
+  const what = line.alwaysRunning ? `${from} · around the clock` : from
+  if (line.current) return `${what} · now`
+  return versionUpcoming(line, today) ? `${what} · upcoming` : `${what} · earlier`
+}
+
+/**
+ * Today (YYYY-MM-DD) in the project's planning zone, as the server counts it for calendar versions and copies; the browser's
+ * date when this browser cannot read the zone.
+ */
+export function projectToday(timeZone: string | undefined, now: Date): string {
+  const format = (zone: string | undefined) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  try {
+    return format(timeZone)
+  } catch {
+    return format(undefined)
+  }
+}
+
+/** A calendar applies from today or later; empty is today (ADR-014, as ADR-013 decisions 3 and 6). */
+export function startsOnProblem(startsOn: string, today: string): string | null {
+  return startsOn && startsOn < today ? 'Pick today or a later date; change a past date with a day change.' : null
 }

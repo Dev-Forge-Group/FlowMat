@@ -16,8 +16,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.LotCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.StockImportRequest;
@@ -48,10 +48,9 @@ public class StockImportService {
 
     public static final int MAX_ROWS = 1000;
     public static final String REFERENCE_TYPE = "stock_import";
-    private static final String NOT_DELETED = "N";
     private static final int MAX_INTEGER_DIGITS = 10;
 
-    private final ItemRepository itemRepository;
+    private final CatalogQuery catalogQuery;
     private final LotMasterRepository lotMasterRepository;
     private final InventoryRepository inventoryRepository;
     private final LotService lotService;
@@ -61,7 +60,7 @@ public class StockImportService {
     private final StorageLocationService storageLocationService;
 
     /** A checked row. {@code lotNo} with a null {@code lotId} is a LOT the import registers. */
-    private record Plan(Item item, String location, String lotNo, String lotId, LocalDate expiry, BigDecimal quantity, String inventoryId) {
+    private record Plan(CatalogItemView item, String location, String lotNo, String lotId, LocalDate expiry, BigDecimal quantity, String inventoryId) {
     }
 
     @Transactional
@@ -76,8 +75,8 @@ public class StockImportService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Import at most " + MAX_ROWS + " rows at a time.");
         }
 
-        Map<String, List<Item>> items = itemRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtAsc(projectId, NOT_DELETED).stream()
-            .collect(Collectors.groupingBy(Item::getItemCode));
+        Map<String, List<CatalogItemView>> items = catalogQuery.findProjectItems(projectId).stream()
+            .collect(Collectors.groupingBy(CatalogItemView::itemCode));
         // LOT numbers are unique in a project regardless of case.
         Map<String, LotMaster> lots = lotMasterRepository.findAllByProjectIdOrderByCreatedAtDesc(projectId).stream()
             .collect(Collectors.toMap(lot -> key(lot.getLotNo()), Function.identity(), (first, second) -> first));
@@ -127,13 +126,13 @@ public class StockImportService {
             String lotId = plan.lotId();
             if (lotId == null && plan.lotNo() != null) {
                 lotId = registered.computeIfAbsent(key(plan.lotNo()), lotKey -> lotService.createLot(
-                    new LotCreateRequest(projectId, plan.item().getItemId(), plan.lotNo(), null, null, plan.expiry())).lotId());
+                    new LotCreateRequest(projectId, plan.item().itemId(), plan.lotNo(), null, null, plan.expiry())).lotId());
             }
             if (plan.inventoryId() != null) {
                 inventoryCommandService.apply(new InventoryMovement(plan.inventoryId(), InventoryTransactionType.RECEIPT,
                     plan.quantity(), BigDecimal.ZERO, REFERENCE_TYPE, importId, note == null ? "Imported stock" : note, null, actor));
             } else {
-                inventoryService.createInventory(new InventoryAdjustRequest(projectId, plan.item().getItemId(), plan.quantity(),
+                inventoryService.createInventory(new InventoryAdjustRequest(projectId, plan.item().itemId(), plan.quantity(),
                     null, null, plan.location(), null, null, null, null, lotId));
             }
         }
@@ -143,7 +142,7 @@ public class StockImportService {
         String projectId,
         StockImportRequest.Row row,
         String code,
-        Map<String, List<Item>> items,
+        Map<String, List<CatalogItemView>> items,
         Map<String, LotMaster> lots,
         Map<String, Plan> newLots,
         Set<String> places,
@@ -154,7 +153,7 @@ public class StockImportService {
             problems.add("Item code is missing");
             return null;
         }
-        List<Item> matches = items.getOrDefault(code, List.of());
+        List<CatalogItemView> matches = items.getOrDefault(code, List.of());
         if (matches.isEmpty()) {
             problems.add("No item has code " + code);
         } else if (matches.size() > 1) {
@@ -189,11 +188,11 @@ public class StockImportService {
         if (matches.size() != 1) {
             return null;
         }
-        Item item = matches.get(0);
-        if (!ItemStatusRule.isActive(item)) {
-            problems.add(ItemStatusRule.refusal(item, "receive stock"));
+        CatalogItemView item = matches.get(0);
+        if (!ItemStatusRule.isActive(item.itemStatus())) {
+            problems.add(ItemStatusRule.refusal(item.itemCode(), item.itemStatus(), "receive stock"));
         }
-        boolean tracked = "Y".equals(item.getLotManageYn());
+        boolean tracked = "Y".equals(item.lotManageYn());
         if (tracked && lotNo == null) {
             problems.add(code + " is LOT-tracked; give the LOT number");
         }
@@ -204,10 +203,10 @@ public class StockImportService {
             problems.add("Only a LOT has an expiry date");
         }
         if (packs != null) {
-            if (item.getPurchaseUnit() == null || item.getConversionRate() == null) {
+            if (item.purchaseUnit() == null || item.conversionRate() == null) {
                 problems.add(code + " has no purchase unit; give the quantity");
             } else {
-                quantity = storedQuantity(packs.multiply(item.getConversionRate()), "Quantity", problems);
+                quantity = storedQuantity(packs.multiply(item.conversionRate()), "Quantity", problems);
             }
         }
 
@@ -216,7 +215,7 @@ public class StockImportService {
             LotMaster known = lots.get(key(lotNo));
             if (known != null) {
                 lotId = known.getLotId();
-                if (!known.getItemId().equals(item.getItemId())) {
+                if (!known.getItemId().equals(item.itemId())) {
                     problems.add("LOT " + known.getLotNo() + " is for a different item");
                 }
                 LotStatus status = LotStatus.fromCode(known.getLotStatus());
@@ -229,15 +228,15 @@ public class StockImportService {
                 }
             } else {
                 Plan first = newLots.get(key(lotNo));
-                if (first != null && !first.item().getItemId().equals(item.getItemId())) {
-                    problems.add("LOT " + lotNo + " is already given to " + first.item().getItemCode() + " in this file");
+                if (first != null && !first.item().itemId().equals(item.itemId())) {
+                    problems.add("LOT " + lotNo + " is already given to " + first.item().itemCode() + " in this file");
                 }
                 if (first != null && expiry != null && !expiry.equals(first.expiry())) {
                     problems.add("LOT " + lotNo + " has a different expiry on an earlier line");
                 }
             }
         }
-        String place = item.getItemId() + "|" + (location == null ? "" : location) + "|" + (lotNo == null ? "" : key(lotNo));
+        String place = item.itemId() + "|" + (location == null ? "" : location) + "|" + (lotNo == null ? "" : key(lotNo));
         if (!places.add(place)) {
             problems.add("The same item, location and LOT appear more than once; combine the lines");
         }
@@ -247,10 +246,10 @@ public class StockImportService {
 
         String inventoryId = null;
         if (lotId != null) {
-            inventoryId = inventoryRepository.findLotStockAt(projectId, item.getItemId(), lotId, location)
+            inventoryId = inventoryRepository.findLotStockAt(projectId, item.itemId(), lotId, location)
                 .map(Inventory::getInventoryId).orElse(null);
         } else if (!tracked) {
-            inventoryId = inventoryRepository.findStockAt(projectId, item.getItemId(), location).stream()
+            inventoryId = inventoryRepository.findStockAt(projectId, item.itemId(), location).stream()
                 .map(Inventory::getInventoryId).findFirst().orElse(null);
         }
         Plan plan = new Plan(item, location, lotNo, lotId, expiry, quantity, inventoryId);

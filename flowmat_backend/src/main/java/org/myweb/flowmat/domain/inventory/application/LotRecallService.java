@@ -8,14 +8,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.LotRecallQuarantineRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotRecallQuarantineResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotRecallResponse;
@@ -47,8 +43,7 @@ public class LotRecallService {
     private final LotService lotService;
     private final InventoryRepository inventoryRepository;
     private final InventoryTransactionRepository transactionRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final InventoryCommandService inventoryCommandService;
     private final ProjectAccessService projectAccessService;
 
@@ -72,12 +67,8 @@ public class LotRecallService {
             .collect(Collectors.groupingBy(Inventory::getLotId));
         Map<String, BigDecimal> issued = transactionRepository.findIssuedByLot(lots.keySet()).stream()
             .collect(Collectors.toMap(LotIssued::getLotId, LotIssued::getIssued));
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(
-                lots.values().stream().map(LotResponse::itemId).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, String> units = StreamSupport.stream(unitMasterRepository.findAllById(
-                items.values().stream().map(Item::getUnitId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode, (first, second) -> first));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(
+            lots.values().stream().map(LotResponse::itemId).collect(Collectors.toSet()));
 
         List<LotRecallResponse.Line> lines = new ArrayList<>();
         for (LotResponse lot : lots.values()) {
@@ -88,15 +79,15 @@ public class LotRecallService {
                 .map(row -> (row.getLocation() == null ? "no location" : row.getLocation()) + " "
                     + row.getQuantity().stripTrailingZeros().toPlainString())
                 .toList();
-            Item item = items.get(lot.itemId());
+            CatalogItemView item = items.get(lot.itemId());
             LotResponse viaLot = via.get(lot.lotId()) == null ? null : lots.get(via.get(lot.lotId()));
             lines.add(new LotRecallResponse.Line(
                 lot.lotId(),
                 lot.lotNo(),
                 lot.itemId(),
-                item == null ? null : item.getItemCode(),
-                item == null ? null : item.getItemName(),
-                item == null ? null : units.get(item.getUnitId()),
+                item == null ? null : item.itemCode(),
+                item == null ? null : item.itemName(),
+                item == null ? null : item.unitCode(),
                 depth.get(lot.lotId()),
                 viaLot == null ? null : viaLot.lotNo(),
                 lot.lotStatus(),

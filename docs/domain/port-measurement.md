@@ -1,6 +1,6 @@
 # 포트 수량·단위 선택 (ADR-005 결정 1)
 
-상태: **구현(2026-10-10, 세션 1 리드, §2 2cq) — 로컬 격리 검증만, 실제 API 브라우저 미검증.** 결정: [ADR-005](../architecture/adr/ADR-005-port-measurement-and-validation.md)(Accepted 2026-10-05) 결정 1과 [DECISIONS-2026-10-05](../status/DECISIONS-2026-10-05.md) §8. 새 마이그레이션 **V68**(개발 DB 미적용). [포트·연결 계약](process-port-connection-contract.md) PC-12의 "quantity는 0 이상"을 이 문서의 PM2–PM3으로 좁힌다.
+상태: **구현(2026-10-10, 세션 1 리드, §2 2cq) — 로컬 격리 검증만, 실제 API 브라우저 미검증.** 결정: [ADR-005](../architecture/adr/ADR-005-port-measurement-and-validation.md)(Accepted 2026-10-05) 결정 1과 [DECISIONS-2026-10-05](../status/DECISIONS-2026-10-05.md) §8. 새 마이그레이션 **V68**(2026-10-16 개발 DB 적용). [포트·연결 계약](process-port-connection-contract.md) PC-12의 "quantity는 0 이상"을 이 문서의 PM2–PM3으로 좁힌다.
 
 ## 바뀌지 않는 것
 

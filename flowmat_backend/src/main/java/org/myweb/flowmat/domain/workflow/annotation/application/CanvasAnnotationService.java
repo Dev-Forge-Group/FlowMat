@@ -13,6 +13,7 @@ import org.myweb.flowmat.domain.workflow.annotation.domain.AnnotationType;
 import org.myweb.flowmat.domain.workflow.annotation.domain.CanvasAnnotation;
 import org.myweb.flowmat.domain.workflow.annotation.domain.ShapeKind;
 import org.myweb.flowmat.domain.workflow.annotation.repository.CanvasAnnotationRepository;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -30,6 +31,7 @@ public class CanvasAnnotationService {
 
     private final CanvasAnnotationRepository canvasAnnotationRepository;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final FractionalIndexService fractionalIndexService;
     private final CanvasAnnotationReconcileService reconcileService;
     private final GraphSyncService graphSyncService;
@@ -37,7 +39,7 @@ public class CanvasAnnotationService {
 
     @Transactional(readOnly = true)
     public List<CanvasAnnotationResponse> list(String workflowId) {
-        Workflow workflow = projectAccessService.requireWorkflowReadAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowReadAccess(workflowId);
         return canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(
                 workflow.getWorkflowId(),
                 NOT_DELETED
@@ -47,7 +49,7 @@ public class CanvasAnnotationService {
     }
 
     public CanvasAnnotationResponse create(String workflowId, CanvasAnnotationCreateRequest request) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         CanvasAnnotation annotation = new CanvasAnnotation();
         annotation.setAnnotationId(generateId());
         annotation.setWorkflowId(workflow.getWorkflowId());
@@ -75,7 +77,7 @@ public class CanvasAnnotationService {
     }
 
     public CanvasAnnotationResponse patch(String workflowId, String annotationId, CanvasAnnotationPatchRequest request) {
-        projectAccessService.requireWorkflowWriteAccess(workflowId);
+        workflowAccess.requireWorkflowWriteAccess(workflowId);
         CanvasAnnotation annotation = canvasAnnotationRepository.findByAnnotationIdAndDeletedYn(annotationId, NOT_DELETED)
             .filter(item -> workflowId.equals(item.getWorkflowId()))
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
@@ -104,7 +106,7 @@ public class CanvasAnnotationService {
     }
 
     public void delete(String workflowId, String annotationId) {
-        projectAccessService.requireWorkflowWriteAccess(workflowId);
+        workflowAccess.requireWorkflowWriteAccess(workflowId);
         CanvasAnnotation annotation = canvasAnnotationRepository.findByAnnotationIdAndDeletedYn(annotationId, NOT_DELETED)
             .filter(item -> workflowId.equals(item.getWorkflowId()))
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
@@ -116,7 +118,7 @@ public class CanvasAnnotationService {
     }
 
     public List<CanvasAnnotationResponse> batchUpdate(String workflowId, CanvasAnnotationBatchRequest request) {
-        projectAccessService.requireWorkflowWriteAccess(workflowId);
+        workflowAccess.requireWorkflowWriteAccess(workflowId);
         String userId = projectAccessService.requireCurrentUserId();
         for (CanvasAnnotationBatchRequest.CanvasAnnotationBatchItemRequest item : request.items()) {
             CanvasAnnotation annotation = canvasAnnotationRepository.findByAnnotationIdAndDeletedYn(item.annotationId(), NOT_DELETED)

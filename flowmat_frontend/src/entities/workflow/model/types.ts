@@ -78,6 +78,9 @@ export interface CanvasEdgeViewModel {
   failurePolicy: 'stop' | 'skip' | 'retry'
   /** An Exclusive gateway's default connection (ADR-006). */
   defaultRoute?: boolean
+  /** A Split gateway's share (ADR-008). */
+  splitKind?: 'share' | 'fixed' | 'rest' | null
+  splitValue?: number | null
   version: number
   versionNonce: number
 }
@@ -179,6 +182,9 @@ export interface UpdateProcessConnectionInput {
   clearCapacity?: boolean
   failurePolicy?: 'stop' | 'skip' | 'retry'
   defaultRoute?: boolean
+  splitKind?: 'share' | 'fixed' | 'rest'
+  splitValue?: number
+  clearSplit?: boolean
 }
 
 export type CanvasMode = 'select' | 'connect'

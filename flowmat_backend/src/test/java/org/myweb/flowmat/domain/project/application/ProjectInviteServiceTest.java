@@ -22,8 +22,8 @@ import org.myweb.flowmat.domain.project.domain.entity.ProjectMember;
 import org.myweb.flowmat.domain.project.repository.ProjectInviteRepository;
 import org.myweb.flowmat.domain.project.repository.ProjectMemberRepository;
 import org.myweb.flowmat.domain.project.repository.ProjectRepository;
-import org.myweb.flowmat.domain.user.domain.entity.User;
-import org.myweb.flowmat.domain.user.repository.UserRepository;
+import org.myweb.flowmat.domain.user.application.publicapi.UserQuery;
+import org.myweb.flowmat.domain.user.application.publicapi.UserView;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -46,7 +46,7 @@ class ProjectInviteServiceTest {
     private ProjectAccessService projectAccessService;
 
     @Mock
-    private UserRepository userRepository;
+    private UserQuery userQuery;
 
     @Mock
     private IdGenerator idGenerator;
@@ -63,11 +63,11 @@ class ProjectInviteServiceTest {
     @Test
     void createInviteReturnsPendingInvite() {
         Project project = project("project-1", "owner-1");
-        User owner = user("owner-1", "owner@flowmat.local");
+        UserView owner = user("owner-1", "owner@flowmat.local");
         when(projectAccessService.requireProjectOwnerAccess("project-1")).thenReturn(project);
         when(projectAccessService.requireCurrentUserId()).thenReturn("owner-1");
-        when(userRepository.findByUserId("owner-1")).thenReturn(Optional.of(owner));
-        when(userRepository.findByUserEmail("guest@flowmat.local")).thenReturn(Optional.empty());
+        when(userQuery.findById("owner-1")).thenReturn(Optional.of(owner));
+        when(userQuery.findByEmail("guest@flowmat.local")).thenReturn(Optional.empty());
         when(projectInviteRepository.existsByProjectIdAndInvitedEmailIgnoreCaseAndInviteStatus("project-1", "guest@flowmat.local", "pending"))
             .thenReturn(false);
         when(idGenerator.generate()).thenReturn("invite-1");
@@ -112,11 +112,11 @@ class ProjectInviteServiceTest {
         invite.setExpiredAt(OffsetDateTime.now().plusDays(1));
 
         Project project = project("project-3", "owner-3");
-        User currentUser = user("member-3", "member@flowmat.local");
+        UserView currentUser = user("member-3", "member@flowmat.local");
 
         when(projectInviteRepository.findByInviteToken("token-3")).thenReturn(Optional.of(invite));
         when(projectAccessService.requireCurrentUserId()).thenReturn("member-3");
-        when(userRepository.findByUserId("member-3")).thenReturn(Optional.of(currentUser));
+        when(userQuery.findById("member-3")).thenReturn(Optional.of(currentUser));
         when(projectRepository.findByProjectIdAndDeletedYn("project-3", "N")).thenReturn(Optional.of(project));
         when(projectMemberRepository.findByProjectIdAndUserIdAndMemberStatus("project-3", "member-3", "active"))
             .thenReturn(Optional.empty());
@@ -145,11 +145,11 @@ class ProjectInviteServiceTest {
         invite.setInviteStatus("pending");
         invite.setExpiredAt(OffsetDateTime.now().plusDays(1));
 
-        User currentUser = user("member-4", "other@flowmat.local");
+        UserView currentUser = user("member-4", "other@flowmat.local");
 
         when(projectInviteRepository.findByInviteToken("token-4")).thenReturn(Optional.of(invite));
         when(projectAccessService.requireCurrentUserId()).thenReturn("member-4");
-        when(userRepository.findByUserId("member-4")).thenReturn(Optional.of(currentUser));
+        when(userQuery.findById("member-4")).thenReturn(Optional.of(currentUser));
 
         assertThatThrownBy(() -> projectInviteService.acceptInvite(new ProjectInviteAcceptRequest("token-4")))
             .isInstanceOf(BusinessException.class)
@@ -162,13 +162,12 @@ class ProjectInviteServiceTest {
         Project project = project("project-1", "owner-1");
         project.setProjectName("Line A");
         ProjectInvite invite = pendingInvite("guest@flowmat.local", OffsetDateTime.now().plusDays(3));
-        User owner = user("owner-1", "owner@flowmat.local");
-        owner.setUserName("Owner Kim");
+        UserView owner = new UserView("owner-1", "owner@flowmat.local", "Owner Kim");
         when(projectInviteRepository.findByInviteToken("token-1")).thenReturn(Optional.of(invite));
         when(projectRepository.findByProjectIdAndDeletedYn("project-1", "N")).thenReturn(Optional.of(project));
-        when(userRepository.findByUserId("owner-1")).thenReturn(Optional.of(owner));
+        when(userQuery.findById("owner-1")).thenReturn(Optional.of(owner));
         when(projectAccessService.requireCurrentUserId()).thenReturn("guest-1");
-        when(userRepository.findByUserId("guest-1")).thenReturn(Optional.of(user("guest-1", "GUEST@flowmat.local")));
+        when(userQuery.findById("guest-1")).thenReturn(Optional.of(user("guest-1", "GUEST@flowmat.local")));
 
         var preview = projectInviteService.previewInvite("token-1");
 
@@ -185,9 +184,9 @@ class ProjectInviteServiceTest {
         ProjectInvite invite = pendingInvite("guest@flowmat.local", OffsetDateTime.now().minusDays(1));
         when(projectInviteRepository.findByInviteToken("token-1")).thenReturn(Optional.of(invite));
         when(projectRepository.findByProjectIdAndDeletedYn("project-1", "N")).thenReturn(Optional.of(project("project-1", "owner-1")));
-        when(userRepository.findByUserId("owner-1")).thenReturn(Optional.empty());
+        when(userQuery.findById("owner-1")).thenReturn(Optional.empty());
         when(projectAccessService.requireCurrentUserId()).thenReturn("someone-else");
-        when(userRepository.findByUserId("someone-else")).thenReturn(Optional.of(user("someone-else", "other@flowmat.local")));
+        when(userQuery.findById("someone-else")).thenReturn(Optional.of(user("someone-else", "other@flowmat.local")));
 
         var preview = projectInviteService.previewInvite("token-1");
 
@@ -224,11 +223,7 @@ class ProjectInviteServiceTest {
         return project;
     }
 
-    private static User user(String userId, String userEmail) {
-        User user = new User();
-        user.setUserId(userId);
-        user.setUserEmail(userEmail);
-        user.setUserName(userId);
-        return user;
+    private static UserView user(String userId, String userEmail) {
+        return new UserView(userId, userEmail, userId);
     }
 }

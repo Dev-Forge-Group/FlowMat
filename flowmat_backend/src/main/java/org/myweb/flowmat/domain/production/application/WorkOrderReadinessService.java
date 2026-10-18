@@ -206,17 +206,23 @@ public class WorkOrderReadinessService {
                 + itemCode(order.getTargetItemId()) + "."));
         }
 
-        List<String> clashes = equipment.concurrentWorkOrders() ? List.of() : sameEquipment.stream()
+        Integer limit = equipment.maxConcurrent();
+        List<WorkOrder> overlapping = limit == null ? List.<WorkOrder>of() : sameEquipment.stream()
             .filter(other -> WorkOrderServiceImpl.status(other).acceptsRuns())
             .filter(other -> other.getPlannedStartAt() != null && other.getPlannedEndAt() != null
                 && other.getPlannedStartAt().isBefore(end) && other.getPlannedEndAt().isAfter(start))
             .sorted(Comparator.comparing(WorkOrder::getPlannedStartAt))
+            .toList();
+        // Up to a limit, only the orders that fill it at some moment of this window clash (E17).
+        boolean limited = limit != null && limit > 1;
+        List<String> clashes = (limited ? EquipmentOverlap.full(overlapping, start, end, limit) : overlapping).stream()
             .map(WorkOrder::getWorkOrderNumber)
             .toList();
         if (!clashes.isEmpty()) {
             String listed = String.join(", ", clashes.subList(0, Math.min(3, clashes.size())))
                 + (clashes.size() > 3 ? " and " + (clashes.size() - 3) + " more" : "");
-            checks.add(new Check("schedule", WARN, name + " is also planned for " + listed + " in this window."));
+            String full = limited ? " runs at most " + limit + " work orders at once and" : "";
+            checks.add(new Check("schedule", WARN, name + full + " is also planned for " + listed + " in this window."));
         }
     }
 

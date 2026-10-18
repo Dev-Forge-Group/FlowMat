@@ -1,9 +1,13 @@
 package org.myweb.flowmat.domain.production.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,6 +26,7 @@ import org.myweb.flowmat.domain.production.repository.WorkInstructionStepReposit
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardQuery;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardView;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -49,6 +54,8 @@ public class WorkInstructionService {
     private final InspectionStandardQuery standardQuery;
     private final ProjectAccessService projectAccessService;
     private final IdGenerator idGenerator;
+    private final WorkflowProductionQuery workflowQuery;
+    private final ObjectMapper objectMapper;
 
     public List<WorkInstructionResponse> list(String projectId, String itemId) {
         if (projectId == null || projectId.isBlank()) {
@@ -95,6 +102,26 @@ public class WorkInstructionService {
         return response(instructionRepository.save(instruction));
     }
 
+    /**
+     * The name of a process, if it is one of {@code projectId}'s (any project when null) and not deleted; else null
+     * (docs/architecture/adr/ADR-011-production-steps.md decision 6).
+     */
+    private String processName(String projectId, String processId) {
+        return workflowQuery.findProcess(processId)
+            .map(facts -> readJson(facts.json()))
+            .filter(process -> projectId == null || projectId.equals(process.path("projectId").asText()))
+            .map(process -> process.path("processName").asText(processId))
+            .orElse(null);
+    }
+
+    private JsonNode readJson(String json) {
+        try {
+            return objectMapper.readTree(json);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Process facts could not be read.", exception);
+        }
+    }
+
     @Transactional
     public WorkInstructionResponse addStep(String instructionId, WorkInstructionStepRequest request) {
         WorkInstruction instruction = findDraft(instructionId);
@@ -120,6 +147,10 @@ public class WorkInstructionService {
         if (standard != null && label == null) {
             label = standardLabel(standard);
         }
+        String processId = ProductionText.trimToNull(request.processId(), "processId");
+        if (processId != null && processName(instruction.getProjectId(), processId) == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "processId is not a process of this project.");
+        }
         List<WorkInstructionStep> steps = stepRepository.findAllByInstructionIdOrderByStepNoAsc(instruction.getInstructionId());
         WorkInstructionStep step = new WorkInstructionStep();
         step.setStepId(idGenerator.generate());
@@ -132,6 +163,7 @@ public class WorkInstructionService {
         step.setValueMin(standard == null ? request.valueMin() : standard.standardMin());
         step.setValueMax(standard == null ? request.valueMax() : standard.standardMax());
         step.setStandardId(standard == null ? null : standard.standardId());
+        step.setProcessId(processId);
         stepRepository.save(step);
         touch(instruction);
         return response(instruction);
@@ -294,6 +326,7 @@ public class WorkInstructionService {
             step.setValueMin(sourceStep.getValueMin());
             step.setValueMax(sourceStep.getValueMax());
             step.setStandardId(sourceStep.getStandardId());
+            step.setProcessId(sourceStep.getProcessId());
             copiedSteps.add(stepRepository.save(step));
         }
         takeStandardLimits(copiedSteps, false);
@@ -328,6 +361,9 @@ public class WorkInstructionService {
         Map<String, CatalogItemView> items = catalogQuery.findItems(instructions.stream().map(WorkInstruction::getItemId).distinct().toList());
         Map<String, InspectionStandardView> standards = standardQuery.findStandards(steps.values().stream().flatMap(List::stream)
             .map(WorkInstructionStep::getStandardId).filter(Objects::nonNull).distinct().toList());
+        Map<String, String> processNames = new HashMap<>();
+        steps.values().stream().flatMap(List::stream).map(WorkInstructionStep::getProcessId).filter(Objects::nonNull).distinct()
+            .forEach(processId -> processNames.put(processId, processName(null, processId)));
         return instructions.stream()
             .map(instruction -> {
                 CatalogItemView item = items.get(instruction.getItemId());
@@ -338,7 +374,8 @@ public class WorkInstructionService {
                         return new WorkInstructionResponse.Step(step.getStepId(), step.getStepNo(), step.getStepText(),
                             "Y".equals(step.getRequiredYn()), "Y".equals(step.getRecordsValueYn()), step.getValueLabel(),
                             step.getValueMin(), step.getValueMax(), step.getStandardId(),
-                            standard == null ? null : standard.inspectionType(), standardStatus(step, standard));
+                            standard == null ? null : standard.inspectionType(), standardStatus(step, standard),
+                            step.getProcessId(), processNames.get(step.getProcessId()));
                     })
                     .toList();
                 return new WorkInstructionResponse(instruction.getInstructionId(), instruction.getProjectId(), instruction.getItemId(),

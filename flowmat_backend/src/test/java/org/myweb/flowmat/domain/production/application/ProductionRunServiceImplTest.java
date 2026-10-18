@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.junit.jupiter.api.BeforeEach;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemFactsQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockFactsQuery;
@@ -58,6 +59,7 @@ class ProductionRunServiceImplTest {
     @Mock private ProductionRunRepository productionRunRepository;
     @Mock private ProductionRunItemRepository productionRunItemRepository;
     @Mock private ProjectAccessService projectAccessService;
+    @Mock private WorkflowAccess workflowAccess;
     @Mock private InventoryCommandService inventoryCommandService;
     @Mock private FlowRuleEngineService flowRuleEngineService;
     @Mock private IdGenerator idGenerator;

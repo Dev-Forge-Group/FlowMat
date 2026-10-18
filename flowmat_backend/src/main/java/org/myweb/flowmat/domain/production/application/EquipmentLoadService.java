@@ -149,12 +149,14 @@ public class EquipmentLoadService {
                 changeover, needed, inWindow, setupCost(changeover, hourlyCost)));
         }
         BigDecimal available = window.availableHours();
-        BigDecimal percent = available.signum() > 0 ? planned.multiply(HUNDRED).divide(available, 1, RoundingMode.HALF_UP) : null;
+        // Up to N side by side it has N times the hours (E18); with no limit it is never overloaded (E14).
+        Integer limit = equipment.maxConcurrent();
+        BigDecimal capacity = limit == null ? available : available.multiply(BigDecimal.valueOf(limit));
+        BigDecimal percent = capacity.signum() > 0 ? planned.multiply(HUNDRED).divide(capacity, 1, RoundingMode.HALF_UP) : null;
         return new EquipmentLoadResponse.Row(equipment.equipmentId(), equipment.equipmentCode(), equipment.equipmentName(),
             equipment.equipmentStatus(), equipment.capacityPerHour(), equipment.efficiencyPercent(), equipment.concurrentWorkOrders(),
-            window.calendarSet(), available, window.downtimeHours(),
-            // Orders running side by side may need more hours than the equipment has without overloading it (E12).
-            planned, drafts, percent, !equipment.concurrentWorkOrders() && planned.compareTo(available) > 0, unplanned, unmeasured, shown,
+            equipment.concurrentLimit(), window.calendarSet(), available, window.downtimeHours(),
+            planned, drafts, percent, limit != null && planned.compareTo(capacity) > 0, unplanned, unmeasured, shown,
             changeovers(equipment.equipmentId(), inWindowOrders, mine));
     }
 

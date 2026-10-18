@@ -13,11 +13,13 @@ export interface EquipmentDetailsForm {
   efficiencyPercent: string
   /** Several work orders at once (docs/domain/equipment.md E12). */
   concurrentWorkOrders: boolean
+  /** At most this many at once while side by side, as typed; empty is no limit (E16). */
+  concurrentLimit: string
 }
 
 export const EMPTY_DETAILS_FORM: EquipmentDetailsForm = {
   manufacturer: '', modelName: '', serialNo: '', capacityPerHour: '', powerKwh: '', waterLiter: '', location: '', efficiencyPercent: '',
-  concurrentWorkOrders: false,
+  concurrentWorkOrders: false, concurrentLimit: '',
 }
 
 const NUMBERS = [
@@ -35,6 +37,7 @@ export function detailsForm(details: EquipmentDetailsDto | null | undefined): Eq
     capacityPerHour: num(details.capacityPerHour), powerKwh: num(details.powerKwh), waterLiter: num(details.waterLiter),
     location: text(details.location), efficiencyPercent: num(details.efficiencyPercent ?? null),
     concurrentWorkOrders: details.concurrentWorkOrders ?? false,
+    concurrentLimit: details.concurrentLimit != null ? String(details.concurrentLimit) : '',
   }
 }
 
@@ -60,12 +63,19 @@ export function detailsPayload(form: EquipmentDetailsForm): { details: Equipment
   if (efficiency !== null && (!Number.isFinite(efficiency) || efficiency <= 0 || efficiency > 100)) {
     return { details: null, error: 'Efficiency % must be above 0 and at most 100.' }
   }
+  // While side by side, at most 2 to 99 at once (E16); empty is no limit.
+  const limitRaw = form.concurrentWorkOrders ? form.concurrentLimit.trim() : ''
+  const limit = limitRaw === '' ? null : Number(limitRaw)
+  if (limit !== null && (!Number.isInteger(limit) || limit < 2 || limit > 99)) {
+    return { details: null, error: 'At most at once is a whole number from 2 to 99.' }
+  }
   const text = (value: string) => (value.trim() === '' ? null : value.trim())
   return {
     details: {
       manufacturer: text(form.manufacturer), modelName: text(form.modelName), serialNo: text(form.serialNo),
       capacityPerHour: numbers.capacityPerHour ?? null, powerKwh: numbers.powerKwh ?? null, waterLiter: numbers.waterLiter ?? null,
       location: text(form.location), efficiencyPercent: efficiency, concurrentWorkOrders: form.concurrentWorkOrders,
+      concurrentLimit: limit,
     },
     error: null,
   }

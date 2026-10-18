@@ -3,13 +3,13 @@ package org.myweb.flowmat.domain.workflow.api;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowUpdateRequest;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowCanvasResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowGraphChangesResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowResponse;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.WorkflowSessionRegistry;
 import org.myweb.flowmat.domain.workflow.collab.dto.PresenceMessage;
@@ -35,7 +35,7 @@ public class WorkflowController {
     private final WorkflowCanvasService workflowCanvasService;
     private final GraphSyncService graphSyncService;
     private final WorkflowSessionRegistry sessionRegistry;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @GetMapping
     public ApiResponse<List<WorkflowResponse>> listWorkflows(@RequestParam("projectId") String projectId) {
@@ -81,7 +81,7 @@ public class WorkflowController {
 
     @GetMapping("/{workflowId}/presence")
     public ApiResponse<List<PresenceMessage>> getPresence(@PathVariable("workflowId") String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         List<PresenceMessage> snapshot = sessionRegistry.listWorkflowSessions(workflowId).stream()
             .filter(session -> session.userId() != null)
             .map(session -> new PresenceMessage(

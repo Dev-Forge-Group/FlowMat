@@ -3,8 +3,8 @@ package org.myweb.flowmat.domain.workflow.application;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
 import org.myweb.flowmat.domain.project.domain.entity.Project;
-import org.myweb.flowmat.domain.project.repository.ProjectRepository;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowTemplateApplyRequest;
 import org.myweb.flowmat.global.rbac.PermissionService;
 import org.myweb.flowmat.global.rbac.SystemPermission;
@@ -32,7 +32,7 @@ public class WorkflowTemplateServiceImpl implements WorkflowTemplateService {
 
     private final WorkflowTemplateRepository workflowTemplateRepository;
     private final WorkflowRepository workflowRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectWorkflowCommand projectWorkflows;
     private final IdGenerator idGenerator;
     private final ProjectAccessService projectAccessService;
     private final PermissionService permissionService;
@@ -138,10 +138,7 @@ public class WorkflowTemplateServiceImpl implements WorkflowTemplateService {
         workflow.setDeletedYn(NOT_DELETED);
 
         Workflow savedWorkflow = workflowRepository.save(workflow);
-        if (project.getCurrentWorkflowId() == null) {
-            project.setCurrentWorkflowId(savedWorkflow.getWorkflowId());
-            projectRepository.save(project);
-        }
+        projectWorkflows.workflowAdded(project.getProjectId(), savedWorkflow.getWorkflowId());
         return toWorkflowResponse(savedWorkflow);
     }
 

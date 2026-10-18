@@ -10,15 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomExplosionResponse;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -40,7 +39,7 @@ public class BomExplosionService {
 
     private final BomHeaderRepository bomHeaderRepository;
     private final BomService bomService;
-    private final ItemRepository itemRepository;
+    private final CatalogQuery catalogQuery;
     private final ProjectAccessService projectAccessService;
     private final ProjectCalendarQuery projectCalendar;
 
@@ -66,8 +65,7 @@ public class BomExplosionService {
         Set<String> itemIds = new HashSet<>(walk.bought.keySet());
         walk.lines.forEach(line -> itemIds.add(line.itemId()));
         itemIds.add(header.getTargetItemId());
-        Map<String, Item> items = itemRepository.findAllById(itemIds).stream()
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(itemIds);
 
         List<BomExplosionResponse.Line> lines = walk.lines.stream()
             .map(line -> new BomExplosionResponse.Line(line.level(), line.parentItemId(), line.itemId(), code(items, line.itemId()),
@@ -77,8 +75,8 @@ public class BomExplosionService {
         boolean complete = true;
         List<BomExplosionResponse.Material> materials = new ArrayList<>();
         for (Map.Entry<String, BigDecimal> entry : walk.bought.entrySet()) {
-            Item item = items.get(entry.getKey());
-            BigDecimal unitCost = item != null && item.getUnitCost() != null && item.getUnitCost().signum() > 0 ? item.getUnitCost() : null;
+            CatalogItemView item = items.get(entry.getKey());
+            BigDecimal unitCost = item != null && item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
             BigDecimal lineCost = unitCost == null ? null : scale(entry.getValue().multiply(unitCost));
             if (lineCost == null) {
                 complete = false;
@@ -158,14 +156,14 @@ public class BomExplosionService {
         return quantity;
     }
 
-    private static String code(Map<String, Item> items, String itemId) {
-        Item item = items.get(itemId);
-        return item == null ? itemId : item.getItemCode();
+    private static String code(Map<String, CatalogItemView> items, String itemId) {
+        CatalogItemView item = items.get(itemId);
+        return item == null ? itemId : item.itemCode();
     }
 
-    private static String name(Map<String, Item> items, String itemId) {
-        Item item = items.get(itemId);
-        return item == null ? null : item.getItemName();
+    private static String name(Map<String, CatalogItemView> items, String itemId) {
+        CatalogItemView item = items.get(itemId);
+        return item == null ? null : item.itemName();
     }
 
     private static BigDecimal scale(BigDecimal value) {

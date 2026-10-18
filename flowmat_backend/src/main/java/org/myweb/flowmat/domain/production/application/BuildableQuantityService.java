@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomLineResponse;
@@ -17,10 +16,8 @@ import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
 import org.myweb.flowmat.domain.bom.application.BomService;
 import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.BuildableQuantityResponse;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -38,12 +35,10 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class BuildableQuantityService {
 
-    private static final String NOT_DELETED = "N";
     private static final int SCALE = 4;
 
     private final BomService bomService;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final UnitConverter unitConverter;
     private final UsableStock usableStock;
 
@@ -74,8 +69,8 @@ public class BuildableQuantityService {
         return result;
     }
 
-    /** The items, units and usable stock the BOMs need, each read once. */
-    private record Stock(Map<String, Item> items, Map<String, UnitMaster> units, Map<String, BigDecimal> usable) {
+    /** The items and usable stock the BOMs need, each read once. */
+    private record Stock(Map<String, CatalogItemView> items, Map<String, BigDecimal> usable) {
     }
 
     private Stock stock(String projectId, List<BomResponse> boms) {
@@ -84,25 +79,20 @@ public class BuildableQuantityService {
             .collect(Collectors.toSet());
         Set<String> itemIds = new HashSet<>(materials);
         boms.forEach(bom -> itemIds.add(bom.targetItemId()));
-        Map<String, Item> items = itemRepository.findAllById(itemIds).stream()
-            .filter(item -> NOT_DELETED.equals(item.getDeletedYn()))
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, UnitMaster> units = unitMasterRepository.findAllByOrderByUnitTypeAscUnitCodeAsc().stream()
-            .collect(Collectors.toMap(UnitMaster::getUnitId, Function.identity()));
-        return new Stock(items, units, materials.isEmpty() ? Map.of() : usableStock.byItem(projectId, materials));
+        Map<String, CatalogItemView> items = catalogQuery.findActiveItems(itemIds);
+        return new Stock(items, materials.isEmpty() ? Map.of() : usableStock.byItem(projectId, materials));
     }
 
     private BuildableQuantityResponse compute(BomResponse bom, Stock stock) {
-        Item target = stock.items().get(bom.targetItemId());
+        CatalogItemView target = stock.items().get(bom.targetItemId());
         if (target == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The BOM's product no longer exists.");
         }
-        UnitMaster unit = target.getUnitId() == null ? null : stock.units().get(target.getUnitId());
-        BigDecimal batch = unitConverter.toItemUnit(bom.baseQuantity(), bom.baseUnit(), target.getUnitId()).quantity();
+        BigDecimal batch = unitConverter.toItemUnit(bom.baseQuantity(), bom.baseUnit(), target.unitId()).quantity();
         if (batch == null || batch.signum() <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Base quantity must be greater than 0.");
         }
-        int buildableScale = unit != null && "count".equals(unit.getUnitType()) ? 0 : SCALE;
+        int buildableScale = "count".equals(target.unitType()) ? 0 : SCALE;
 
         Map<String, BigDecimal> needs = new LinkedHashMap<>();
         Map<String, String> itemUnits = new LinkedHashMap<>();
@@ -117,14 +107,14 @@ public class BuildableQuantityService {
             if (!BomTree.isMaterial(line.lineType())) {
                 continue;
             }
-            Item child = stock.items().get(line.childItemId());
+            CatalogItemView child = stock.items().get(line.childItemId());
             if (child == null) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Material " + line.childItemId() + " no longer exists.");
             }
-            UnitConverter.Conversion need = unitConverter.toItemUnit(line.quantity(), line.unit(), child.getUnitId());
+            UnitConverter.Conversion need = unitConverter.toItemUnit(line.quantity(), line.unit(), child.unitId());
             // The BOM rounds each converted line before adding it. Repeated materials share one stock balance.
-            needs.merge(child.getItemId(), need.quantity().setScale(SCALE, RoundingMode.HALF_UP), BigDecimal::add);
-            itemUnits.putIfAbsent(child.getItemId(), need.toUnitCode());
+            needs.merge(child.itemId(), need.quantity().setScale(SCALE, RoundingMode.HALF_UP), BigDecimal::add);
+            itemUnits.putIfAbsent(child.itemId(), need.toUnitCode());
         }
         List<BuildableQuantityResponse.Line> lines = new ArrayList<>();
         BigDecimal least = null;
@@ -143,7 +133,7 @@ public class BuildableQuantityService {
             lines.add(new BuildableQuantityResponse.Line(itemId, itemUnits.get(itemId), perBatch,
                 have.setScale(SCALE, RoundingMode.HALF_UP), allows));
         }
-        return new BuildableQuantityResponse(bom.bomId(), bom.targetItemId(), unit == null ? bom.baseUnit() : unit.getUnitCode(),
+        return new BuildableQuantityResponse(bom.bomId(), bom.targetItemId(), target.unitCode() == null ? bom.baseUnit() : target.unitCode(),
             batch, least, limiting, lines, null);
     }
 }

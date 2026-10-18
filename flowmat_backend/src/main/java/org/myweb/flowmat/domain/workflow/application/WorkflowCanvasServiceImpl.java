@@ -37,11 +37,12 @@ public class WorkflowCanvasServiceImpl implements WorkflowCanvasService {
     private final ProcessConnectionRepository processConnectionRepository;
     private final GraphSyncService graphSyncService;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final CanvasAnnotationService canvasAnnotationService;
 
     @Override
     public WorkflowCanvasResponse getCanvas(String workflowId) {
-        Workflow workflow = projectAccessService.requireWorkflowReadAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowReadAccess(workflowId);
         // Capture the replay cursor before reading the DB snapshot. Changes committed
         // during the reads are then replayed, rather than silently skipped.
         long graphSeq = graphSyncService.getCurrentSeq(workflow.getWorkflowId());
@@ -128,6 +129,8 @@ public class WorkflowCanvasServiceImpl implements WorkflowCanvasService {
             connection.getCapacity(),
             connection.getFailurePolicy(),
             connection.isDefaultRoute(),
+            connection.getSplitKind(),
+            connection.getSplitValue(),
             connection.getVersion(),
             connection.getVersionNonce()
         );

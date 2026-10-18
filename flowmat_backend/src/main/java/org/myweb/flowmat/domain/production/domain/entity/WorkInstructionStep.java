@@ -40,4 +40,7 @@ public class WorkInstructionStep {
 
     /** The inspection standard the limits come from (W13, V71); null when they were typed. */
     private String standardId;
+
+    /** The process the step belongs to (V91, docs/architecture/adr/ADR-011-production-steps.md decision 6); null for the whole run. */
+    private String processId;
 }

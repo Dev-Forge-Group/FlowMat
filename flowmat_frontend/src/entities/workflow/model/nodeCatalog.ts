@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-export type WorkflowNodePaletteTool = 'process' | 'equipment' | 'storage' | 'input' | 'output' | 'exclusive'
+export type WorkflowNodePaletteTool = 'process' | 'equipment' | 'storage' | 'input' | 'output' | 'exclusive' | 'join' | 'split'
 
 export type WorkflowAnnotationTool = 'annotation-shape' | 'annotation-text' | 'annotation-freehand'
 
@@ -122,6 +122,32 @@ const WORKFLOW_NODE_DEFINITIONS: WorkflowNodeDefinition[] = [
     height: 72,
     shapeKind: 'dashed',
     defaultConnectionType: 'control_flow',
+    isTerminal: false,
+  },
+  {
+    tool: 'join',
+    nodeType: 'join',
+    processType: 'gateway',
+    colorScheme: 'gray',
+    label: 'Join',
+    description: 'Gateway: waits for every branch that can still reach it, then sends on what arrived, once.',
+    width: 150,
+    height: 72,
+    shapeKind: 'dashed',
+    defaultConnectionType: 'control_flow',
+    isTerminal: false,
+  },
+  {
+    tool: 'split',
+    nodeType: 'split',
+    processType: 'gateway',
+    colorScheme: 'violet',
+    label: 'Split',
+    description: 'Gateway: divides the quantity that arrives between its connections: fixed amounts, percents and the rest.',
+    width: 150,
+    height: 72,
+    shapeKind: 'dashed',
+    defaultConnectionType: 'material_flow',
     isTerminal: false,
   },
 ]

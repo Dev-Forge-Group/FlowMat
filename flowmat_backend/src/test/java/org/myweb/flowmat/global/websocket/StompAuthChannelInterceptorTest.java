@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.security.AuthUser;
@@ -45,12 +45,12 @@ class StompAuthChannelInterceptorTest {
         accessor.setDestination(destination);
         accessor.setUser(new UsernamePasswordAuthenticationToken(new AuthUser("user-1"), null));
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
-        assertThatThrownBy(() -> new StompAuthChannelInterceptor(jwtProvider, projectAccessService).preSend(message, null))
+        assertThatThrownBy(() -> new StompAuthChannelInterceptor(jwtProvider, workflowAccess).preSend(message, null))
             .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }
 
     @Mock
-    private ProjectAccessService projectAccessService;
+    private WorkflowAccess workflowAccess;
 
     private final JwtProvider jwtProvider = new JwtProvider(
         "flowmat-local-dev-secret-key-32bytes!!",
@@ -60,7 +60,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void connectWithAccessTokenSetsAuthenticatedPrincipal() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         String accessToken = jwtProvider.generateAccessToken("user-1");
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.setLeaveMutable(true);
@@ -79,7 +79,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void connectRejectsRefreshToken() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         String refreshToken = jwtProvider.generateRefreshToken("user-1");
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.setLeaveMutable(true);
@@ -94,7 +94,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void connectRejectsExpiredAccessToken() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         String expiredToken = jwtProvider.generateAccessToken("user-1", "user", -1);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.setLeaveMutable(true);
@@ -109,7 +109,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void connectRejectsMalformedAccessToken() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.setLeaveMutable(true);
         accessor.setNativeHeader("Authorization", "Bearer not-a-jwt");
@@ -123,7 +123,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void workflowSubscribeRequiresAuthenticatedUser() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setLeaveMutable(true);
         accessor.setDestination("/topic/workflow/workflow-1/presence");
@@ -137,7 +137,7 @@ class StompAuthChannelInterceptorTest {
 
     @Test
     void workflowSendChecksWorkflowMembership() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         accessor.setLeaveMutable(true);
         accessor.setDestination("/app/workflow/workflow-7/presence");
@@ -146,12 +146,12 @@ class StompAuthChannelInterceptorTest {
 
         interceptor.preSend(message, null);
 
-        verify(projectAccessService).requireWorkflowWriteAccess("workflow-7", "user-7");
+        verify(workflowAccess).requireWrite("workflow-7", "user-7");
     }
 
     @Test
     void workflowSubscribeChecksWorkflowReadMembership() {
-        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, projectAccessService);
+        StompAuthChannelInterceptor interceptor = new StompAuthChannelInterceptor(jwtProvider, workflowAccess);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setLeaveMutable(true);
         accessor.setDestination("/topic/workflow/workflow-8/graph");
@@ -160,6 +160,6 @@ class StompAuthChannelInterceptorTest {
 
         interceptor.preSend(message, null);
 
-        verify(projectAccessService).requireWorkflowReadAccess("workflow-8", "user-8");
+        verify(workflowAccess).requireRead("workflow-8", "user-8");
     }
 }

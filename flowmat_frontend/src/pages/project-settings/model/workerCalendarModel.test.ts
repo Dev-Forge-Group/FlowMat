@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { dayOffText, daysText, rotaProblem, rotaShiftText, rotaText, shiftText, weeklyText, workerDayText } from './workerCalendarModel'
+import {
+  dayOffText, daysText, rotaProblem, rotaShiftText, rotaText, scheduleText, scheduleUpcoming, shiftText, startsOnProblem, weeklyText,
+  workerDayText,
+} from './workerCalendarModel'
 
 describe('rota', () => {
   const rota = { weeks: 2, startsOn: '2041-09-02', currentWeek: 1 }
@@ -48,5 +51,28 @@ describe('worker calendar text', () => {
     expect(weeklyText({ calendarSet: false, weeklyHours: 0 })).toBe('No shifts set')
     expect(dayOffText({ firstDay: '2041-03-06', lastDay: '2041-03-06', reason: 'Training' })).toBe('2041-03-06 · Training')
     expect(dayOffText({ firstDay: '2041-03-06', lastDay: '2041-03-08', reason: null })).toBe('2041-03-06 – 2041-03-08')
+  })
+})
+
+describe('versions of weekly shifts (ADR-013)', () => {
+  const today = '2041-09-05'
+
+  it('says which version applies now, which is ahead and which is history', () => {
+    expect(scheduleText({ effectiveFrom: null, current: true }, today)).toBe('From the start · now')
+    expect(scheduleText({ effectiveFrom: '2041-09-09', current: false }, today)).toBe('From 2041-09-09 · upcoming')
+    expect(scheduleText({ effectiveFrom: null, current: false }, today)).toBe('From the start · earlier')
+    expect(scheduleText({ effectiveFrom: '2041-09-05', current: true }, today)).toBe('From 2041-09-05 · now')
+  })
+
+  it('lets only a version that has not started change or go', () => {
+    expect(scheduleUpcoming({ effectiveFrom: '2041-09-06' }, today)).toBe(true)
+    expect(scheduleUpcoming({ effectiveFrom: today }, today)).toBe(false)
+    expect(scheduleUpcoming({ effectiveFrom: null }, today)).toBe(false)
+  })
+
+  it('refuses a start before today; empty is today', () => {
+    expect(startsOnProblem('', today)).toBeNull()
+    expect(startsOnProblem(today, today)).toBeNull()
+    expect(startsOnProblem('2041-09-04', today)).toBe('Pick today or a later date; change a past date with a day change.')
   })
 })

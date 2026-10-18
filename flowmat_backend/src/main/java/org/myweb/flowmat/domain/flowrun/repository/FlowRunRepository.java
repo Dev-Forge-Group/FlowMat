@@ -13,6 +13,8 @@ public interface FlowRunRepository extends JpaRepository<FlowRun, String> {
 
     List<FlowRun> findAllByWorkflowIdOrderByStartedAtDesc(String workflowId);
 
+    Optional<FlowRun> findByProductionRunId(String productionRunId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select run from FlowRun run where run.flowRunId = :flowRunId")
     Optional<FlowRun> findLockedByFlowRunId(@Param("flowRunId") String flowRunId);

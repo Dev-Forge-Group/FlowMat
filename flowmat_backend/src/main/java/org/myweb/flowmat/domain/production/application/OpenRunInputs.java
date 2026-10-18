@@ -7,13 +7,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
@@ -36,7 +34,7 @@ public class OpenRunInputs {
 
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
-    private final ItemRepository itemRepository;
+    private final CatalogQuery catalogQuery;
     private final UnitConverter unitConverter;
 
     /** For one order: material id → recorded input. */
@@ -59,20 +57,19 @@ public class OpenRunInputs {
         for (String runId : orderOfRun.keySet()) {
             recordings.addAll(productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc(runId));
         }
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(
-                recordings.stream().map(ProductionRunItem::getItemId).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(
+            recordings.stream().map(ProductionRunItem::getItemId).collect(Collectors.toSet()));
         for (ProductionRunItem recording : recordings) {
-            Item item = items.get(recording.getItemId());
+            CatalogItemView item = items.get(recording.getItemId());
             BigDecimal recordedQuantity = recording.getActualQty() != null ? recording.getActualQty() : recording.getPlannedQty();
             if (!"input".equals(recording.getDirection()) || recording.isCancelled() || "bom".equals(recording.getQuantitySource())
                 || recordedQuantity == null || item == null) {
                 continue;
             }
             try {
-                BigDecimal inItemUnit = unitConverter.toItemUnit(recordedQuantity, recording.getUnit(), item.getUnitId()).quantity();
+                BigDecimal inItemUnit = unitConverter.toItemUnit(recordedQuantity, recording.getUnit(), item.unitId()).quantity();
                 used.computeIfAbsent(orderOfRun.get(recording.getProductionRunId()), id -> new HashMap<>())
-                    .merge(item.getItemId(), inItemUnit, BigDecimal::add);
+                    .merge(item.itemId(), inItemUnit, BigDecimal::add);
             } catch (BusinessException ignored) {
                 // Not convertible to the material's unit: it cannot be set against the requirement.
             }

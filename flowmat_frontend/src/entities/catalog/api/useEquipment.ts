@@ -57,6 +57,24 @@ export interface EquipmentScheduleDto {
   downtimes: EquipmentDowntimeDto[]
   /** Dates whose shifts differ from the calendar's, earliest first. */
   days: EquipmentDayDto[]
+  /** The calendar's versions, earliest first; {@code calendar} is today's (docs/architecture/adr/ADR-014-equipment-calendar-history.md). */
+  versions?: EquipmentCalendarVersionLineDto[]
+}
+
+/** A calendar version from a date (null: from the start) until the next; without shifts the equipment runs around the clock. */
+export interface EquipmentCalendarVersionLineDto {
+  scheduleId: string
+  /** YYYY-MM-DD; null is the version from the start. */
+  effectiveFrom: string | null
+  /** The version that applies today. */
+  current: boolean
+  alwaysRunning: boolean
+}
+
+/** One calendar version with its shifts, to change one that has not started (ADR-014). */
+export interface EquipmentCalendarVersionDto extends EquipmentCalendarVersionLineDto {
+  shifts: EquipmentShiftDto[]
+  weeklyHours: number
 }
 
 /** The shifts that start on one date; none closes the day. */
@@ -101,9 +119,14 @@ export interface HolidayDto {
   createdBy: string | null
 }
 
-/** Replaces all of the equipment's shifts (at most six; the server refuses overlaps). */
+/**
+ * The equipment's shifts from {@code effectiveFrom}, today when left out (at most six; the server refuses overlaps). Earlier
+ * dates keep the shifts they had (docs/architecture/adr/ADR-014-equipment-calendar-history.md).
+ */
 export interface EquipmentCalendarInput {
   shifts: { shiftStart: string; shiftEnd: string; workDays: number[] }[]
+  /** YYYY-MM-DD, today or later. */
+  effectiveFrom?: string
 }
 
 export interface EquipmentDowntimeInput {
@@ -135,6 +158,12 @@ export function useEquipmentScheduleQuery(equipmentId: string) {
       ),
     enabled: Boolean(equipmentId),
   })
+}
+
+/** One version of the equipment's calendar, to change one that has not started (ADR-014). */
+export async function fetchEquipmentCalendarVersion(equipmentId: string, scheduleId: string): Promise<EquipmentCalendarVersionDto> {
+  return unwrapApiResponse(await httpClient.get<ApiEnvelope<EquipmentCalendarVersionDto>>(
+    `/equipments/${encodeURIComponent(equipmentId)}/calendar/versions/${encodeURIComponent(scheduleId)}`))
 }
 
 export function useEquipmentAvailabilityQuery(equipmentId: string, from: string, to: string) {
@@ -197,8 +226,16 @@ export function useEquipmentScheduleMutations(equipmentId: string) {
         unwrapApiResponse(await httpClient.put<ApiEnvelope<EquipmentScheduleDto>>(`${base}/calendar`, input)),
       onSuccess,
     }),
+    /** Around the clock from {@code effectiveFrom}, today when left out; earlier dates keep their shifts (ADR-014). */
     clearCalendar: useMutation({
-      mutationFn: async () => unwrapApiResponse(await httpClient.delete<ApiEnvelope<EquipmentScheduleDto>>(`${base}/calendar`)),
+      mutationFn: async (effectiveFrom?: string) => unwrapApiResponse(await httpClient.delete<ApiEnvelope<EquipmentScheduleDto>>(
+        effectiveFrom ? `${base}/calendar?effectiveFrom=${encodeURIComponent(effectiveFrom)}` : `${base}/calendar`)),
+      onSuccess,
+    }),
+    /** Deletes a calendar version that has not started; one that has started stays as history (ADR-014). */
+    removeCalendarVersion: useMutation({
+      mutationFn: async (scheduleId: string) => unwrapApiResponse(await httpClient.delete<ApiEnvelope<EquipmentScheduleDto>>(
+        `${base}/calendar/versions/${encodeURIComponent(scheduleId)}`)),
       onSuccess,
     }),
     addDowntime: useMutation({

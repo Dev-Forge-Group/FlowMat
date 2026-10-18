@@ -51,11 +51,17 @@ test('a connection leaving an Exclusive gateway can be made its default route', 
   await page.goto('/projects/prj-e2e/workflows/wf-gate')
   await expect(page.locator('.react-flow__node').filter({ hasText: 'Choose' })).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
   // A quarter of the way along: the edge's Delete and Insert buttons sit at its middle.
   async function selectEdge(connectionId: string) {
-    const box = await page.locator(`.react-flow__edge[data-id="${connectionId}"] .react-flow__edge-interaction`).boundingBox()
-    expect(box).not.toBeNull()
-    await page.mouse.click(box!.x + box!.width / 4, box!.y + box!.height / 2)
+    const edgePath = page.locator(`.react-flow__edge[data-id="${connectionId}"] .react-flow__edge-interaction`)
+    await expect(edgePath).toBeAttached()
+    const point = await edgePath.evaluate((element) => {
+      const path = element as SVGPathElement
+      const point = path.getPointAtLength(path.getTotalLength() / 4).matrixTransform(path.getScreenCTM()!)
+      return { x: point.x, y: point.y }
+    })
+    await page.mouse.click(point.x, point.y)
   }
 
   // Into the gateway: an ordinary node's connection, so no default route is offered or sent.

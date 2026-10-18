@@ -3,7 +3,6 @@ package org.myweb.flowmat.domain.workflow.application;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessPositionRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessUpdateRequest;
@@ -34,11 +33,11 @@ public class ProcessServiceImpl implements ProcessService {
     private final WorkflowRepository workflowRepository;
     private final IdGenerator idGenerator;
     private final GraphSyncService graphSyncService;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @Override
     public List<ProcessResponse> listProcesses(String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         return processRepository.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, NOT_DELETED).stream()
             .map(ProcessServiceImpl::toResponse)
             .toList();
@@ -47,7 +46,7 @@ public class ProcessServiceImpl implements ProcessService {
     @Override
     @Transactional
     public ProcessResponse createProcess(ProcessCreateRequest request) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(request.workflowId());
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(request.workflowId());
 
         Process process = new Process();
         process.setProcessId(idGenerator.generate());
@@ -73,13 +72,13 @@ public class ProcessServiceImpl implements ProcessService {
 
     @Override
     public ProcessResponse getProcess(String processId) {
-        return toResponse(projectAccessService.requireProcessReadAccess(processId));
+        return toResponse(workflowAccess.requireProcessReadAccess(processId));
     }
 
     @Override
     @Transactional
     public ProcessResponse updateProcess(String processId, ProcessUpdateRequest request) {
-        Process process = projectAccessService.requireProcessWriteAccess(processId);
+        Process process = workflowAccess.requireProcessWriteAccess(processId);
         if (hasText(request.processName())) {
             process.setProcessName(request.processName().trim());
         }
@@ -120,7 +119,7 @@ public class ProcessServiceImpl implements ProcessService {
     @Override
     @Transactional
     public ProcessResponse updatePosition(String processId, ProcessPositionRequest request) {
-        Process process = projectAccessService.requireProcessWriteAccess(processId);
+        Process process = workflowAccess.requireProcessWriteAccess(processId);
         process.setPosX(request.posX());
         process.setPosY(request.posY());
         process.setVersion(process.getVersion() + 1);
@@ -133,7 +132,7 @@ public class ProcessServiceImpl implements ProcessService {
     @Override
     @Transactional
     public void deleteProcess(String processId) {
-        Process process = projectAccessService.requireProcessWriteAccess(processId);
+        Process process = workflowAccess.requireProcessWriteAccess(processId);
         String workflowId = process.getWorkflowId();
         process.setDeletedYn(DELETED);
         process.setProcessStatus("deleted");

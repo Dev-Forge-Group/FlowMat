@@ -45,6 +45,7 @@ export function RunInstructionChecklist({ projectId, runId }: { projectId: strin
             <li key={step.stepId}>
               <span style={{ textDecoration: confirmed ? 'line-through' : undefined }}>{step.text}</span>
               {!step.required && <span className="inspector-hint"> (optional)</span>}
+              {step.processName && <span className="inspector-hint"> · at {step.processName}</span>}
               {confirmed ? (
                 <span style={{ marginLeft: 6, color: '#047857' }}>
                   ✓ {confirmed.value && `${step.valueLabel ?? 'value'} ${confirmed.value} `}

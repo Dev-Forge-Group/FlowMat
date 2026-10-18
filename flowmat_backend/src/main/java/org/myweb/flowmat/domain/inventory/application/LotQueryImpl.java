@@ -39,6 +39,6 @@ public class LotQueryImpl implements LotQuery {
     }
 
     private static LotView view(LotMaster lot) {
-        return new LotView(lot.getLotId(), lot.getProjectId(), lot.getItemId(), lot.getLotNo());
+        return new LotView(lot.getLotId(), lot.getProjectId(), lot.getItemId(), lot.getLotNo(), lot.getLotStatus(), lot.getProductionRunId());
     }
 }

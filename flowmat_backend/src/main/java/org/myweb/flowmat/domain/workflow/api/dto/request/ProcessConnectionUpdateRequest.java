@@ -25,6 +25,10 @@ public record ProcessConnectionUpdateRequest(
     String failurePolicy,
     Boolean clearCapacity,
     /** An Exclusive gateway's default connection (ADR-006); unchanged when left out. */
-    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean defaultRoute
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean defaultRoute,
+    /** A Split gateway's share (ADR-008); unchanged when left out, removed by {@code clearSplit}. */
+    String splitKind,
+    BigDecimal splitValue,
+    Boolean clearSplit
 ) {
 }

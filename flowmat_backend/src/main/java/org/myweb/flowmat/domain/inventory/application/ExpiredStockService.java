@@ -12,9 +12,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.ExpiredWriteOffRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.ExpiredWriteOffResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
@@ -50,8 +49,7 @@ public class ExpiredStockService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final InventoryCommandService inventoryCommandService;
     private final LotService lotService;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
 
     @Transactional
     public ExpiredWriteOffResponse writeOff(ExpiredWriteOffRequest request) {
@@ -151,10 +149,10 @@ public class ExpiredStockService {
     }
 
     private ExpiredWriteOffResponse.Line line(LotMaster lot, BigDecimal writtenOff, boolean closed, String note) {
-        Optional<Item> item = itemRepository.findById(lot.getItemId());
-        String unit = item.map(Item::getUnitId).flatMap(unitMasterRepository::findById).map(u -> u.getUnitCode()).orElse(null);
-        BigDecimal cost = item.map(Item::getUnitCost).filter(c -> c.signum() > 0).orElse(null);
-        return new ExpiredWriteOffResponse.Line(lot.getLotId(), lot.getLotNo(), lot.getItemId(), item.map(Item::getItemCode).orElse(null),
+        Optional<CatalogItemView> item = Optional.ofNullable(catalogQuery.findItems(List.of(lot.getItemId())).get(lot.getItemId()));
+        String unit = item.map(CatalogItemView::unitCode).orElse(null);
+        BigDecimal cost = item.map(CatalogItemView::unitCost).filter(c -> c.signum() > 0).orElse(null);
+        return new ExpiredWriteOffResponse.Line(lot.getLotId(), lot.getLotNo(), lot.getItemId(), item.map(CatalogItemView::itemCode).orElse(null),
             unit, writtenOff, cost == null ? null : writtenOff.multiply(cost), closed, note);
     }
 

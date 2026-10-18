@@ -7,16 +7,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockMovementSummaryResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockSnapshotResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
@@ -42,8 +37,7 @@ public class StockMovementSummaryService {
 
     private final StockSnapshotService stockSnapshotService;
     private final InventoryTransactionRepository transactionRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final ProjectAccessService projectAccessService;
 
     /** Running totals for one item. */
@@ -98,23 +92,19 @@ public class StockMovementSummaryService {
             }
         }
 
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(byItem.keySet()).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, String> units = StreamSupport.stream(unitMasterRepository.findAllById(
-                items.values().stream().map(Item::getUnitId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode, (first, second) -> first));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(byItem.keySet());
 
         List<StockMovementSummaryResponse.Line> lines = byItem.entrySet().stream()
             .map(entry -> {
-                Item item = items.get(entry.getKey());
+                CatalogItemView item = items.get(entry.getKey());
                 Totals t = entry.getValue();
                 BigDecimal explained = t.opening.add(t.received).add(t.produced).subtract(t.issued).subtract(t.consumed)
                     .add(t.transferred).add(t.corrected);
                 return new StockMovementSummaryResponse.Line(
                     entry.getKey(),
-                    item == null ? null : item.getItemCode(),
-                    item == null ? null : item.getItemName(),
-                    item == null ? null : units.get(item.getUnitId()),
+                    item == null ? null : item.itemCode(),
+                    item == null ? null : item.itemName(),
+                    item == null ? null : item.unitCode(),
                     scale(t.opening),
                     scale(t.received),
                     scale(t.produced),

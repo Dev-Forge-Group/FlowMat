@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.workflow.application;
 
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,7 +11,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationIssue;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationResponse;
 import org.myweb.flowmat.domain.workflow.domain.contract.PortSchema;
@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class WorkflowValidationService {
     private static final String LIVE = "N";
 
-    private final ProjectAccessService access;
+    private final WorkflowAccessService workflowAccess;
     private final ProcessRepository processes;
     private final ProcessIoRepository ports;
     private final ProcessConnectionRepository connections;
@@ -40,7 +40,7 @@ public class WorkflowValidationService {
     private final CatalogQuery catalog;
 
     public WorkflowValidationResponse validate(String workflowId) {
-        access.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         List<Process> activeProcesses = processes.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, LIVE);
         Set<String> processIds = new HashSet<>();
         for (Process process : activeProcesses) processIds.add(process.getProcessId());
@@ -162,7 +162,8 @@ public class WorkflowValidationService {
 
     /**
      * Exclusive gateways (docs/architecture/adr/ADR-006-operation-types.md): at most one default connection each, and only
-     * they have one; each needs an incoming connection, since it passes on what an earlier step gives it.
+     * they have one; each needs an incoming connection, since it passes on what an earlier step gives it. A Join
+     * (docs/architecture/adr/ADR-007-join-gateway.md decision 10) needs an incoming connection and waits for nothing with one.
      */
     private static void gatewayIssues(List<Process> processes, List<ProcessConnection> connections,
         List<WorkflowValidationIssue> issues) {
@@ -170,14 +171,51 @@ public class WorkflowValidationService {
         for (Process process : processes) {
             if ("exclusive".equalsIgnoreCase(process.getNodeType())) gateways.add(process.getProcessId());
         }
+        Set<String> splits = new HashSet<>();
+        for (Process process : processes) {
+            if ("split".equalsIgnoreCase(process.getNodeType())) splits.add(process.getProcessId());
+        }
         Map<String, List<ProcessConnection>> outgoing = new HashMap<>();
         Set<String> withInput = new HashSet<>();
+        Map<String, Integer> inputs = new HashMap<>();
         for (ProcessConnection connection : connections) {
             outgoing.computeIfAbsent(connection.getFromProcessId(), ignored -> new ArrayList<>()).add(connection);
             withInput.add(connection.getToProcessId());
+            inputs.merge(connection.getToProcessId(), 1, Integer::sum);
             if (connection.isDefaultRoute() && !gateways.contains(connection.getFromProcessId())) {
                 issues.add(issue("error", "DEFAULT_ROUTE_OUTSIDE_GATEWAY", null, null, connection.getConnectionId(),
                     "Connection " + connection.getConnectionId() + " is a default connection, but only an Exclusive gateway has one."));
+            }
+            if (connection.getSplitKind() != null && !splits.contains(connection.getFromProcessId())) {
+                issues.add(issue("error", "SPLIT_OUTSIDE_GATEWAY", null, null, connection.getConnectionId(),
+                    "Connection " + connection.getConnectionId() + " has a split share, but only a Split gateway divides its output."));
+            }
+            BigDecimal lossRate = connection.getLossRate();
+            if (lossRate != null && (lossRate.signum() < 0 || lossRate.compareTo(BigDecimal.ONE) >= 0)) {
+                issues.add(issue("error", "LOSS_RATE_RANGE", null, null, connection.getConnectionId(),
+                    "Connection " + connection.getConnectionId() + " has loss rate " + lossRate.stripTrailingZeros().toPlainString()
+                        + "; a loss rate is a fraction of at least 0 and below 1 (ADR-009)."));
+            }
+            BigDecimal delay = connection.getDelayTimeSec();
+            if (delay != null && delay.signum() < 0) {
+                issues.add(issue("error", "DELAY_RANGE", null, null, connection.getConnectionId(),
+                    "Connection " + connection.getConnectionId() + " has delay " + delay.stripTrailingZeros().toPlainString()
+                        + " s; a delay is 0 or more seconds (ADR-010)."));
+            }
+        }
+        splitIssues(splits, outgoing, withInput, issues);
+        for (Process process : processes) {
+            if (!"join".equalsIgnoreCase(process.getNodeType())) {
+                continue;
+            }
+            String join = process.getProcessId();
+            int count = inputs.getOrDefault(join, 0);
+            if (count == 0) {
+                issues.add(issue("error", "JOIN_WITHOUT_INPUT", join, null, null,
+                    "Join " + join + " has no incoming connection; it waits for the branches that lead into it."));
+            } else if (count == 1) {
+                issues.add(issue("warning", "JOIN_SINGLE_INPUT", join, null, null,
+                    "Join " + join + " has one incoming connection, so it has nothing to wait for."));
             }
         }
         for (String gateway : gateways) {
@@ -213,6 +251,62 @@ public class WorkflowValidationService {
                 issues.add(issue("warning", "GATEWAY_PRIORITY_TIE", gateway, null, null,
                     "Exclusive gateway " + gateway + " has more than one connection with priority " + priority
                         + "; the one drawn first is tried first."));
+            }
+        }
+    }
+
+    /**
+     * Split gateways (docs/architecture/adr/ADR-008-quantity-split.md decision 9): each needs an incoming connection and a share
+     * on every outgoing one, at most one rest, percents of at most 100 and, without a rest, percents of exactly 100 and no
+     * fixed quantities; no conditions, since a Split divides what it gets.
+     */
+    private static void splitIssues(Set<String> splits, Map<String, List<ProcessConnection>> outgoing, Set<String> withInput,
+        List<WorkflowValidationIssue> issues) {
+        for (String split : splits) {
+            List<ProcessConnection> out = outgoing.getOrDefault(split, List.of());
+            if (!withInput.contains(split)) {
+                issues.add(issue("error", "SPLIT_WITHOUT_INPUT", split, null, null,
+                    "Split gateway " + split + " has no incoming connection; it divides what an earlier step gives it."));
+            }
+            if (out.size() < 2) {
+                issues.add(issue("warning", "SPLIT_SINGLE_ROUTE", split, null, null,
+                    "Split gateway " + split + " has fewer than two outgoing connections, so it has nothing to divide between."));
+            }
+            int rests = 0;
+            boolean fixed = false;
+            boolean missing = false;
+            BigDecimal shares = BigDecimal.ZERO;
+            for (ProcessConnection connection : out) {
+                String kind = connection.getSplitKind();
+                if (kind == null) {
+                    missing = true;
+                    issues.add(issue("error", "SPLIT_SHARE_MISSING", null, null, connection.getConnectionId(),
+                        "Connection " + connection.getConnectionId() + " leaves Split gateway " + split
+                            + " without a share; give it a percent, a fixed quantity or the rest."));
+                } else if ("rest".equals(kind)) {
+                    rests++;
+                } else if ("fixed".equals(kind)) {
+                    fixed = true;
+                } else if (connection.getSplitValue() != null) {
+                    shares = shares.add(connection.getSplitValue());
+                }
+                if (text(connection.getConditionExpr())) {
+                    issues.add(issue("error", "SPLIT_CONDITION", null, null, connection.getConnectionId(),
+                        "Connection " + connection.getConnectionId() + " leaves Split gateway " + split
+                            + " with a condition; a Split divides what it gets without conditions."));
+                }
+            }
+            if (rests > 1) {
+                issues.add(issue("error", "SPLIT_REST_DUPLICATE", split, null, null,
+                    "Split gateway " + split + " has " + rests + " rest connections; keep at most one."));
+            }
+            if (shares.compareTo(BigDecimal.valueOf(100)) > 0) {
+                issues.add(issue("error", "SPLIT_SHARES_OVER", split, null, null,
+                    "Split gateway " + split + " shares out " + shares.stripTrailingZeros().toPlainString() + "%, more than 100%."));
+            } else if (rests == 0 && !missing && !out.isEmpty() && (fixed || shares.compareTo(BigDecimal.valueOf(100)) != 0)) {
+                issues.add(issue("error", "SPLIT_NO_REST", split, null, null,
+                    "Split gateway " + split + " needs a rest connection: without one, its percents must add up to exactly 100"
+                        + " and it cannot have fixed quantities."));
             }
         }
     }

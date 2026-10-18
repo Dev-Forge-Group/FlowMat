@@ -57,19 +57,17 @@
   - 연결 조건·용량으로 다음 단계를 고르고, 출처 단계를 기록한다(V40).
   - 완료 전에는 `preview`로 경로를 미리 볼 수 있다.
 - 실패 정책은 연결마다 stop·skip·retry 중 하나다. retry는 즉시 최대 3회 다시 시도한다.
+- 그 뒤 생긴 것(2026-10-17 기준): 시간 제한·재시도 간격·동시 실행 제한([ADR-004](adr/ADR-004-flow-run-execution-policy.md), [노드 실행 정책](../domain/flow-run-execution-policy.md)), Exclusive 게이트웨이([ADR-006](adr/ADR-006-operation-types.md), 2eb), Join 게이트웨이([ADR-007](adr/ADR-007-join-gateway.md), 2ef), Split 게이트웨이([ADR-008](adr/ADR-008-quantity-split.md), 2eh: 비율·고정·나머지로 수량을 나눔), 연결 손실률([ADR-009](adr/ADR-009-connection-loss-rate.md), 2ei: 새 발행본부터 연결을 지날 때 뺌), 연결 지연([ADR-010](adr/ADR-010-connection-delay.md), 2ej: 새 발행본부터 다음 단계의 예정 시각). 게이트웨이 단계만 서버가 지나간다.
 - 아직 없는 것
   - 노드 자동 실행기
-  - 시간 제한
-  - 재시도 간격
-  - 동시 실행 제한
-  - 여러 연결의 합류와 수량 분할
-  - 이 항목들은 [결정 인계](decision-handoff.md) §3에서 보류 중이다. 시간 제한·재시도 간격·동시 실행 제한은 [ADR-004](adr/ADR-004-flow-run-execution-policy.md) 초안(**Proposed**, 2026-10-03)이 있고, 수용 기준이 닫히기 전에는 구현하지 않는다.
+  - 개수 단위의 정수 나눔([ADR-008](adr/ADR-008-quantity-split.md)), 흐름률 적용과 손실의 재고 기록([ADR-009](adr/ADR-009-connection-loss-rate.md) "결정하지 않은 것"), 근무 시간에 맞춘 예정 시각([ADR-010](adr/ADR-010-connection-delay.md) "결정하지 않은 것")
 - 범용성: 비제조 흐름으로 검증될 때까지 목표로 취급한다(ADR-003 결정 8·9). 결정 9-(a)의 통합 테스트(`DataFlowRunIntegrationTest`, File → Transform → Data)는 2026-10-03에 통과했고, "검증됨"으로 바꿀지는 사용자 결정 대기다.
 
 ## 6. 생산 실행과 Flow Run의 연결
 
 - 발행 revision이 있는 생산 실행은 같은 트랜잭션에서 연결된 Flow Run을 만든다.
   - 생산 실행이 시작되면 Flow Run이 running으로 시작한다.
+  - 2026-10-17부터 이 Flow Run은 그래프로 시작해 공정마다 단계를 둔다. 작업자는 생산 실행 API로 단계를 시작하고 완료한다([ADR-011](adr/ADR-011-production-steps.md)). revision이 그래프로 돌 수 없으면 단계가 없다.
   - 생산 실행이 끝나면 Flow Run은 finished가 되고, 실제 산출량이 기록된다.
 - 연결은 `flow_run.production_run_id`이다. production은 `FlowRunCommand`(flowrun 공개 API)만 호출하고, Flow Run 저장 구현은 모른다(ADR-002).
 - revision이 없는 생산 실행에는 Flow Run이 없다.

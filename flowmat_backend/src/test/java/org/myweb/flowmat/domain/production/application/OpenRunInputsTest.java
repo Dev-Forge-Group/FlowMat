@@ -7,14 +7,15 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
@@ -25,7 +26,7 @@ class OpenRunInputsTest {
 
     @Mock private ProductionRunRepository productionRunRepository;
     @Mock private ProductionRunItemRepository productionRunItemRepository;
-    @Mock private ItemRepository itemRepository;
+    @Mock private CatalogQuery catalogQuery;
     @Mock private UnitConverter unitConverter;
     @InjectMocks private OpenRunInputs openRunInputs;
 
@@ -57,10 +58,7 @@ class OpenRunInputsTest {
         actualInput.setUnit("kg");
         when(productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc("actual-1"))
             .thenReturn(List.of(actualInput));
-        Item item = new Item();
-        item.setItemId("material-1");
-        item.setUnitId("unit-kg");
-        when(itemRepository.findAllById(any())).thenReturn(List.of(item));
+        when(catalogQuery.findItems(any())).thenReturn(Map.of("material-1", material("unit-kg")));
         when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit-kg"))
             .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
 
@@ -85,14 +83,15 @@ class OpenRunInputsTest {
         when(productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc("run-1"))
             .thenReturn(List.of(input));
 
-        Item item = new Item();
-        item.setItemId("material-1");
-        item.setUnitId("unit-kg");
-        when(itemRepository.findAllById(any())).thenReturn(List.of(item));
+        when(catalogQuery.findItems(any())).thenReturn(Map.of("material-1", material("unit-kg")));
         when(unitConverter.toItemUnit(new BigDecimal("5"), "kg", "unit-kg"))
             .thenReturn(new UnitConverter.Conversion(new BigDecimal("5"), "kg", "kg", false));
 
         assertThat(openRunInputs.byOrder(List.of(run)).get("order-1"))
             .containsEntry("material-1", new BigDecimal("5"));
+    }
+
+    private static CatalogItemView material(String unitId) {
+        return new CatalogItemView("material-1", "project-1", "MAT-1", "Material", unitId, "kg", "mass", null, null, null, "N", null, null);
     }
 }

@@ -1,14 +1,14 @@
 # 품질 검사와 불량 기록
 
-상태: **구현(2026-09-24).** 출처: [벤치마크](../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) FM-MFG-004(Quality/Issue). 코드는 가져오지 않았고, V1에 미리 만들어 둔 `quality_inspection`·`defect_log` 테이블을 그대로 씁니다. **새 마이그레이션 없음.**
+상태: **구현(2026-09-24).** 출처는 [벤치마크](../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) FM-MFG-004(Quality/Issue)다. 코드는 가져오지 않았다. V1에 미리 만들어 둔 `quality_inspection`·`defect_log` 테이블을 그대로 쓴다. **새 마이그레이션 없음.**
 
 ## 목적
 
-- 실행에서 쓰거나 만든 LOT, 또는 LOT 없는 품목을 **검사한 결과를 남깁니다.**
-- 불합격이면 **그 LOT를 같은 요청 안에서 격리**할 수 있습니다.
-- 발견한 **불량을 기록하고, 조치 내용과 함께 한 번 종결**합니다.
+- 실행에서 쓰거나 만든 LOT, 또는 LOT 없는 품목을 **검사한 결과를 남긴다.**
+- 불합격이면 **그 LOT를 같은 요청 안에서 격리**할 수 있다.
+- 발견한 **불량을 기록하고, 조치 내용과 함께 한 번 종결**한다.
 
-두 기록 모두 재고를 직접 바꾸지 않습니다. 재고가 움직이는 경우는 불합격 검사가 LOT를 격리할 때 하나뿐이고, 이것도 일반 격리와 같은 재고 명령 경로(`InventoryCommandService`)를 탑니다.
+두 기록 모두 재고를 직접 바꾸지 않는다. 재고가 움직이는 경우는 불합격 검사가 LOT를 격리할 때 하나뿐이다. 이때도 일반 격리와 같은 재고 명령 경로(`InventoryCommandService`)를 탄다.
 
 ## API
 
@@ -21,7 +21,7 @@
 | `POST /defects/{id}/resolve` | 쓰기 | `actionTaken` 필수, 한 번만 |
 | `GET /quality/summary?projectId=&from=&to=` | 읽기 | 요약(아래). `from`·`to`는 ISO 일시, 둘 다 선택 |
 
-검사와 불량은 **수정·삭제 API가 없습니다.** 잘못 기록한 검사는 새 검사로 이어 적습니다. 목록은 둘 다 남기고, 최신 것이 위에 나옵니다.
+검사와 불량에는 **수정·삭제 API가 없다.** 잘못 기록한 검사는 새 검사로 이어 적는다. 목록에는 둘 다 남고, 최신 것이 위에 나온다.
 
 ## 결정
 
@@ -41,64 +41,71 @@
 
 ## 폐기 처리 (불량 종결 때)
 
-`POST /defects/{id}/resolve`에 `scrapInventoryId`, `scrapQuantity`를 **함께** 주면, 종결과 같은 트랜잭션에서 그 재고를 폐기합니다.
-- 폐기는 **감소 조정(`adjustment`)** 거래로 남습니다. 참조는 `defect_log` / 불량 ID이고, 메모는 `Scrapped: 불량 유형`입니다.
-  - 출고(`issue`)가 아니라 조정인 이유: 불량품은 보통 격리돼 있고, 격리 재고는 출고가 막혀 있기 때문입니다. 조정은 격리와 상관없이 허용됩니다.
-- 재고 행은 불량의 품목이어야 하고, 불량에 LOT가 있으면 그 LOT여야 합니다(아니면 400). 둘 중 하나만 주면 400입니다.
-- 보유량이나 예약을 넘으면 기존 재고 규칙대로 409이고, 종결도 되지 않습니다.
-- 조치 내용 끝에 `(scrapped 3 from WH-A)`가 붙습니다.
-- 화면: 불량의 **Resolve**를 누르면 조치 입력란이 열립니다.
-  - 그 품목·LOT의 재고 행을 고르면 "Scrap from stock"으로 수량과 함께 폐기합니다.
-  - 버튼은 **Resolve and scrap**으로 바뀝니다.
+`POST /defects/{id}/resolve`에 `scrapInventoryId`, `scrapQuantity`를 **함께** 주면, 종결과 같은 트랜잭션에서 그 재고를 폐기한다.
+- 폐기는 **감소 조정(`adjustment`)** 거래로 남는다. 참조는 `defect_log` / 불량 ID이고, 메모는 `Scrapped: 불량 유형`이다.
+  - 출고(`issue`)가 아니라 조정인 이유: 불량품은 보통 격리돼 있고, 격리 재고는 출고가 막혀 있다. 조정은 격리와 상관없이 된다.
+- 재고 행은 불량의 품목이어야 하고, 불량에 LOT가 있으면 그 LOT여야 한다. 아니면 400이다. 둘 중 하나만 주어도 400이다.
+- 보유량이나 예약을 넘으면 기존 재고 규칙대로 409이고, 종결도 되지 않는다.
+- 조치 내용 끝에 `(scrapped 3 from WH-A)`가 붙는다.
+- 화면: 불량의 **Resolve**를 누르면 조치 입력란이 열린다.
+  - 그 품목·LOT의 재고 행을 고르면 "Scrap from stock"으로 수량과 함께 폐기한다.
+  - 버튼은 **Resolve and scrap**으로 바뀐다.
 
 ## 요약 (Quality 탭)
 
-`GET /quality/summary`는 기간 안의 검사와 불량을 셉니다. 읽기 전용이며 새 테이블이나 마이그레이션은 없습니다.
-- **기간:** 검사는 검사 시각, 불량은 기록 시각으로 넣습니다. `from`은 포함하고 `to`는 제외합니다.
+`GET /quality/summary`는 기간 안의 검사와 불량을 센다. 읽기 전용이고 새 테이블이나 마이그레이션은 없다.
+- **기간:** 검사는 검사 시각, 불량은 기록 시각으로 넣는다. `from`은 포함하고 `to`는 뺀다.
 - **숫자:** 검사 수, 합격, 불합격, 합격률(합격 ÷ 검사, 소수 4자리, 검사가 없으면 `null`), 미종결 불량, 종결된 불량.
-- **불량 유형별(`defectsByType`):** 기록 수와 미종결 수, 많은 순. 수량은 더하지 않습니다. 같은 유형이라도 품목마다 단위(kg, ea …)가 달라 합이 뜻이 없기 때문입니다.
-- **항목별 불합격(`failuresByCheck`):** 한 번 이상 불합격한 검사 항목만, 불합격 많은 순. 그 항목의 전체 검사 수도 같이 줍니다.
-- **품목별(`byItem`, 2026-09-26):** 기간 안에 불합격 검사나 불량이 하나라도 있는 품목만. 검사 수·불합격 수·불량 수·미종결 불량 수와 **불량 수량 합(`defectQuantity`)**. 불량 수량은 품목 단위로 기록되므로 한 품목 안에서는 더할 수 있습니다. 불량 많은 순, 같으면 불합격 많은 순. 품목 없이 기록된 검사·불량은 뺍니다.
-- 유형과 항목 이름은 **대소문자와 앞뒤 공백을 무시**하고 묶습니다. 표시 이름은 가장 최근 기록의 표기입니다.
-- 프로젝트의 기록을 불러와 메모리에서 셉니다. 기록이 많아지면 DB 집계(`GROUP BY`)와 `(project_id, inspected_at)`·`(project_id, logged_at)` 인덱스로 바꿉니다. 인덱스는 새 마이그레이션이 필요합니다.
+- **불량 유형별(`defectsByType`):** 기록 수와 미종결 수, 많은 순. 수량은 더하지 않는다. 같은 유형이라도 품목마다 단위(kg, ea …)가 달라 합에 뜻이 없다.
+- **항목별 불합격(`failuresByCheck`):** 한 번 이상 불합격한 검사 항목만, 불합격 많은 순. 그 항목의 전체 검사 수도 같이 준다.
+- **품목별(`byItem`, 2026-09-26):** 기간 안에 불합격 검사나 불량이 하나라도 있는 품목만 나온다.
+  - 검사 수·불합격 수·불량 수·미종결 불량 수와 **불량 수량 합(`defectQuantity`)**. 불량 수량은 품목 단위로 기록되므로 한 품목 안에서는 더할 수 있다.
+  - 불량 많은 순, 같으면 불합격 많은 순. 품목 없이 기록된 검사·불량은 뺀다.
+- 유형과 항목 이름은 **대소문자와 앞뒤 공백을 무시**하고 묶는다. 표시 이름은 가장 최근 기록의 표기다.
+- 프로젝트의 기록을 불러와 메모리에서 센다. 기록이 많아지면 DB 집계(`GROUP BY`)와 `(project_id, inspected_at)`·`(project_id, logged_at)` 인덱스로 바꾼다. 인덱스는 새 마이그레이션이 필요하다.
 
 화면: 재고 → **Quality** 탭
-- 기간: 최근 7일, 30일(기본), 90일, 전체. 기간은 오늘을 포함해 로컬 자정부터 셉니다.
-- 숫자 다섯 개(Inspections, Pass rate, Failed, Defects logged, Still open)와 두 표(Failures by check, Defects by type). 그 아래 **By item** 표(품목, `불합격 of 검사`, 불량, 미종결(주황), 불량 수량과 단위). 문제가 있는 품목이 없으면 숨깁니다.
-- 아래 **Open defects**는 기간과 관계없이 미종결 불량 전체입니다. 여기서 바로 종결(폐기 포함)할 수 있고, 종결하면 요약도 다시 불러옵니다.
-- **Record inspection / Log defect**(실행과 관계없는 기록, 입고 검사 등): 대상은 종료되지 않은 LOT 전체, 그다음 LOT 관리를 하지 않는 품목입니다(LOT 관리 품목은 LOT로 검사). 실행의 검사·불량은 여전히 실행 상세에서 기록합니다. 저장하면 요약과 목록이 바로 새로 고쳐집니다. `qualityOverviewModel.test.ts`의 `qualityTargets`. 실 화면: LOT 관리 안 하는 품목에 측정 9·상한 8 → 서버 판정 불합격, 요약 검사 6 → 7.
-- **Inspections CSV / Defects CSV:** 고른 기간의 검사·불량을 받습니다(누를 때만 전체 목록을 불러옴). 기간 비교는 시각을 실제 순간으로 바꿔서 합니다(서버 시각의 오프셋이 달라도 맞게).
+- 기간: 최근 7일, 30일(기본), 90일, 전체. 오늘을 포함해 로컬 자정부터 센다.
+- 숫자 다섯 개(Inspections, Pass rate, Failed, Defects logged, Still open)와 두 표(Failures by check, Defects by type).
+- 그 아래 **By item** 표: 품목, `불합격 of 검사`, 불량, 미종결(주황), 불량 수량과 단위. 문제가 있는 품목이 없으면 숨긴다.
+- 아래 **Open defects**는 기간과 관계없이 미종결 불량 전체다. 여기서 바로 종결(폐기 포함)할 수 있고, 종결하면 요약도 다시 불러온다.
+- **Record inspection / Log defect**는 실행과 관계없는 기록이다(입고 검사 등).
+  - 대상은 종료되지 않은 LOT 전체, 그다음 LOT 관리를 하지 않는 품목이다. LOT 관리 품목은 LOT로 검사한다.
+  - 실행의 검사·불량은 여전히 실행 상세에서 기록한다.
+  - 저장하면 요약과 목록이 바로 새로 고쳐진다. `qualityOverviewModel.test.ts`의 `qualityTargets`.
+  - 실 화면: LOT 관리 안 하는 품목에 측정 9·상한 8 → 서버 판정 불합격, 요약 검사 6 → 7.
+- **Inspections CSV / Defects CSV:** 고른 기간의 검사·불량을 받는다. 누를 때만 전체 목록을 불러온다. 기간 비교는 시각을 실제 순간으로 바꿔서 한다. 서버 시각의 오프셋이 달라도 맞는다.
   - 검사 열: `inspected_at,inspection_type,result,measured,min,max,unit,item_code,lot,run,inspected_by,note`
   - 불량 열: `logged_at,defect_type,severity,quantity,unit,item_code,lot,run,status,action_taken,logged_by,resolved_by,resolved_at`(status는 open·resolved)
-  - 파일 이름은 `inspections-<기간 시작>-to-<오늘>.csv`이고, 다른 내보내기와 같은 따옴표 규칙과 BOM을 씁니다. `qualityExportModel.test.ts` 3건. 실 화면에서 요약(검사 6, 불량 3)과 같은 줄 수를 확인했습니다.
+  - 파일 이름은 `inspections-<기간 시작>-to-<오늘>.csv`다. 따옴표 규칙과 BOM은 다른 내보내기와 같다. `qualityExportModel.test.ts` 3건. 실 화면에서 요약(검사 6, 불량 3)과 같은 줄 수를 확인했다.
 
 ## DB
 
-V1의 두 테이블에는 **FK와 CHECK가 없습니다.** 프로젝트·실행·LOT·품목의 존재와 소속, 결과값과 심각도 값은 서비스에서 검사합니다.
+V1의 두 테이블에는 **FK와 CHECK가 없다.** 프로젝트·실행·LOT·품목의 존재와 소속, 결과값과 심각도 값은 서비스에서 검사한다.
 
-제약을 DB에 넣으려면 새 마이그레이션이 필요하므로 이번에는 넣지 않았습니다. 다른 세션의 번호 사용(V23 이후)이 정리되면 다음 후보로 올립니다:
+제약을 DB에 넣으려면 새 마이그레이션이 필요해서 이번에는 넣지 않았다. 다른 세션의 번호 사용(V23 이후)이 정리되면 다음 후보로 올린다.
 - FK: `project_id`, `production_run_id`, `lot_id`, `item_id`, `defect_log.inspection_id`
 - CHECK: `result_status IN ('pending','pass','fail')`, `severity`, `resolved_yn`, `quantity > 0`
 - 인덱스: `defect_log(production_run_id)`, `defect_log(lot_id)`
 
-`result_status`의 기본값 `'pending'`은 나중에 "계획된 검사"용으로 남겨 두고, 지금은 쓰지 않습니다.
+`result_status`의 기본값 `'pending'`은 나중에 "계획된 검사"용으로 남겨 두었다. 지금은 쓰지 않는다.
 
 ## 화면
 
-실행 상세 → 오른쪽 **Quality** 영역(실행 상태와 관계없이 표시)
+실행 상세 → 오른쪽 **Quality** 영역. 실행 상태와 관계없이 보인다.
 
-- **검사 목록:** 결과(✓ Pass / ✕ Fail), 항목, 측정값과 한계, 대상, 기록자·시각. LOT가 지금 격리 중이면 "LOT quarantined"를 표시합니다.
-- **Record inspection:** 대상은 이 실행의 LOT·품목(산출 먼저)에서 고릅니다.
-  - 측정값과 한계를 넣으면 결과를 미리 보여 주고, 결과 선택칸은 숨깁니다.
-  - 격리 체크는 불합격일 때만 켤 수 있습니다.
-- **불합격 검사의 Log defect:** 그 검사에서 대상을 물려받은 불량 기록 양식을 엽니다.
-- **Defects 목록:** 각 항목에 Resolve 버튼이 있고, 누르면 조치 내용을 묻습니다. NCR에 모인 불량은 번호를 보여 주고, 아직 없는 미종결 불량은 골라 새 NCR을 바로 발행할 수 있습니다([부적합](nonconformity.md) N11, 2026-10-03).
+- **검사 목록:** 결과(✓ Pass / ✕ Fail), 항목, 측정값과 한계, 대상, 기록자·시각. LOT가 지금 격리 중이면 "LOT quarantined"가 붙는다.
+- **Record inspection:** 대상은 이 실행의 LOT·품목(산출 먼저)에서 고른다.
+  - 측정값과 한계를 넣으면 결과를 미리 보여 주고, 결과 선택칸은 숨긴다.
+  - 격리 체크는 불합격일 때만 켤 수 있다.
+- **불합격 검사의 Log defect:** 그 검사에서 대상을 물려받은 불량 기록 양식을 연다.
+- **Defects 목록:** 항목마다 Resolve 버튼이 있고, 누르면 조치 내용을 묻는다. NCR에 모인 불량은 번호가 보인다. 아직 NCR이 없는 미종결 불량은 골라서 새 NCR을 바로 발행할 수 있다([부적합](nonconformity.md) N11, 2026-10-03).
 
 재고 → LOTs 탭 → LOT 선택 → **Quality**
-- 그 LOT의 검사·불량 전체 이력입니다. 어느 실행에서 기록했는지는 `run …`으로 표시합니다.
-- 여기서 기록하는 검사와 불량은 실행 없이 LOT만 대상으로 합니다(입고 검사 등).
+- 그 LOT의 검사·불량 전체 이력이다. 어느 실행에서 기록했는지는 `run …`으로 보인다.
+- 여기서 기록하는 검사와 불량은 실행 없이 LOT만 대상으로 한다(입고 검사 등).
 
-목록과 양식은 `entities/quality/ui`(`QualitySection`, `QualityRecords`)에 있어 두 화면이 같이 씁니다. 판정·요청 조립 규칙은 `entities/quality/model/qualityModel.ts`에 있습니다.
+목록과 양식은 `entities/quality/ui`(`QualitySection`, `QualityRecords`)에 있어 두 화면이 같이 쓴다. 판정과 요청 조립 규칙은 `entities/quality/model/qualityModel.ts`에 있다.
 
 ## 검증
 

@@ -139,6 +139,41 @@ jobs:
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/worker-planning-e2e-fixture.sql
           npm run test:e2e -- e2e/worker-planning-real-api.spec.ts --workers=1 --retries=0 --trace=off
 
+      - name: Run real Exclusive gateway browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_GATEWAY_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/exclusive-gateway-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
+      - name: Run real gateway quantity browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_GATEWAY_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/gateway-quantity-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
+      - name: Run real transfer, equipment limit and production step acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/gateway-delay-real-api.spec.ts e2e/equipment-concurrency-limit-real-api.spec.ts e2e/production-steps-real-api.spec.ts e2e/worker-schedule-history-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
+      - name: Run real worker rota browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_ROTA_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/worker-rota-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
+      - name: Run real equipment capacity browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_EQUIPMENT_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/equipment-capacity-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
       - name: Run browser E2E
         working-directory: flowmat_frontend
         run: npm run test:e2e

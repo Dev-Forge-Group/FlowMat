@@ -29,6 +29,14 @@ export function connectionUndoInput(
   }
   if (input.failurePolicy !== undefined) previous.failurePolicy = edge.failurePolicy
   if (input.defaultRoute !== undefined) previous.defaultRoute = edge.defaultRoute ?? false
+  if (input.splitKind !== undefined || input.clearSplit !== undefined) {
+    if (edge.splitKind == null) {
+      previous.clearSplit = true
+    } else {
+      previous.splitKind = edge.splitKind
+      if (edge.splitValue != null) previous.splitValue = edge.splitValue
+    }
+  }
 
   return previous
 }

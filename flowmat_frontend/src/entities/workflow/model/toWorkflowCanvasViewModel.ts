@@ -88,6 +88,8 @@ export function toEdgeViewModel(dto: ProcessConnectionDto): CanvasEdgeViewModel 
     capacity: dto.capacity ?? null,
     failurePolicy: dto.failurePolicy ?? 'stop',
     defaultRoute: dto.defaultRoute ?? false,
+    splitKind: dto.splitKind ?? null,
+    splitValue: dto.splitValue ?? null,
     version: dto.version,
     versionNonce: dto.versionNonce,
   }

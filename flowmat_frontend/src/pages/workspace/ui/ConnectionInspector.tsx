@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../../../shared/lib/errorMessage'
+import { splitInput, type SplitKind } from '../model/splitShare'
+import { lossPercentText, lossRateInput } from '../model/lossPercent'
 import type {
   CanvasEdgeViewModel,
   FlowRuleViewModel,
@@ -16,6 +18,8 @@ interface Props {
   focusLabel?: boolean
   /** The connection leaves an Exclusive gateway, so it can be the gateway's default (ADR-006). */
   sourceIsExclusive?: boolean
+  /** The connection leaves a Split gateway, so it takes a share of what the Split divides (ADR-008). */
+  sourceIsSplit?: boolean
 }
 
 const CONNECTION_TYPE_OPTIONS = [
@@ -30,7 +34,7 @@ const CONNECTION_TYPE_OPTIONS = [
   'equipment_flow',
 ]
 
-export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sourceIsExclusive = false }: Props) {
+export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sourceIsExclusive = false, sourceIsSplit = false }: Props) {
   const labelRef = useRef<HTMLInputElement>(null)
   const [label, setLabel] = useState('')
   const [connectionType, setConnectionType] = useState('material')
@@ -43,6 +47,8 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
   const [capacity, setCapacity] = useState('')
   const [failurePolicy, setFailurePolicy] = useState<'stop' | 'skip' | 'retry'>('stop')
   const [defaultRoute, setDefaultRoute] = useState(false)
+  const [splitKind, setSplitKind] = useState<SplitKind | ''>('')
+  const [splitValue, setSplitValue] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -57,12 +63,14 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
     setFlowRate(edge.flowRate ?? '')
     setUnit(edge.unit ?? '')
     setDelayTimeSec(edge.delayTimeSec !== null ? String(edge.delayTimeSec) : '')
-    setLossRate(edge.lossRate !== null ? String(edge.lossRate) : '')
+    setLossRate(lossPercentText(edge.lossRate))
     setPriority(edge.priority !== null ? String(edge.priority) : '')
     setConditionExpr(edge.conditionExpr ?? '')
     setCapacity(edge.capacity !== null ? String(edge.capacity) : '')
     setFailurePolicy(edge.failurePolicy)
     setDefaultRoute(edge.defaultRoute ?? false)
+    setSplitKind(edge.splitKind ?? '')
+    setSplitValue(edge.splitValue != null ? String(edge.splitValue) : '')
   }, [edge])
 
   if (!edge) return null
@@ -71,6 +79,21 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setSaveError(null)
+    const split = splitInput(splitKind, splitValue)
+    if (sourceIsSplit && 'error' in split) {
+      setSaveError(split.error)
+      return
+    }
+    const loss = lossRateInput(lossRate)
+    if ('error' in loss) {
+      setSaveError(loss.error)
+      return
+    }
+    // A connection's delay schedules the next step (docs/architecture/adr/ADR-010-connection-delay.md decision 8).
+    if (delayTimeSec.trim() !== '' && !(Number(delayTimeSec) >= 0)) {
+      setSaveError('Delay is 0 or more seconds.')
+      return
+    }
     try {
       await onSubmit({
       connectionId: currentEdge.id,
@@ -79,13 +102,14 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
       flowRate: flowRate !== '' ? Number(flowRate) : null,
       unit: unit.trim() || null,
       delayTimeSec: delayTimeSec !== '' ? Number(delayTimeSec) : null,
-      lossRate: lossRate !== '' ? Number(lossRate) : null,
+      lossRate: loss.lossRate,
       priority: priority !== '' ? Number(priority) : null,
       conditionExpr: conditionExpr.trim(),
       capacity: capacity !== '' ? Number(capacity) : null,
       clearCapacity: capacity === '',
       failurePolicy,
       ...(sourceIsExclusive ? { defaultRoute } : {}),
+      ...(sourceIsSplit && !('error' in split) ? split : {}),
       })
     } catch (error) {
       setSaveError(errorMessage(error, 'Could not save connection.'))
@@ -162,7 +186,6 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
               type="number"
               step="0.01"
               min="0"
-              max="1"
               value={lossRate}
               onChange={(e) => setLossRate(e.target.value)}
               placeholder="0"
@@ -208,6 +231,31 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
             <span className="inspector-hint">
               This gateway tries its connections by priority, lowest first, and takes the first whose condition holds; the
               default route is taken when none holds. Keep one default at most.
+            </span>
+          </div>
+        )}
+
+        {sourceIsSplit && (
+          <div style={{ display: 'grid', gap: '4px' }}>
+            <label style={{ display: 'grid', gap: '4px' }}>
+              <span>Share</span>
+              <select aria-label="Split share" value={splitKind} onChange={(e) => setSplitKind(e.target.value as SplitKind | '')}>
+                <option value="">(none)</option>
+                <option value="share">Percent</option>
+                <option value="fixed">Fixed quantity</option>
+                <option value="rest">The rest</option>
+              </select>
+            </label>
+            {(splitKind === 'share' || splitKind === 'fixed') && (
+              <label style={{ display: 'grid', gap: '4px' }}>
+                <span>{splitKind === 'share' ? 'Percent' : 'Quantity'}</span>
+                <input aria-label="Split value" type="number" min="0" step="any" value={splitValue}
+                  onChange={(e) => setSplitValue(e.target.value)} />
+              </label>
+            )}
+            <span className="inspector-hint">
+              The Split divides what arrives: fixed quantities and percents of the whole go first, and the rest takes what is
+              left. Without a rest, the percents must add up to 100.
             </span>
           </div>
         )}

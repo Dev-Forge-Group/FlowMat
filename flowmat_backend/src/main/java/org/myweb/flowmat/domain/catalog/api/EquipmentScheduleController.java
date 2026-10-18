@@ -6,6 +6,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDayCopyRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDayRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDowntimeRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentAvailabilityResponse;
+import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarVersionResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentScheduleResponse;
 import org.myweb.flowmat.domain.catalog.application.EquipmentScheduleService;
 import org.myweb.flowmat.global.response.ApiResponse;
@@ -40,9 +41,31 @@ public class EquipmentScheduleController {
         return ApiResponse.ok(equipmentScheduleService.setCalendar(equipmentId, request));
     }
 
+    /** From {@code effectiveFrom} (today when left out) the equipment runs around the clock; earlier dates keep theirs. */
     @DeleteMapping("/calendar")
-    public ApiResponse<EquipmentScheduleResponse> clearCalendar(@PathVariable("equipmentId") String equipmentId) {
-        return ApiResponse.ok(equipmentScheduleService.clearCalendar(equipmentId));
+    public ApiResponse<EquipmentScheduleResponse> clearCalendar(
+        @PathVariable("equipmentId") String equipmentId,
+        @RequestParam(value = "effectiveFrom", required = false) String effectiveFrom
+    ) {
+        return ApiResponse.ok(equipmentScheduleService.clearCalendar(equipmentId, effectiveFrom));
+    }
+
+    /** One version of the calendar (docs/architecture/adr/ADR-014-equipment-calendar-history.md). */
+    @GetMapping("/calendar/versions/{scheduleId}")
+    public ApiResponse<EquipmentCalendarVersionResponse> calendarVersion(
+        @PathVariable("equipmentId") String equipmentId,
+        @PathVariable("scheduleId") String scheduleId
+    ) {
+        return ApiResponse.ok(equipmentScheduleService.calendarVersion(equipmentId, scheduleId));
+    }
+
+    /** Deletes a calendar version that has not started yet (ADR-014). */
+    @DeleteMapping("/calendar/versions/{scheduleId}")
+    public ApiResponse<EquipmentScheduleResponse> removeCalendarVersion(
+        @PathVariable("equipmentId") String equipmentId,
+        @PathVariable("scheduleId") String scheduleId
+    ) {
+        return ApiResponse.ok(equipmentScheduleService.removeCalendarVersion(equipmentId, scheduleId));
     }
 
     /** One date's shifts in place of the calendar's; no shifts close the day (docs/domain/equipment-schedule.md). */

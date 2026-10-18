@@ -25,6 +25,8 @@ public class WorkerRota {
     private String userId;
     private int cycleWeeks;
     private LocalDate startsOn;
+    /** The version of the worker's weekly shifts it belongs to (V93, docs/architecture/adr/ADR-013-rota-history.md). */
+    private String scheduleId;
     private String updatedBy;
     private OffsetDateTime updatedAt;
 }

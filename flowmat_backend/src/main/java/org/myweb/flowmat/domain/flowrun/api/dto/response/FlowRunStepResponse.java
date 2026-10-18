@@ -17,6 +17,8 @@ public record FlowRunStepResponse(
     JsonNode inputSnapshot,
     JsonNode outputSnapshot,
     String errorCode,
-    String errorMessage
+    String errorMessage,
+    /** A Join step's connections that can still bring something (ADR-007), 0 once passed; null for other steps and answers. */
+    Integer joinWaiting
 ) {
 }

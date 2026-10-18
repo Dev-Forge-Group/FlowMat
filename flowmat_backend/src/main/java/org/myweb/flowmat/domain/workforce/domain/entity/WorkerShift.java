@@ -29,6 +29,8 @@ public class WorkerShift {
     private String workDays;
     /** The week of the worker's rota it runs in; 1 without a rota (V87, WC44). */
     private int rotaWeek = 1;
+    /** The version of the worker's weekly shifts it belongs to (V93, docs/architecture/adr/ADR-013-rota-history.md). */
+    private String scheduleId;
     private String updatedBy;
     private OffsetDateTime updatedAt;
 }

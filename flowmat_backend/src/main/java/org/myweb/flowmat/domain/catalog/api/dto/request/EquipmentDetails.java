@@ -1,10 +1,15 @@
 package org.myweb.flowmat.domain.catalog.api.dto.request;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Size;
+import java.io.IOException;
 import java.math.BigDecimal;
 import org.myweb.flowmat.global.util.StrictBooleanDeserializer;
 
@@ -31,12 +36,42 @@ public record EquipmentDetails(
     @DecimalMax(value = "100", message = "efficiencyPercent must be above 0 and at most 100.")
     @Digits(integer = 3, fraction = 2, message = "efficiencyPercent takes at most 2 decimals.") BigDecimal efficiencyPercent,
     /** True when several work orders may run on it at once (E12); null or false is one at a time, as before V86. */
-    @JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean concurrentWorkOrders
+    @JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean concurrentWorkOrders,
+    /** With concurrentWorkOrders, at most this many at once, 2 to 99; null is no limit (E16). */
+    @JsonDeserialize(using = WholeLimit.class) Integer concurrentLimit
 ) {
 
     /** The details without an efficiency or the side-by-side switch, as callers wrote them before V84. */
     public EquipmentDetails(String manufacturer, String modelName, String serialNo, BigDecimal capacityPerHour, BigDecimal powerKwh,
                             BigDecimal waterLiter, String location) {
-        this(manufacturer, modelName, serialNo, capacityPerHour, powerKwh, waterLiter, location, null, null);
+        this(manufacturer, modelName, serialNo, capacityPerHour, powerKwh, waterLiter, location, null, null, null);
+    }
+
+    /** The details without a limit on side-by-side work orders, as callers wrote them before V90. */
+    public EquipmentDetails(String manufacturer, String modelName, String serialNo, BigDecimal capacityPerHour, BigDecimal powerKwh,
+                            BigDecimal waterLiter, String location, BigDecimal efficiencyPercent, Boolean concurrentWorkOrders) {
+        this(manufacturer, modelName, serialNo, capacityPerHour, powerKwh, waterLiter, location, efficiencyPercent,
+            concurrentWorkOrders, null);
+    }
+
+    /** Read the limit exactly; the service checks its range (E16). */
+    public static final class WholeLimit extends StdDeserializer<Integer> {
+        public static final String MESSAGE = "concurrentLimit is a whole number from 2 to 99.";
+
+        public WholeLimit() {
+            super(Integer.class);
+        }
+
+        @Override
+        public Integer deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            if (!parser.currentToken().isNumeric()) {
+                throw JsonMappingException.from(parser, MESSAGE);
+            }
+            try {
+                return parser.getDecimalValue().intValueExact();
+            } catch (ArithmeticException invalid) {
+                throw JsonMappingException.from(parser, MESSAGE);
+            }
+        }
     }
 }

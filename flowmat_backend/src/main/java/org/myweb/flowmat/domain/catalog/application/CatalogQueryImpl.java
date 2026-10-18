@@ -41,18 +41,23 @@ public class CatalogQueryImpl implements CatalogQuery {
     public Optional<CatalogItemView> findProjectItem(String projectId, String itemId) {
         return itemRepository.findByItemIdAndDeletedYn(itemId, NOT_DELETED)
             .filter(item -> Objects.equals(projectId, item.getProjectId()))
-            .map(item -> view(item, unitCodes(List.of(item))));
+            .map(item -> view(item, units(List.of(item))));
     }
 
     @Override
     public Optional<CatalogItemView> findActiveItem(String itemId) {
         return itemRepository.findByItemIdAndDeletedYn(itemId, NOT_DELETED)
-            .map(item -> view(item, unitCodes(List.of(item))));
+            .map(item -> view(item, units(List.of(item))));
     }
 
     @Override
     public boolean isKnownUnitCode(String unitCode) {
         return unitCode != null && unitMasterRepository.findByUnitCodeIgnoreCase(unitCode.trim()).isPresent();
+    }
+
+    @Override
+    public Optional<String> findUnitType(String unitCode) {
+        return unitCode == null ? Optional.empty() : unitMasterRepository.findByUnitCodeIgnoreCase(unitCode).map(UnitMaster::getUnitType);
     }
 
     @Override
@@ -62,14 +67,26 @@ public class CatalogQueryImpl implements CatalogQuery {
             return Collections.emptyMap();
         }
         List<Item> items = itemRepository.findAllById(itemIds);
-        Map<String, String> units = unitCodes(items);
+        Map<String, UnitMaster> units = units(items);
+        return items.stream().collect(Collectors.toMap(Item::getItemId, item -> view(item, units)));
+    }
+
+    @Override
+    public Map<String, CatalogItemView> findActiveItems(Collection<String> itemIds) {
+        if (itemIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Item> items = itemRepository.findAllById(itemIds).stream()
+            .filter(item -> NOT_DELETED.equals(item.getDeletedYn()))
+            .toList();
+        Map<String, UnitMaster> units = units(items);
         return items.stream().collect(Collectors.toMap(Item::getItemId, item -> view(item, units)));
     }
 
     @Override
     public List<CatalogItemView> findProjectItems(String projectId) {
         List<Item> items = itemRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtAsc(projectId, NOT_DELETED);
-        Map<String, String> units = unitCodes(items);
+        Map<String, UnitMaster> units = units(items);
         return items.stream().map(item -> view(item, units)).toList();
     }
 
@@ -97,7 +114,7 @@ public class CatalogQueryImpl implements CatalogQuery {
     private static CatalogEquipmentView equipmentView(Equipment equipment) {
         return new CatalogEquipmentView(equipment.getEquipmentId(), equipment.getProjectId(), equipment.getEquipmentCode(),
             equipment.getEquipmentName(), equipment.getEquipmentStatus(), equipment.getCapacityPerHour(), equipment.getEfficiencyPercent(),
-            "Y".equals(equipment.getConcurrentWorkOrdersYn()));
+            "Y".equals(equipment.getConcurrentWorkOrdersYn()), equipment.getConcurrentWorkOrdersLimit());
     }
 
     @Override
@@ -119,15 +136,16 @@ public class CatalogQueryImpl implements CatalogQuery {
             .orElseGet(OptionalInt::empty);
     }
 
-    private Map<String, String> unitCodes(List<Item> items) {
+    private Map<String, UnitMaster> units(List<Item> items) {
         List<String> unitIds = items.stream().map(Item::getUnitId).filter(Objects::nonNull).distinct().toList();
         return unitIds.isEmpty() ? Map.of() : unitMasterRepository.findAllById(unitIds).stream()
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode));
+            .collect(Collectors.toMap(UnitMaster::getUnitId, unit -> unit));
     }
 
-    private static CatalogItemView view(Item item, Map<String, String> units) {
+    private static CatalogItemView view(Item item, Map<String, UnitMaster> units) {
+        UnitMaster unit = item.getUnitId() == null ? null : units.get(item.getUnitId());
         return new CatalogItemView(item.getItemId(), item.getProjectId(), item.getItemCode(), item.getItemName(),
-            item.getUnitId(), item.getUnitId() == null ? null : units.get(item.getUnitId()), item.getUnitCost(), item.getLeadTimeDays(),
-            item.getItemStatus());
+            item.getUnitId(), unit == null ? null : unit.getUnitCode(), unit == null ? null : unit.getUnitType(), item.getUnitCost(),
+            item.getLeadTimeDays(), item.getItemStatus(), item.getLotManageYn(), item.getPurchaseUnit(), item.getConversionRate());
     }
 }

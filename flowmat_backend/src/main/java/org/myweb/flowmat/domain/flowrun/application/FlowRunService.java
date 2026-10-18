@@ -3,8 +3,6 @@ package org.myweb.flowmat.domain.flowrun.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -22,12 +20,15 @@ import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccessView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -43,7 +44,7 @@ public class FlowRunService {
     private final FlowRunEventRecorder eventRecorder;
     private final WorkflowProductionQuery workflowQuery;
     private final ProjectAccessService projectAccessService;
-    private final EntityManager entityManager;
+    private final WorkflowAccess workflowAccess;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
 
@@ -58,12 +59,11 @@ public class FlowRunService {
     }
 
     private FlowRunResponse start(FlowRunStartRequest request, String executionMode) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(request.workflowId().trim());
         // Retire holds this same lock, so a start observes the committed revision status.
-        entityManager.lock(workflow, LockModeType.PESSIMISTIC_WRITE);
+        WorkflowAccessView workflow = workflowAccess.requireWriteAndLock(request.workflowId().trim());
         // Read through the workflow context's public query, not its repository (ADR-002).
         WorkflowProductionQuery.Revision revision = workflowQuery
-            .findRevision(request.workflowRevisionId().trim(), workflow.getWorkflowId())
+            .findRevision(request.workflowRevisionId().trim(), workflow.workflowId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
                 "Workflow revision was not found for this workflow."));
         if (!"published".equals(revision.status())) {
@@ -84,8 +84,8 @@ public class FlowRunService {
 
         FlowRun run = new FlowRun();
         run.setFlowRunId(idGenerator.generate());
-        run.setProjectId(workflow.getProjectId());
-        run.setWorkflowId(workflow.getWorkflowId());
+        run.setProjectId(workflow.projectId());
+        run.setWorkflowId(workflow.workflowId());
         run.setWorkflowRevisionId(revision.workflowRevisionId());
         run.setRunType(runType);
         run.setExecutionMode(executionMode);
@@ -97,25 +97,33 @@ public class FlowRunService {
         eventRecorder.record(run.getFlowRunId(), null, "run_started",
             readJson(run.getInputPayload()), run.getRequestedBy());
         if (graph != null) {
-            int sequence = 0;
-            for (String nodeId : graph.roots()) {
-                FlowRunStep step = new FlowRunStep();
-                step.setStepId(idGenerator.generate());
-                step.setFlowRunId(run.getFlowRunId());
-                step.setNodeId(nodeId);
-                step.setStatus("planned");
-                step.setSequenceNo(++sequence);
-                step.setInputSnapshot(run.getInputPayload());
-                stepRepository.saveAndFlush(step);
-                eventRecorder.record(run.getFlowRunId(), step.getStepId(), "step_created",
-                    input, run.getRequestedBy());
-            }
+            createRootSteps(run, graph, input, run.getRequestedBy());
         }
         return toResponse(run);
     }
 
+    /**
+     * One planned step for each root node of the graph as the run starts. A production-linked run gets them the same way
+     * (docs/architecture/adr/ADR-011-production-steps.md decision 1).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void createRootSteps(FlowRun run, FlowRunGraph graph, JsonNode input, String actorId) {
+        int sequence = 0;
+        for (String nodeId : graph.roots()) {
+            FlowRunStep step = new FlowRunStep();
+            step.setStepId(idGenerator.generate());
+            step.setFlowRunId(run.getFlowRunId());
+            step.setNodeId(nodeId);
+            step.setStatus("planned");
+            step.setSequenceNo(++sequence);
+            step.setInputSnapshot(run.getInputPayload());
+            stepRepository.saveAndFlush(step);
+            eventRecorder.record(run.getFlowRunId(), step.getStepId(), "step_created", input, actorId);
+        }
+    }
+
     public List<FlowRunResponse> list(String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireRead(workflowId);
         return flowRunRepository.findAllByWorkflowIdOrderByStartedAtDesc(workflowId).stream()
             .map(this::toResponse)
             .toList();

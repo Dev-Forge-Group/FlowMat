@@ -86,13 +86,17 @@ export function EquipmentPanel({ projectId }: { projectId: string }) {
       setDetails(EMPTY_DETAILS_FORM)
       setStatusNote('')
       void queryClient.invalidateQueries({ queryKey })
+      void queryClient.invalidateQueries({ queryKey: ['equipment-load', projectId] })
     },
   })
   const remove = useMutation({
     mutationFn: async (id: string) => {
       unwrapApiVoidResponse(await httpClient.delete<ApiEnvelope<null>>(`/equipments/${encodeURIComponent(id)}`))
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey })
+      void queryClient.invalidateQueries({ queryKey: ['equipment-load', projectId] })
+    },
   })
 
   function edit(equipment: EquipmentDto) {
@@ -140,7 +144,8 @@ export function EquipmentPanel({ projectId }: { projectId: string }) {
         <tbody>{shown.map((equipment) => <tr key={equipment.equipmentId}>
           <td>{equipment.equipmentCode ?? '—'}</td><td>{equipment.equipmentName}</td>
           <td>{equipment.equipmentType}</td><td>{equipment.equipmentStatus}
-            {equipment.details?.concurrentWorkOrders && <div className="inspector-hint">side by side</div>}</td>
+            {equipment.details?.concurrentWorkOrders && <div className="inspector-hint">side by side
+              {equipment.details.concurrentLimit ? ` · up to ${equipment.details.concurrentLimit}` : ''}</div>}</td>
           <td>{makerModel(equipment.details) || '—'}
             {equipment.details?.serialNo && <div className="inspector-hint">S/N {equipment.details.serialNo}</div>}</td>
           <td>{equipment.details?.location ?? '—'}</td>
@@ -187,6 +192,8 @@ export function EquipmentPanel({ projectId }: { projectId: string }) {
           onChange={(event) => setDetails({ ...details, [field.key]: event.target.value })} /></label>)}
         <label><input type="checkbox" checked={details.concurrentWorkOrders}
           onChange={(event) => setDetails({ ...details, concurrentWorkOrders: event.target.checked })} /> Runs several work orders at once</label>
+        {details.concurrentWorkOrders && <label>At most at once<input type="number" step={1} inputMode="numeric" placeholder="no limit"
+          value={details.concurrentLimit} onChange={(event) => setDetails({ ...details, concurrentLimit: event.target.value })} /></label>}
         <span className="inspector-hint">Plans then let its work orders overlap, and the load board does not call it overloaded.</span>
       </fieldset>
       {save.isError && <p role="alert">{errorMessage(save.error)}</p>}

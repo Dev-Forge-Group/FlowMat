@@ -39,7 +39,7 @@
 
 ## 워크플로 검증과 발행
 
-`GET /workflows/{workflowId}/validation`은 읽기 권한을 요구한다. 결과는 `errors`, `warnings`, `issues[]`이며 각 문제에 `severity`, `code`, `processId`, `ioId`, `connectionId`, `message`가 있다. 오류 코드: `CONNECTION_ORPHAN`, `CONNECTION_INCOMPATIBLE`, `EXPRESSION_INVALID`, `PORT_SCHEMA_INVALID`, `REQUIRED_INPUT_UNCONNECTED`. 경고 코드: `PROCESS_ISOLATED`, `CYCLE`, `SCHEMA_UNVERIFIED`, `UNIT_UNKNOWN`, `RESOURCE_TYPE_UNKNOWN`. Exclusive 게이트웨이의 오류·경고는 GR-19. 오류를 먼저 표시한다.
+`GET /workflows/{workflowId}/validation`은 읽기 권한을 요구한다. 결과는 `errors`, `warnings`, `issues[]`이며 각 문제에 `severity`, `code`, `processId`, `ioId`, `connectionId`, `message`가 있다. 오류 코드: `CONNECTION_ORPHAN`, `CONNECTION_INCOMPATIBLE`, `EXPRESSION_INVALID`, `PORT_SCHEMA_INVALID`, `REQUIRED_INPUT_UNCONNECTED`. 경고 코드: `PROCESS_ISOLATED`, `CYCLE`, `SCHEMA_UNVERIFIED`, `UNIT_UNKNOWN`, `RESOURCE_TYPE_UNKNOWN`. Exclusive 게이트웨이의 오류·경고는 GR-19, Join은 GR-27. 오류를 먼저 표시한다.
 
 `RESOURCE_TYPE_UNKNOWN`(2026-10-02)은 포트의 `resourceType`이 registry에 없을 때 나온다. Registry(Experimental)는 `material, product, energy, water, waste, file, data, api, parameter, signal, generic`이다([ADR-003](../architecture/adr/ADR-003-resource-port-contract.md) "Resource Type Registry"). `labor`는 실행 요건이지 포트로 흐르는 대상이 아니어서 넣지 않았다. 포트 편집 화면의 I/O Type에 `labor`가 있어 그 포트는 이 경고를 받는다. 저장과 발행은 막지 않는다. 목록 밖 값도 그대로 저장되며, 연결의 PC-04(양쪽 `resourceType` 일치)는 그대로 적용된다.
 
@@ -118,7 +118,7 @@ PC-21은 포트·연결 서비스와 revision 발행이 함께 쓰는 워크플�
 
 ## 2026-10-17 Exclusive 게이트웨이 (ADR-006, V85)
 
-[ADR-006](../architecture/adr/ADR-006-operation-types.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")의 1단계. 일을 하지 않는 게이트웨이 노드 중 Exclusive만 구현했다(2eb, 로컬 검증, V85 개발 DB 미적용). Join·Parallel 노드·Subflow·수량 분할은 없다. 병렬 분기는 지금처럼 조건 없는 여러 연결로 한다.
+[ADR-006](../architecture/adr/ADR-006-operation-types.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")의 1단계. 일을 하지 않는 게이트웨이 노드 중 Exclusive만 구현했다(2eb, 로컬 검증, V85 2026-10-17 개발 DB 적용). Join·Parallel 노드·Subflow·수량 분할은 없다. 병렬 분기는 지금처럼 조건 없는 여러 연결로 한다.
 
 | 규칙 | 동작 | 위반 응답 |
 |---|---|---|
@@ -132,3 +132,71 @@ PC-21은 포트·연결 서비스와 revision 발행이 함께 쓰는 워크플�
 | GR-20 | API: 연결 생성·수정의 `defaultRoute`는 JSON `true`·`false`만 받는다. 생성에서 빠지면 false, 수정에서 빠지면 그대로다. 응답과 캔버스에 `defaultRoute`가 있다. 편집기: 게이트웨이에서 나가는 연결의 인스펙터에만 **Default route** 체크와 설명이 있고, 그 밖의 연결은 이 값을 보내지 않는다. 실행 취소가 기본 연결 여부도 되돌린다 | 다른 값이면 400 |
 
 검증(2026-10-17, 격리 복사본): `ExclusiveGatewayIntegrationTest` — Measure → Choose(Exclusive) → Big(priority 1, `quantity > 10`)·Medium(2, `quantity > 5`)·Rest(9, 기본). 12는 Big만(Medium은 `exclusive_not_chosen`, Rest는 `default_not_needed`, 게이트웨이 완료 행위자 system, 끝난 게이트웨이 단계 시작 409), 7은 Medium, 3은 Rest(`default`). 기본 연결을 끄고 다시 발행하면 3에서 게이트웨이 단계 `NO_ROUTE` 실패·실행 실패이고, 앞 revision으로 시작한 실행은 여전히 Rest로 간다. 기본 연결 둘·게이트웨이 밖 기본 연결·입력 없는 게이트웨이 발행 409, 나가는 연결 하나면 경고, `"defaultRoute":"yes"` 400. Exclusive·그래프 실행·실행 정책·데이터 흐름·포트 측정·연결 계약·워크플로 검사·모듈 경계·마이그레이션 91건, 워크플로·캔버스·협업·revision·공정·그래프·편집기 249건 실패 0. 프런트 `nodeCatalog.test.ts`(팔레트), `connectionUndo.test.ts`(기본 연결 되돌리기) 각 1건, 모의 API e2e `exclusive-gateway-editor.spec.ts`(게이트웨이 연결만 Default route를 보이고 보냄) 4회 반복 통과.
+
+## 2026-10-17 Join 게이트웨이 (ADR-007, V88)
+
+[ADR-007](../architecture/adr/ADR-007-join-gateway.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")을 구현했다(2ef, 로컬 검증, V88 개발 DB 미적용). 노드 종류 `join`(편집기 팔레트 **Join**, `processType` `gateway`).
+
+| 규칙 | 동작 | 위반 응답 |
+|---|---|---|
+| GR-21 | Join으로 가는 연결이 통과하면 단계를 따로 만들지 않고, 그 실행의 Join 단계(노드마다 하나)에 **도착**으로 더한다. 첫 도착 때 planned로 만들고 도착마다 `join_arrived`(연결·출처 단계·도착 번호)를 남긴다. 도착은 V88 `flow_run_step_source`에 순서대로 남는다 | |
+| GR-22 | **합류 시점(도달 가능성):** Join으로 들어오는 연결 가운데, 그 실행의 planned·running 단계(재시도 대기·예정 시각 대기, 기다리는 다른 Join 포함)에서 발행 그래프를 따라 닿을 수 있는 것이 하나도 없으면 합류한다. 단계 완료와 건너뜀(시간 초과로 인한 것 포함) 뒤마다 실행 행 잠금 안에서 다시 보므로, 동시에 끝난 두 갈래도 한 번만 합류한다 | |
+| GR-23 | 끊긴 갈래(조건 거짓, Exclusive 미선택, 건너뜀)는 기다리지 않는다. 하나도 도착하지 않으면 Join 단계와 그 뒤 단계를 만들지 않고, 실행은 마칠 수 있다. 위쪽에서 다시 모인 갈래가 같은 연결로 여러 번 오면 모두 모아 한 번 합류한다. 재시도는 도착을 늘리지 않는다 | |
+| GR-24 | **합친 입력·출력:** `arrivals[{connectionId, sourceStepId, quantity, unit, item, attrs}]`(도착 순서, 출처 단계 출력에 있는 것만). 모든 도착에 수량이 있고 단위가 같으면(모두 없음 포함) 위쪽에 `quantity`(합)와 `unit`, 품목이 모두 같으면 `item`을 둔다. `attrs`는 합치지 않는다. 출력은 입력과 같고, 나가는 연결의 조건·용량·단위·포트 규칙은 이 출력으로 본다 | |
+| GR-25 | 합류하면 서버가 system으로 지나간다(시도 1, `step_started`·`step_completed`). 사람이 시작·완료·일정 변경할 단계가 아니다. 재고·생산 기록은 움직이지 않는다 | 시작·일정 변경 409 `A Join step waits for its branches; the server passes it on (ADR-007).`, 완료 409 |
+| GR-26 | 합친 출력이 나가는 연결 규칙(GR-03·GR-07·GR-08)을 통과하지 못할 때: 계기가 완료 보고면 그 보고 전체를 409로 거절해 아무것도 남기지 않는다. 계기가 건너뜀·시간 초과면 Join 단계가 `JOIN_TRANSFER_REJECTED`로 실패하고 실행도 실패한다(건너뜀은 그대로 남는다). Join 뒤 Exclusive가 고른 연결도 같다 | 409 / 실행 failed |
+| GR-27 | 발행 검사: 오류 `JOIN_WITHOUT_INPUT`(진입 연결 없음), 경고 `JOIN_SINGLE_INPUT`(진입 연결 하나). 진입 연결 없는 Join이 든 발행본으로는 그래프 실행을 시작하지 않는다 | 발행 409 / 실행 시작 409 `Published revision Join <id> has no incoming connection.` |
+| GR-28 | 응답·계보: 단계 목록의 Join 단계에 `joinWaiting`(아직 닿을 수 있는 진입 연결 수, 지나간 뒤 0. 다른 단계와 다른 응답은 null). 계보 API의 조상은 Join의 모든 도착 출처를 따라 단계 순번 순, 자손은 다시 모인 곳을 한 번만 센다. 실행 화면은 Join 단계에 `joins steps #2, #3 · waiting for 1 branch`를 보이고 Start·Edit schedule을 숨긴다. Join 단계의 `sourceStepId`·`sourceConnectionId`는 첫 도착이다 | |
+
+검증(2026-10-17, 격리 복사본): `JoinGatewayIntegrationTest` 4건 — 두 갈래(B 2 kg 도착 → Join planned·`joinWaiting` 1·시작 409·일정 409 → C 3 kg → 같은 Join 단계가 system으로 완료, 수량 5 kg·`attrs` 없음·도착 태그 B·C, 입력 = 출력, `join_arrived` 2, End 입력 = 합친 출력, End 계보 조상 A·B·C·J, A 자손 B·C·J·End, 실행 마감), 끊긴 갈래(skip 뒤 도착 1로 합류, Exclusive 미선택 갈래 기다리지 않음, 도착 없으면 Join 없음·마감), 전송 규칙(용량 4에 2+3 완료 보고 409·그대로 running·도착 1 → 1로 다시 보내 3, skip이 계기면 `JOIN_TRANSFER_REJECTED`·실행 failed·skip 유지), 발행 검사(`JOIN_WITHOUT_INPUT` 발행 409, `JOIN_SINGLE_INPUT`). 오류 담당이 미리 쓴 수용 테스트 `JoinGatewayAcceptanceIntegrationTest`(격리본에만 복사): 14건 중 13건 통과, 1건 실패(retry 갈래의 상태 단정, 아래). Join·Exclusive·그래프 실행·실행 정책·데이터 흐름·포트·연결·워크플로 검사·모듈 경계·마이그레이션 95건 실패 0, 전체 백엔드 1,425건 실패 0. 프런트 `nodeCatalog.test.ts` 1건, 모의 E2E `flow-run-join.spec.ts`(기다리는 Join `joins step #2 · waiting for 1 branch`·Start·Edit schedule 없음 → 지나간 뒤 `joins steps #2, #3`).
+
+## 2026-10-17 Split 게이트웨이 (ADR-008, V89)
+
+[ADR-008](../architecture/adr/ADR-008-quantity-split.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")을 구현했다(2eh, 로컬 검증, V89 개발 DB 미적용). 노드 종류 `split`(편집기 팔레트 **Split**, `processType` `gateway`). 일반 노드가 통과한 연결마다 같은 출력을 보내는 동작(GR-04)은 그대로다.
+
+| 규칙 | 동작 | 위반 응답 |
+|---|---|---|
+| GR-29 | 저장: 연결의 `splitKind`(`share`·`fixed`·`rest`)와 `splitValue`(V89 `split_kind`·`split_value numeric(19,4)`, DB 검사 제약 `ck_process_connection_split`). `share`는 입력 수량의 %(0 초과 100 이하, 소수 2자리까지), `fixed`는 수량(0 초과, 소수 4자리까지), `rest`는 값 없음. 생성에서 빠지면 몫 없음, 수정에서 빠지면 그대로, 수정의 `clearSplit: true`가 지운다. 응답·캔버스·발행 snapshot에 `splitKind`·`splitValue`(다른 연결은 null) | 400 `splitKind is share, fixed or rest.`·`A share split takes a percent above 0 and at most 100, with up to 2 decimals.`·`A fixed split takes a quantity above 0 with up to 4 decimals.`·`A rest split takes no splitValue.`·`splitValue needs splitKind.`·`splitKind and splitValue cannot be supplied with clearSplit.` |
+| GR-30 | 나누기: Split 단계 입력의 `quantity`를 그린 순서로 나눈다. 고정량은 그대로, 비율 몫은 입력 전체 × % ÷ 100을 소수 4자리 HALF_UP으로, 나머지 연결은 입력 − 고정량 합 − 비율 몫 합. 나머지 연결이 없으면 반올림 차이는 마지막 비율 연결이 가진다. 그래서 몫의 합은 언제나 입력과 같다 | |
+| GR-31 | 각 갈래의 입력: Split 입력을 복사하고 `quantity`만 그 몫으로 바꾼다(`unit`·`item`·`attrs` 그대로). 연결 용량·단위·포트 규칙(GR-03·GR-07·GR-08)은 각 몫으로 본다. `gateway_routed`는 reason `split`과 그 몫 `quantity` | |
+| GR-32 | 0인 몫: 그 연결로는 단계를 만들지 않고 `connection_filtered` reason `split_empty`를 남긴다. 몫이 모두 0이어도 Split은 실패하지 않는다(Exclusive의 `NO_ROUTE` 없음). 나가는 연결이 없는 Split은 거기서 끝난다 | |
+| GR-33 | Split은 서버가 system으로 바로 지나간다(시도 1, `step_started`·`step_completed`, 출력 = 입력). 사람이 시작·완료할 단계가 아니다. 재고·생산 기록은 움직이지 않는다 | |
+| GR-34 | 나눌 수 없을 때(입력에 수인 `quantity`가 없거나 음수, 고정량·비율 몫의 합이 입력을 넘음, 몫이 연결 규칙을 어김): 계기가 완료 보고면 그 보고 전체를 409로 거절해 아무것도 남기지 않는다. Join 뒤처럼 다시 보낼 사람이 없으면(건너뜀·시간 초과가 계기) Split 단계가 `SPLIT_REJECTED`로 실패하고 실행도 실패한다(GR-26과 같은 규칙) | 409 `Split <id> needs outputSnapshot.quantity to divide.`·`Split <id> gives out 3 but has 2.` |
+| GR-35 | Join과: Split에서 Join으로 바로 가는 연결은 그 몫이 도착 수량이다(`arrivals[].quantity`, GR-24). 나눈 갈래를 Join으로 모으면 같은 단위의 합이 다시 입력과 같다. 연결 손실률은 GR-37–GR-44(새 발행본부터), 흐름률은 반영하지 않는다(FM-FLOW-002) | |
+| GR-36 | 발행 검사: 오류 `SPLIT_WITHOUT_INPUT`(진입 연결 없음), `SPLIT_SHARE_MISSING`(몫이 없는 나가는 연결), `SPLIT_CONDITION`(조건식), `SPLIT_REST_DUPLICATE`(나머지 둘 이상), `SPLIT_SHARES_OVER`(비율 합 100 초과), `SPLIT_NO_REST`(나머지 없이 고정량이 있거나 비율 합이 100이 아님), `SPLIT_OUTSIDE_GATEWAY`(Split이 아닌 노드의 연결에 몫). 경고 `SPLIT_SINGLE_ROUTE`(나가는 연결 둘 미만). 화면: 팔레트 **Split**, Split에서 나가는 연결 인스펙터에 **Share**(Percent·Fixed quantity·The rest)와 값(보내기 전 0 초과·100 이하 검사), 실행 화면의 갈래 단계에 `received 70 kg` | 발행 409 |
+
+검증(2026-10-17, 격리 복사본): `SplitGatewayIntegrationTest` 5건 — 비율(100 kg → 70·30, Split은 system 완료, `gateway_routed` `split` 수량 70, `unit` 그대로, 두 갈래를 Join으로 모으면 100), 고정과 나머지(0.5·99.5), 반올림(0.001을 33.33·33.33·33.34% → 0.0003·0.0003·0.0004), 0인 몫(fixed 5 + rest에 5 → rest 단계 없음·`split_empty`), 나눌 수 없음(2에 fixed 3 보고 409 `gives out 3 but has 2.`, 수량 없는 보고 409, A는 running 그대로 → 3으로 다시 보내 통과, Join 뒤 skip이 계기면 `SPLIT_REJECTED`·실행 failed·뒤 단계 없음), Split→Join으로 바로 가는 몫 30이 도착 → B 70과 합쳐 100, 저장·발행 검사(오류 코드 5종 한 번에·발행 409, `SPLIT_SHARES_OVER`·`SPLIT_NO_REST`·`SPLIT_SINGLE_ROUTE`, 400 메시지 7종, `clearSplit`). Split·Join·Exclusive·그래프 실행·워크플로 검사·연결·모듈 경계·마이그레이션 96건 실패 0, 전체 백엔드 1,431건 실패 0(V89 제약을 CASE로 고친 뒤 Split·마이그레이션·연결·워크플로 검사·모듈 경계 52건 다시 실패 0). 프런트 Vitest 659건(`splitShare.test.ts` 2건, `connectionUndo.test.ts`·`nodeCatalog.test.ts` 각 1건), 모의 E2E `split-gateway-editor.spec.ts`(일반 노드 연결은 몫을 묻지도 보내지도 않음, 120 거절·70 보냄, rest는 값 없이)·`flow-run-split.spec.ts`(`received 70 kg`·`received 30 kg`, Split 단계 자신은 없음) 2회 반복 통과. V89 리허설(개발 DB 5434, `BEGIN; … ROLLBACK;`, `lock_timeout` 5s): 기존 연결 16건 그대로 통과, 잘못된 조합 7가지(`share` 150·`rest` 1·`fixed` 0·종류 없이 값 2·모르는 종류·값 없는 `share`·`fixed`) 거절, 맞는 조합 5가지 통과, 롤백 뒤 열 없음·V87 그대로. 처음 쓴 OR 제약은 종류 없이 값만 있는 행을 통과시켜(CHECK가 NULL이면 통과) CASE로 고쳤다.
+
+## 2026-10-17 연결 손실률 (ADR-009, 마이그레이션 없음)
+
+[ADR-009](../architecture/adr/ADR-009-connection-loss-rate.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")을 구현했다(2ei, 로컬 검증, 새 마이그레이션 없음). 연결의 `lossRate`(`numeric(5,4)`, PC-14)는 이제 그 연결이 나르는 수량의 비율이고, 발행 snapshot `schemaVersion` 2부터 실행에 쓴다.
+
+| 규칙 | 동작 | 위반 응답 |
+|---|---|---|
+| GR-37 | 뜻과 저장: 비율 0 이상 1 미만(0.05 = 5%). PC-14의 `numeric(5,4)` 검사 뒤에 범위를 본다. 생성에서 빠지거나 수정의 명시적 `null`은 0이다(PC-14 그대로). 편집기 **Loss %**는 퍼센트(0 이상 100 미만, 소수 2자리까지)로 보이고 받으며 비율로 보낸다 | 400 `lossRate is a fraction of at least 0 and below 1 (0.05 is 5%).`, `numeric(5,4)`를 넘으면 PC-14 메시지 |
+| GR-38 | 계산: 연결을 지날 때 도착 = 보낸 수량 × (1 − r)을 소수 4자리 HALF_UP으로 반올림, 손실 = 보낸 − 도착. 보낸 수량이 소수 4자리를 넘어 반올림이 보낸 것보다 커지면 보낸 만큼만 도착한다 | |
+| GR-39 | 보낸 수량: 그 연결로 가는 수량(일반 노드·Exclusive·Join은 출력, Split은 그 몫, GR-30). 출력에 양수 `quantity`가 없으면 빼지 않고 그대로 보낸다 | |
+| GR-40 | 검사 순서: 연결 용량(GR-03)·단위·출발 포트 스키마·검증식은 보낸 수량으로, 도착 포트 스키마·검증식(GR-07·GR-08)은 도착 수량으로 본다. 손실이 없으면 지금과 같다 | 409 그대로 |
+| GR-41 | 기록: 다음 단계 입력 스냅샷의 `quantity`는 도착 수량, 다른 값은 그대로. 출발 단계에 이벤트 `transfer_loss`(`connectionId`·`targetNodeId`·`sent`·`lossRate`·`lost`·`arrived`·`unit`). Split의 `gateway_routed` 수량은 몫(보낸 수량)이다. Join 도착(`arrivals[].quantity`)은 도착 수량이고 합친 수량은 그 합이다. 새 표 없음 | |
+| GR-42 | 도착 0: 양수가 반올림으로 모두 사라지면 단계를 만들지 않고 `connection_filtered` reason `loss_empty`(`transfer_loss`는 남김). Exclusive가 고른 연결이 그렇게 되어도 `NO_ROUTE`가 아니고 게이트웨이는 완료된다 | |
+| GR-43 | 이미 발행한 revision: 발행 snapshot·`workflow_revision.schema_version`이 2부터 손실을 적용한다. 1(2ei 전 발행본)은 `lossRate`를 갖고 있어도 지금처럼 전량을 보낸다. 2 이상 발행본에 범위 밖 값이 있으면 실행 시작 409 | 409 `Published revision has an invalid lossRate: <id>` |
+| GR-44 | 발행 검사: 오류 `LOSS_RATE_RANGE`(0 미만 또는 1 이상, 규칙 전에 저장된 값). 실행 화면: 손실이 있었던 단계에 `received 98 kg · lost 2 kg`(Split 몫 줄과 같은 자리, Join 단계는 제외) | 발행 409 |
+
+검증(2026-10-17, 격리 복사본): `ConnectionLossIntegrationTest` 6건 — 손실 2%(발행 `schemaVersion` 2, 100 kg → B 입력 98 kg·`unit` 그대로, `transfer_loss` 100·0.02·2·98·kg), Split 몫과 Join(70% 몫에 1% → 69.3, `gateway_routed` 수량 70, Split→Join 20% 몫에 10% → 도착 18, B→J 손실 50%로 69.3 → 34.65, C 10 → Join 62.65, 뒤 단계 입력 62.65), 검사 순서(용량 99에 100을 2% 손실로 보내도 409, 출발 포트 `quantity >= 100`·도착 포트 `quantity < 99`는 통과해 98 도착), 도착 0(0.0001에 60% → B 단계 없음·`loss_empty`·`transfer_loss` 손실 0.0001·도착 0, Exclusive가 고른 연결도 단계 없이 게이트웨이 완료, 실행 마감), 예전 발행본(`schemaVersion` 1로 되돌린 발행본은 100 그대로·`transfer_loss` 없음), 저장·발행 검사(생성 1·−0.1 400, 수정 1 400, 0.9999 저장, 예전 값 1.5는 `LOSS_RATE_RANGE`·발행 409). `ProcessConnectionDecimalValidationIntegrationTest`의 `lossRate` 경계를 9.9999에서 0.9999로 바꿨다(계약 변경). 관련 백엔드 113건(손실·Split·Join·Exclusive·그래프 실행·워크플로 검사·연결·포트·revision·데이터 흐름·모듈 경계·마이그레이션) 중 테스트 자체의 단정 1건만 실패 → 고쳐 다시 통과, 전체 백엔드 1,437건 실패 0. 프런트 Vitest 662건(`lossPercent.test.ts` 3건), 모의 E2E `connection-loss-editor.spec.ts`(저장된 0.02가 `2`로 보임, 100 거절·보내지 않음, 2.5 → 0.025)·`flow-run-split.spec.ts`(`received 69.3 kg · lost 0.7 kg`) 반복 통과.
+
+## 2026-10-17 연결 지연 (ADR-010, 마이그레이션 없음)
+
+[ADR-010](../architecture/adr/ADR-010-connection-delay.md)(Accepted 2026-10-17, 사용자 결정 "Accept as recommended")을 구현했다(2ej, 로컬 검증, 새 마이그레이션 없음). 연결의 `delayTimeSec`(`numeric(10,2)`, PC-14)는 이제 다음 단계를 시작할 수 있는 시각을 정하고, 발행 snapshot `schemaVersion` 3부터 실행에 쓴다.
+
+| 규칙 | 동작 | 위반 응답 |
+|---|---|---|
+| GR-45 | 저장: 0 이상(초). PC-14의 `numeric(10,2)` 검사 뒤에 범위를 본다. 생성에서 빠지거나 수정의 명시적 `null`은 0이다(PC-14 그대로). 편집기 **Delay (s)**는 음수를 보내기 전에 거절한다 | 400 `delayTimeSec is 0 or more seconds.` |
+| GR-46 | 계산: 연결을 지나 만든 단계의 `scheduledAt` = 기준 시각 + 지연(마이크로초로 자름). 기준은 출발 단계의 완료 시각이고, 출발이 게이트웨이면 그 게이트웨이가 받은 시각이다. 지연이 없고 넘겨받은 시각도 없으면 지금처럼 비어 있다 | |
+| GR-47 | 게이트웨이: Exclusive·Split은 지금처럼 바로 지나가되 받은 시각을 자기 `scheduledAt`에 남기고 나가는 연결로 넘긴다(지연이 더해진다). Join은 지나갈 때 도착들의 준비 시각(출처 기준 + 그 연결의 지연, 지연이 없는 도착은 출처 완료 시각) 가운데 가장 늦은 것을 받는다. 도착 중 하나라도 지연이 있을 때만 남긴다. 게이트웨이 단계의 `scheduledAt`은 "받은 시각"이다 | |
+| GR-48 | 시작: `scheduledAt` 전 `start`는 지금처럼 409. 서버는 단계를 스스로 시작하지 않는다 | 409 `Step cannot start before its scheduledAt.` |
+| GR-49 | 바닥: 지연으로 정한 시각보다 앞당기거나 지우는 `schedule`은 409. 늦추는 것은 된다. 재시도 대기(EP5)는 그대로다 | 409 `Step's input is ready at <시각>; schedule it at or after then.` |
+| GR-50 | 기록: 지연으로 예정 시각을 정한 단계에 `step_scheduled`(`scheduledAt`, `reason` `connection_delay`, `connectionId`, `delaySeconds`). Join은 `scheduledAt`·`reason`만 | |
+| GR-51 | 이미 발행한 revision: 발행 snapshot·`workflow_revision.schema_version`이 3부터 지연을 적용한다. 1·2(2ej 전 발행본)는 `delayTimeSec`가 있어도 지금처럼 바로 시작할 수 있다. 3 이상 발행본에 음수가 있으면 실행 시작 409 | 409 `Published revision has an invalid delayTimeSec: <id>` |
+| GR-52 | 발행 검사: 오류 `DELAY_RANGE`(규칙 전에 저장된 음수). 실행 화면: 지연이 정한 예정 시각 옆에 `· after a 2 h delay`(그 뒤 누가 일정을 바꾸면 보이지 않음) | 발행 409 |
+
+검증(2026-10-17, 격리 복사본): `ConnectionDelayIntegrationTest` 5건 — 지연 7 200초(발행 `schemaVersion` 3, B `scheduledAt` = A 완료 + 2시간, 그 전 `start` 409, `step_scheduled` `connection_delay`·연결·7200·같은 시각), 게이트웨이(A →1 800→ Exclusive X →3 600→ C: X는 바로 완료·`scheduledAt` A + 30분, C는 A + 90분; Join: B는 지연 없음·`scheduledAt` 없음, D→J 600초 → J는 D 완료 + 10분, 뒤 단계 E도 같은 시각·그 전 `start` 409), 바닥(1시간 당기기 409, 지우기 409, 1시간 늦추기 200), 예전 발행본(`schemaVersion` 2로 되돌린 발행본은 `scheduledAt` 없음·`step_scheduled` 없음·바로 `start`), 저장·발행 검사(생성 −1 400, 수정 −1 400, 0.5 저장, 예전 값 −5는 `DELAY_RANGE`·발행 409). 지연·손실·Split·Join·Exclusive·그래프 실행·워크플로 검사·연결·revision·모듈 경계 104건 실패 0, 전체 백엔드 1,442건 실패 0. 프런트 Vitest(`delayText.test.ts` 1건), 모의 E2E `flow-run-delay.spec.ts`(`after a 2 h delay`, 다시 잡은 단계엔 없음)·`connection-loss-editor.spec.ts`(지연 −5 거절·보내지 않음) 2회 반복 통과.

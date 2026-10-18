@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 public interface FlowRunStepRepository extends JpaRepository<FlowRunStep, String> {
     List<FlowRunStep> findAllByFlowRunIdOrderBySequenceNoAsc(String flowRunId);
     Optional<FlowRunStep> findByStepIdAndFlowRunId(String stepId, String flowRunId);
+
+    /** A run's step for the node; a Join has one, made on its first arrival (ADR-007). */
+    Optional<FlowRunStep> findFirstByFlowRunIdAndNodeIdOrderBySequenceNoAsc(String flowRunId, String nodeId);
     boolean existsByFlowRunIdAndStatusNot(String flowRunId, String status);
     boolean existsByFlowRunIdAndStatusNotIn(String flowRunId, Set<String> statuses);
     long countByFlowRunId(String flowRunId);

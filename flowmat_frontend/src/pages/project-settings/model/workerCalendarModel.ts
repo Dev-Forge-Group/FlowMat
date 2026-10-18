@@ -76,3 +76,20 @@ export function dayOffText(dayOff: Pick<WorkerDayOffDto, 'firstDay' | 'lastDay' 
   const days = dayOff.firstDay === dayOff.lastDay ? dayOff.firstDay : `${dayOff.firstDay} – ${dayOff.lastDay}`
   return dayOff.reason ? `${days} · ${dayOff.reason}` : days
 }
+
+/** A version that has not started yet; only those can be changed or deleted (docs/architecture/adr/ADR-013-rota-history.md). */
+export function scheduleUpcoming(line: { effectiveFrom: string | null }, today: string): boolean {
+  return line.effectiveFrom !== null && line.effectiveFrom > today
+}
+
+/** A version's line: from the start or a date, and whether it applies now, is still ahead or is history (ADR-013). */
+export function scheduleText(line: { effectiveFrom: string | null; current: boolean }, today: string): string {
+  const from = line.effectiveFrom === null ? 'From the start' : `From ${line.effectiveFrom}`
+  if (line.current) return `${from} · now`
+  return scheduleUpcoming(line, today) ? `${from} · upcoming` : `${from} · earlier`
+}
+
+/** Shifts start today or later; empty is today (ADR-013 decisions 3, 6). */
+export function startsOnProblem(startsOn: string, today: string): string | null {
+  return startsOn && startsOn < today ? 'Pick today or a later date; change a past date with a day change.' : null
+}

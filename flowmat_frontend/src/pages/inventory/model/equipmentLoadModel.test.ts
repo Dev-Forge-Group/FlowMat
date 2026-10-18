@@ -87,6 +87,18 @@ describe('timeline', () => {
     expect(lanes).toBe(2)
   })
 
+  it('marks a clash only where more than its limit run at once (E18)', () => {
+    const four = [
+      order({ workOrderId: 'a', workOrderNumber: 'WO-1', plannedStartAt: at(7, 9), plannedEndAt: at(7, 17) }),
+      order({ workOrderId: 'b', workOrderNumber: 'WO-2', plannedStartAt: at(7, 10), plannedEndAt: at(7, 12) }),
+      order({ workOrderId: 'c', workOrderNumber: 'WO-3', plannedStartAt: at(7, 11), plannedEndAt: at(7, 15) }),
+      order({ workOrderId: 'd', workOrderNumber: 'WO-4', plannedStartAt: at(7, 15), plannedEndAt: at(7, 16) }),
+    ]
+    // 11-12 has three at once: too many for 2, enough room with 3.
+    expect(timelineBars(four, week.from, week.to, true, 2).bars.map((bar) => bar.clash)).toEqual([true, true, true, false])
+    expect(timelineBars(four, week.from, week.to, true, 3).bars.map((bar) => bar.clash)).toEqual([false, false, false, false])
+  })
+
   it('keeps one lane when there is nothing to show', () => {
     expect(timelineBars([], week.from, week.to)).toEqual({ bars: [], lanes: 1 })
   })

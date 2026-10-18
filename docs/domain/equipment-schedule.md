@@ -32,7 +32,7 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | H1 | 휴일에는 **교대가 시작하지 않습니다**(달력이 있는 프로젝트의 모든 설비). 전날 저녁에 시작한 야간 교대는 휴일 새벽까지 그대로 돕니다 |
 | H2 | 달력이 없는 설비(항상 가동)는 휴일의 영향을 받지 않습니다 |
 | H3 | 근무 요일이 아닌 날의 휴일은 아무것도 빼지 않습니다. 가용 시간 응답의 `holidays`에는 **실제로 교대를 뺀** 휴일만 나옵니다 |
-| H4 | 가용 시간을 쓰는 곳(가용 시간 API, 작업지시 준비 점검의 설비 항목, [설비 부하표](equipment-load.md))에 모두 적용됩니다. 같은 계산(`EquipmentScheduleService.window`)을 쓰기 때문입니다 |
+| H4 | 가용 시간을 쓰는 곳(가용 시간 API, 작업지시 준비 점검의 설비 항목, [설비 부하표](equipment-load.md), 생산 실행의 연결 지연([ADR-015](../architecture/adr/ADR-015-shift-aware-delay.md), 2026-10-18))에 모두 적용됩니다. 같은 계산(`EquipmentScheduleService.window`)을 쓰기 때문입니다 |
 
 예: 09:00–17:00 월–금, 2032-03-01(월)부터 일주일 40시간 → 수요일 휴일이면 32시간(`holidays: ["2032-03-03"]`), 토요일 휴일은 변화 없음. 22:00–06:00 교대에서 수요일 휴일이면 수요일 하루 동안 화요일 교대의 0–6시 6시간만 남습니다.
 
@@ -50,6 +50,23 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | S6 | 교대 전체 저장·달력 삭제는 설비별 트랜잭션 advisory lock(`equipment-calendar\|<설비 ID>`)을 잡은 뒤 현재 교대를 읽음(2026-10-04). 빈 달력도 잠금 대상. 기다리던 요청은 앞 요청이 확정한 교대 전체를 바꾸거나 지워, 두 요청의 교대가 섞이거나 삭제가 빠지지 않음. 다른 설비는 별도로 처리 | |
 
 예: 06:00–14:00·14:00–22:00 월–금과 08:00–12:00 토 → 주 84시간. 수요일이 휴일이면 그 주 68시간.
+
+## 달력 판 (2026-10-18, 2es, V94)
+
+설비의 주간 교대는 시작일이 있는 **판**에 묶입니다. 교대를 바꾸거나 달력을 지워도 그 전 날짜의 가용 시간, 준비 점검, 부하표, 계획 기간 제안은 그대로입니다. 근거: [ADR-014](../architecture/adr/ADR-014-equipment-calendar-history.md)(사용자 결정 2026-10-18 "Accept as recommended"), 작업자 쪽 [ADR-013](../architecture/adr/ADR-013-rota-history.md)과 같은 규칙입니다.
+
+| # | 규칙 | 위반 응답 |
+|---|---|---|
+| CV1 | 판은 시작일(`effectiveFrom`)부터 다음 판이 시작하기 전날까지 적용됩니다. V94 전의 교대는 설비마다 "처음부터" 판(`effectiveFrom` null)이 됐습니다. 판은 설비당 하루 하나입니다 | |
+| CV2 | 달력 저장(S1)에 `effectiveFrom`을 줄 수 있습니다. 빼면 프로젝트 기준 오늘입니다. 같은 날짜로 다시 저장하면 그 판을 고칩니다 | 오늘보다 앞이면 400 `effectiveFrom must be today (2026-10-18) or later; change a past date with that date's own shifts.` |
+| CV3 | 달력 지우기도 `effectiveFrom`을 받습니다(빼면 오늘). 그날부터 교대 없는 판을 두어 항상 가동이 되고, 그 전 날짜는 교대가 그대로입니다 | CV2와 같음 |
+| CV4 | 첫 판 전 날짜와 교대 없는 판의 날짜는 항상 가동입니다. 휴일(H2)과 날짜별 교대도 쓰이지 않습니다 | |
+| CV5 | 날짜별 교대 저장(D2)은 요청한 날짜 중 하나라도 교대가 있는 판에 들어야 합니다. 다른 설비로 복사(D7)는 받는 설비에 오늘 판이나 앞으로 올 판에 교대가 있어야 합니다. 날짜별 교대는 판과 상관없이 그 날짜에 묶입니다(사용자 결정 2026-10-18 "날짜에만 묶어 둠") | 409 (D2·D7과 같은 메시지) |
+| CV6 | 판 삭제는 아직 시작하지 않은 판만 됩니다. 시작한 판과 처음부터 판은 남습니다. 다른 설비의 판은 404 | 409 `This calendar version has started; save a new one from a later date instead.` |
+| CV7 | 일정 응답의 `calendar`는 오늘 판입니다. `versions`에 모든 판이 이른 순으로 나옵니다(`scheduleId, effectiveFrom, current, alwaysRunning`). 가용 시간의 `calendarSet`은 기간 안에 교대가 있는 판의 날이 있을 때 true입니다 | |
+| CV8 | 판 저장, 지우기, 삭제는 S6의 설비별 잠금 안에서 합니다 | |
+
+예: 오늘 08:00–16:00 월–금을 저장하고, 2041-09-09부터 06:00–17:00, 2041-09-16부터 달력 지우기 → 2041-09-02 주 40시간, 09-09 주 55시간, 09-16 주 168시간. 2041-09-16 판을 지우면 그 주도 55시간입니다. 2041-09-17 날짜별 교대는 409, 2041-09-10 닫음은 저장되어 09-09 주가 44시간이 됩니다.
 
 ## 날짜별 교대 (2026-10-03, V45)
 
@@ -128,7 +145,7 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | P17 | **승인 작업지시 함께 일정 변경**(2026-10-13, 2ds, 정책 C): **Plan several orders**의 답에 승인 작업지시가 있고 보는 사람이 프로젝트 소유자면 **Reason** 한 칸과 **Reschedule N approved orders**. 답의 순서대로 하나씩 기존 owner reschedule(`POST /work-orders/{id}/reschedules`, 지금 기간을 `expected…`로 보내 그 사이 바뀌었으면 409, 같은 내용 재시도는 같은 `requestId`)로 제안 기간에 옮긴다. 하나가 거절되면 멈추고 `… N rescheduled before it.`, 다시 누르면 남은 것만 보낸다. 끝나면 `Rescheduled N approved orders.` 소유자가 아니면 `Only the project owner can reschedule the approved orders.` 서버 변경 없음 | 정책 C의 거절 그대로 |
 | P18 | **인력**(2026-10-14, 2dx): 작업지시에 인력이 있으면 그 사람들이 모두 일하는 시간에만 생산 시간을 세고, 인력을 이미 잡은 다른 승인·진행 중 작업지시를 비킨다. 응답 `waitedForCrew`·`crewMovedPast`. [작업자 달력](worker-calendar.md) WC24–WC28 | 409 `… and the crew do not have N h available together …` |
 | P19 | **효율**(2026-10-17, 2ea): 생산 시간은 시간당 산출 × 효율로 센다. 전환 시간은 효율로 늘리거나 줄이지 않는다. 응답 `efficiencyPercent`(100이면 null), `capacityPerHour`는 정격. [설비](equipment.md) E8–E11 | |
-| P20 | **동시 작업**(2026-10-17, 2ec): 여러 작업지시를 함께 하는 설비는 P4·P9에서 겹치는 작업지시를 비켜 가지 않는다(`movedPast` 없음). 인력은 그대로 비켜 간다. 전환 시간은 그대로. [설비](equipment.md) E12–E15 | |
+| P20 | **동시 작업**(2026-10-17, 2ec): 여러 작업지시를 함께 하는 설비는 P4·P9에서 겹치는 작업지시를 비켜 가지 않는다(`movedPast` 없음). 인력은 그대로 비켜 간다. 전환 시간은 그대로. [설비](equipment.md) E12–E15. 최대 N개(2ek)면 N개가 함께 도는 순간에만 비켜 가고, 그중 가장 먼저 끝나는 시각부터 다시 찾는다(E17) | |
 
 예: 09:00–17:00 월–금, 시간당 10, 100개 → 10시간. 2030-01-07(월) 0시부터 → 월 09:00 → 화 11:00. 화 09–10시 정비 → 화 12:00. 월 13–15시에 승인된 작업지시가 있으면 15:00부터 → 수 10:00.
 
@@ -139,8 +156,10 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | 요청 | 권한 | 설명 |
 |---|---|---|
 | `GET /equipments/{id}/schedule` | 읽기 | `{equipmentId, timeZone, calendar: {shifts: [{shiftId, shiftStart, shiftEnd, workDays, shiftHours}], weeklyHours, updatedBy, updatedAt} \| null, downtimes: [{downtimeId, downtimeType, startsAt, endsAt, hours, reason, createdBy, createdAt}]}`(정지는 최신 시작순) |
-| `PUT /equipments/{id}/calendar` | 쓰기 | `{shifts: [{shiftStart: "06:00", shiftEnd: "14:00", workDays: [1,2,3,4,5]}, …]}`로 교대 전체를 바꿈(위 S1~S4). 예전 본문 `{shiftStart, shiftEnd, workDays}`도 교대 하나로 받음. 교대는 시작 시각순으로 돌려줌. 요일은 정렬·중복 제거. 잘못된 시각·빈 요일·1~7 밖 요일 400 |
-| `DELETE /equipments/{id}/calendar` | 쓰기 | 달력 삭제(항상 가동으로) |
+| `PUT /equipments/{id}/calendar` | 쓰기 | `{shifts: [{shiftStart: "06:00", shiftEnd: "14:00", workDays: [1,2,3,4,5]}, …], effectiveFrom?}`로 그 날짜(빼면 오늘)부터의 교대 전체를 바꿈(위 S1~S4, CV2). 예전 본문 `{shiftStart, shiftEnd, workDays}`도 교대 하나로 받음. 교대는 시작 시각순으로 돌려줌. 요일은 정렬·중복 제거. 잘못된 시각·빈 요일·1~7 밖 요일 400 |
+| `DELETE /equipments/{id}/calendar?effectiveFrom=` | 쓰기 | 그 날짜(빼면 오늘)부터 항상 가동, 그 전 날짜는 교대 그대로(CV3) |
+| `GET /equipments/{id}/calendar/versions/{scheduleId}` | 읽기 | 판 하나 `{scheduleId, effectiveFrom, current, alwaysRunning, shifts, weeklyHours}`. 다른 설비의 판 404 |
+| `DELETE /equipments/{id}/calendar/versions/{scheduleId}` | 쓰기 | 아직 시작하지 않은 판 삭제(CV6). 응답은 새 일정 |
 | `PUT /equipments/{id}/days/{date}` | 쓰기 | `{shifts: [{shiftStart, shiftEnd}], reason?, throughDate?, weekDays?}`, 빈 목록은 그날 닫음(D1~D5), `throughDate`면 그 날까지 모든 날짜(D6). 응답 일정의 `days: [{date, shifts: [{shiftStart, shiftEnd, shiftHours}], closed, hours, reason, updatedBy, updatedAt}]`(날짜순) |
 | `DELETE /equipments/{id}/days/{date}?through=` | 쓰기 | 그날(또는 `through`까지의 날짜별 교대 모두, D6) 달력으로 되돌림 |
 | `POST /equipments/{id}/days/copy` | 쓰기 | `{toEquipmentId, fromDate?, throughDate?}` 날짜별 교대를 다른 설비로(D7). 응답은 받는 설비의 일정 |
@@ -162,6 +181,8 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 재고 → **Equipment** 탭 → 설비 행의 **Schedule**
 - 요약: `09:00–17:00 · Mon–Fri · 8 h a shift`(야간은 `(ends next day)`, 같은 시각은 `All day`, 달력 없으면 `No calendar: available around the clock.`. 교대가 여러 개면 `; `로 잇고 끝에 주 합계 `· 80 h a week`)와 `Next 7 days: 35 h available (5 h down) · can make 350.`
 - **Calendar** 폼: 교대마다 한 줄(시작·끝 시각, 요일 체크, 기본 월–금). 첫 줄은 `Shift start`·`Shift end`, 다음 줄은 `Shift 2 start`처럼 번호. **Add shift**(마지막 교대가 끝나는 시각부터 8시간, 같은 요일. 6개까지), 교대가 둘 이상이면 줄마다 **Remove shift N**, **Save calendar**, 달력이 있으면 **Remove calendar**. 시간대·겹침 안내. 겹침 거절은 서버 메시지를 그대로 보여 줌
+- **Applies from**(2026-10-18, 2es): 비우면 오늘. 오늘보다 앞이면 보내기 전에 `Pick today or a later date; change a past date with a day change.` 미래 날짜로 저장하면 `Calendar saved from 2041-09-09; until then the current calendar stays.`, 날짜를 고르면 지우기 버튼이 **Remove calendar from 2041-09-16**이 되고 `Calendar removed from …`. 화면의 오늘은 일정 응답의 `timeZone`으로 셉니다(브라우저 날짜가 아님). 이름은 ADR-014의 Starts on 대신 Applies from입니다. 같은 화면 정지 폼의 `Starts`와 겹치지 않게 했습니다(사용자 사전 위임 2026-10-18).
+- **Calendar versions**(판이 둘 이상이거나 앞으로 올 판이 있을 때): `From the start · now`, `From 2041-09-09 · upcoming`(**Edit**·**Delete**), 교대 없는 판은 `· around the clock`(**Delete**만), 지난 판은 `· earlier`. **Edit**은 그 판의 교대와 날짜를 폼에 불러옵니다. **Change a day** 폼은 교대가 있는 판이 하나라도 있으면 보입니다.
 - **Change a day** 폼(달력이 있을 때, 2026-10-03): **Day**(날짜), **Closed all day**, 교대 줄(`From`·`Until`, 둘째부터 `From 2`…, **Add day shift**·**Remove day shift N**), **Through**(마지막 날짜, 선택: 주면 버튼이 **Save 3 days**, 그 옆 **Days of the week** 요일 체크박스로 고른 요일만), **Note**, **Save day**. 아래 **Day changes** 표: `Wed 2030-01-09`, `Closed` 또는 `09:00–12:00 · 3 h`, 메모, **Remove**(지난 날짜는 흐리게). 날짜별 교대가 둘 이상이면 **Clear days**(2026-10-03): **Back to the calendar from**·**through** 날짜와 **Clear these days**로 그 사이 날짜별 교대를 한 번에 지움(D6의 `?through=`). 다른 설비가 있으면 그 아래 **Copy day changes**: **Copy to**(프로젝트의 다른 설비), **Copy 5 day changes**(오늘부터의 날짜별 교대 수) → `Copied 5 day changes to EQ-2.`
 - **Add downtime** 폼: 종류, 시작·끝(현지 날짜·시각), 이유
 - 정지 표: 아직 끝나지 않은 것(빠른 순) 다음에 지난 것(흐리게), **Remove**
@@ -203,6 +224,9 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 - 여러 작업지시(2026-10-12, 2do) `WorkOrderBatchPlanIntegrationTest`: 09:00–17:00 월–금·시간당 10 설비, 빨강 → 파랑 60분 전환. [빨강 100, 설비 없음, 파랑 50] → 빨강 월 09:00–화 11:00, 설비 없음은 `problem`, 파랑은 빨강 뒤 화 11:00–17:00(전환 1 h, `changeoverFrom`·`movedPast` 빨강). [파랑, 빨강] → 파랑 월 09–14, 빨강 월 14:00–화 16:00(전환 규칙 없음). 빨강 승인 뒤 파랑만 → 승인된 빨강을 비켜 화 11:00, [파랑, 빨강] → 빨강 자기 기간은 세지 않아 파랑 월 09:00. `from` 없음 → 응답 `from` null, 저장 안 됨. 중복·빈 목록·51개·`from` 형식·`projectId` 없음·형식 틀린 본문 400, 없는 작업지시 404, 외부인 403. 계획 제안·준비 점검·부하표·모듈 경계 관련 13건 실패 0. `workOrderPlanModel.test.ts` +2(고를 수 있는 작업지시, 초안만 적용). 모의 E2E `e2e/work-order-batch-plan.spec.ts`(설비 없는 작업지시는 안 보임, 누른 순서·요청 본문, 줄 문장·문제·승인 안내, 초안 2개만 순서대로 저장).
 - 순서 제안(2026-10-12, 2dq) `WorkOrderBatchPlanIntegrationTest` 둘째: A→B·B→C 10분, 나머지 60분인 설비. [C, 설비 없음, B, A] → A, B, C(20분, 준 순서 120분), 설비 없는 것은 맨 뒤, `after` 없음. 10:00 전에 승인된 C 작업지시가 있으면 C, A, B(70분, 준 순서 A, B, C는 80분), `after`가 그 번호. 07:00부터면 앞 작업지시가 없어 A, B, C. 중복 400, 외부인 403. `WorkOrderSequenceServiceTest`(정확한 순서·같은 합의 순위 유지·싼 첫걸음 함정·13개 근사). 배치·순서·단일 제안·모듈 경계 관련 7건 실패 0. `workOrderPlanModel.test.ts` +1(안내 문장). 모의 E2E `e2e/work-order-batch-plan.spec.ts` 둘째(하나만 고르면 꺼짐, 요청 본문, 새 순번, 체크를 바꾸면 안내 사라짐).
 - 승인 함께 일정 변경(2026-10-13, 2ds, 프런트만): `workOrderPlanModel.test.ts` +2(승인만 고르기, 지금 기간을 기대값으로 한 변경 본문). 모의 E2E `e2e/work-order-batch-plan.spec.ts` 셋째 — 소유자, 승인 2건 제안 → 사유 없으면 버튼 꺼짐 → 둘째가 409로 거절되면 `… 1 rescheduled before it.` → 다시 누르면 둘째만 보내 `Rescheduled 2 approved orders.`, 첫 본문의 `expectedPlannedStartAt`·`plannedStartAt`·사유·`requestId`. 타입·lint 통과.
+- 달력 판(2026-10-18, 2es, V94, 격리 복사본) `EquipmentCalendarHistoryIntegrationTest`: 달력 없던 설비에 오늘 08–16 저장 → 판 1(`current`), 2주 전은 `calendarSet` false·168시간 → 2041-09-09부터 06–16 저장 → 판 2, 응답 `calendar`는 오늘 판 그대로, 09-02 주 40·09-09 주 50 → 같은 날 06–17로 다시 저장 → 55 → 09-16부터 지우기 → 판 3(`alwaysRunning`), 168, 앞 주 55 그대로 → 09-17 날짜별 교대 409, 09-10 닫음 저장 → 44 → 판 조회(`weeklyHours` 55) → 어제 시작 400 → 시작한 판 삭제 409, 미래 판 삭제 → 판 2, 09-16 주 55, 지운 판 조회 404. 설비·계획 관련 85건(29클래스) 실패 0, 전체 백엔드 1,509건(254클래스) 통과(실패 0), 프런트 Vitest 675건·typecheck·빌드, 모의 e2e 185건 통과(실패·flaky 0, 실제 API용 38건 조건부 제외).
+- V94 리허설: 일회용 postgres:16(`flowmat-v94-check`, 리드가 만들고 지움)에 V43 뒤 모양의 표와 합성 교대 4행(설비 2개, 달력 없는 설비 1개)을 넣고 V94를 한 트랜잭션으로 적용 → 교대 4행 그대로, 판 2개, 4행 모두 같은 설비의 판, 달력 없는 설비는 판 없음. 같은 날 판 중복과 판 없는 교대는 거절됩니다.
+- 프런트 `equipmentScheduleModel.test.ts` +3(판 줄 `now`·`upcoming`·`earlier`·`around the clock`, 시작일 확인과 판 불러오기, 프로젝트 날짜 `projectToday`). 모의 E2E `e2e/equipment-calendar-versions.spec.ts`: 판 목록 → 과거 날짜는 보내기 전에 거절 → 미래 판 **Edit** 후 그 날짜로 다시 저장 → 미래 날짜부터 **Remove calendar** → 판 삭제.
 
 ## 2026-10-05 확정: 승인 작업지시 일정
 

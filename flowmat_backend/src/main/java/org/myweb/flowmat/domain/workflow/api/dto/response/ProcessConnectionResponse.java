@@ -25,6 +25,9 @@ public record ProcessConnectionResponse(
     String failurePolicy,
     /** An Exclusive gateway's default connection (ADR-006). */
     boolean defaultRoute,
+    /** A Split gateway's share (ADR-008): share, fixed or rest, and its percent or quantity; null for other connections. */
+    String splitKind,
+    BigDecimal splitValue,
     int version,
     int versionNonce
 ) {

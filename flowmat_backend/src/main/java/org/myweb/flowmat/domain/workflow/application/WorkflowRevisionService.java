@@ -38,7 +38,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class WorkflowRevisionService {
 
-    private static final int SCHEMA_VERSION = 1;
+    /**
+     * 2: connections' loss rates apply in runs (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 8); 3: and
+     * their delays (docs/architecture/adr/ADR-010-connection-delay.md decision 7).
+     */
+    private static final int SCHEMA_VERSION = 3;
     private static final String NOT_DELETED = "N";
 
     private final WorkflowRevisionRepository repository;
@@ -48,6 +52,7 @@ public class WorkflowRevisionService {
     private final CanvasAnnotationService annotationService;
     private final WorkflowEditorDocumentService editorDocumentService;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final WorkflowValidationService validationService;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
@@ -55,7 +60,7 @@ public class WorkflowRevisionService {
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public WorkflowRevisionResponse publish(String workflowId) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         // Serialize publishers of the same draft; the draft remains editable after publication.
         entityManager.lock(workflow, LockModeType.PESSIMISTIC_WRITE);
         WorkflowValidationResponse validation = validationService.validate(workflowId);
@@ -109,20 +114,20 @@ public class WorkflowRevisionService {
     }
 
     public List<WorkflowRevisionSummaryResponse> list(String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         return repository.findAllByWorkflowIdOrderByRevisionNoDesc(workflowId).stream()
             .map(this::toSummary)
             .toList();
     }
 
     public WorkflowRevisionResponse get(String workflowId, String revisionId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         return toResponse(findRevision(workflowId, revisionId));
     }
 
     @Transactional
     public WorkflowRevisionResponse retire(String workflowId, String revisionId) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         entityManager.lock(workflow, LockModeType.PESSIMISTIC_WRITE);
         WorkflowRevision revision = findRevision(workflowId, revisionId);
         if (!"published".equals(revision.getStatus())) {

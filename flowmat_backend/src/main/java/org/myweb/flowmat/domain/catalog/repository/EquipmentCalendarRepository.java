@@ -14,4 +14,6 @@ public interface EquipmentCalendarRepository extends JpaRepository<EquipmentCale
 
     /** The equipment's shifts, earliest start first. */
     List<EquipmentCalendar> findAllByEquipmentIdOrderByShiftStartAscShiftIdAsc(String equipmentId);
+    /** One calendar version's shifts, earliest start first. */
+    List<EquipmentCalendar> findAllByScheduleIdOrderByShiftStartAscShiftIdAsc(String scheduleId);
 }

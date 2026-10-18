@@ -8,14 +8,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.response.QualitySummaryResponse;
 import org.myweb.flowmat.domain.quality.api.dto.response.QualitySummaryResponse.CheckCount;
@@ -41,8 +37,7 @@ public class QualitySummaryService {
     private final QualityInspectionRepository inspectionRepository;
     private final DefectLogRepository defectLogRepository;
     private final ProjectAccessService projectAccessService;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
 
     public QualitySummaryResponse summary(String projectId, OffsetDateTime from, OffsetDateTime to) {
         projectAccessService.requireProjectReadAccess(projectId);
@@ -114,17 +109,13 @@ public class QualitySummaryService {
         if (counts.isEmpty()) {
             return List.of();
         }
-        Map<String, Item> items = itemRepository.findAllById(counts.keySet()).stream()
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, String> units = unitMasterRepository.findAllById(items.values().stream()
-                .map(Item::getUnitId).filter(Objects::nonNull).distinct().toList()).stream()
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(counts.keySet());
         return counts.entrySet().stream()
             .map(entry -> {
-                Item item = items.get(entry.getKey());
+                CatalogItemView item = items.get(entry.getKey());
                 long[] c = entry.getValue();
-                return new ItemQuality(entry.getKey(), item == null ? null : item.getItemCode(), item == null ? null : item.getItemName(),
-                    item == null || item.getUnitId() == null ? null : units.get(item.getUnitId()), c[0], c[1], c[2], c[3],
+                return new ItemQuality(entry.getKey(), item == null ? null : item.itemCode(), item == null ? null : item.itemName(),
+                    item == null ? null : item.unitCode(), c[0], c[1], c[2], c[3],
                     quantities.getOrDefault(entry.getKey(), BigDecimal.ZERO));
             })
             .sorted(Comparator.comparingLong(ItemQuality::defects).reversed()

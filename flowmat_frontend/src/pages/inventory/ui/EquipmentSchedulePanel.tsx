@@ -1,9 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import {
+  fetchEquipmentCalendarVersion,
   useEquipmentAvailabilityQuery,
   useEquipmentScheduleMutations,
   useEquipmentScheduleQuery,
   type DowntimeType,
+  type EquipmentCalendarVersionLineDto,
 } from '../../../entities/catalog/api/useEquipment'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { EquipmentDto } from '../../../shared/types/api'
@@ -29,9 +31,14 @@ import {
   nextDayShift,
   nextShift,
   nextWeek,
+  projectToday,
   shiftSummary,
   splitDowntimes,
+  startsOnProblem,
   toggleDay,
+  versionForm,
+  versionText,
+  versionUpcoming,
   type CalendarForm,
   type DayForm,
   type ShiftForm,
@@ -40,7 +47,6 @@ import { EquipmentChangeovers } from './EquipmentChangeovers'
 import { EquipmentSetupPreviewPanel } from './EquipmentSetupPreviewPanel'
 import { EquipmentSetupChangeoversPanel } from './EquipmentSetupChangeoversPanel'
 import { EquipmentHourlyCostPanel } from './EquipmentHourlyCostPanel'
-import { dateInputValue } from '../model/equipmentLoadModel'
 
 const cell = { padding: '4px 6px' } as const
 
@@ -69,10 +75,13 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
   const scheduleQuery = useEquipmentScheduleQuery(equipment.equipmentId)
   const week = useMemo(() => nextWeek(new Date()), [])
   const availabilityQuery = useEquipmentAvailabilityQuery(equipment.equipmentId, week.from, week.to)
-  const { setCalendar, clearCalendar, setDay, clearDay, clearDays, copyDays, addDowntime, removeDowntime } =
+  const { setCalendar, clearCalendar, removeCalendarVersion, setDay, clearDay, clearDays, copyDays, addDowntime, removeDowntime } =
     useEquipmentScheduleMutations(equipment.equipmentId)
   // null: not edited, so the form follows the saved calendar.
   const [editedCalendar, setEditedCalendar] = useState<CalendarForm | null>(null)
+  // Empty is today; a later date saves the calendar as the version from then (ADR-014).
+  const [startsOn, setStartsOn] = useState('')
+  const [savedNote, setSavedNote] = useState<string | null>(null)
   const [downtime, setDowntime] = useState(EMPTY_DOWNTIME_FORM)
   const [calendarError, setCalendarError] = useState<string | null>(null)
   const [downtimeError, setDowntimeError] = useState<string | null>(null)
@@ -90,13 +99,18 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
   const calendarProblem = calendarError
     ?? (setCalendar.isError ? errorMessage(setCalendar.error) : null)
     ?? (clearCalendar.isError ? errorMessage(clearCalendar.error) : null)
+    ?? (removeCalendarVersion.isError ? errorMessage(removeCalendarVersion.error) : null)
   const downtimeProblem = downtimeError ?? (addDowntime.isError ? errorMessage(addDowntime.error) : null)
   const dayProblem = dayError
     ?? (setDay.isError ? errorMessage(setDay.error) : null)
     ?? (clearDay.isError ? errorMessage(clearDay.error) : null)
-  const today = dateInputValue(new Date())
+  // The project's date, as the server counts versions and copies (not the browser's).
+  const today = projectToday(schedule?.timeZone, new Date())
   const upcoming = copyableDays(schedule?.days ?? [], today)
   const days = dayCount(dayForm)
+  const versions = schedule?.versions ?? []
+  // A date's own shifts need a calendar on that date (D2), so day changes need a version with shifts.
+  const hasShifts = Boolean(schedule?.calendar) || versions.some((line) => !line.alwaysRunning)
 
   function copy(event: FormEvent) {
     event.preventDefault()
@@ -118,8 +132,35 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
   function saveCalendar(event: FormEvent) {
     event.preventDefault()
     const payload = calendarPayload(form)
-    setCalendarError(payload.error)
-    if (payload.input) setCalendar.mutate(payload.input, { onSuccess: () => setEditedCalendar(null) })
+    const problem = payload.error ?? startsOnProblem(startsOn, today)
+    setCalendarError(problem)
+    if (!payload.input || problem) return
+    const from = startsOn
+    setCalendar.mutate({ ...payload.input, ...(from ? { effectiveFrom: from } : {}) }, { onSuccess: () => changed(from, 'saved') })
+  }
+
+  /** Around the clock from Applies from, today when empty; earlier dates keep their shifts (ADR-014 decision 2). */
+  function removeCalendar() {
+    const problem = startsOnProblem(startsOn, today)
+    setCalendarError(problem)
+    if (problem) return
+    const from = startsOn
+    clearCalendar.mutate(from || undefined, { onSuccess: () => changed(from, 'removed') })
+  }
+
+  function changed(from: string, what: 'saved' | 'removed') {
+    setEditedCalendar(null)
+    setStartsOn('')
+    setSavedNote(from && from > today ? `Calendar ${what} from ${from}; until then the current calendar stays.` : null)
+  }
+
+  /** Loads a version that has not started into the form, to change it (ADR-014). */
+  function editVersion(line: EquipmentCalendarVersionLineDto) {
+    setCalendarError(null)
+    fetchEquipmentCalendarVersion(equipment.equipmentId, line.scheduleId).then((version) => {
+      setEditedCalendar(versionForm(version))
+      setStartsOn(line.effectiveFrom ?? '')
+    }, (error: unknown) => setCalendarError(errorMessage(error, 'Failed to load the version.')))
   }
 
   function saveDowntime(event: FormEvent) {
@@ -167,17 +208,23 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
           })}
           <button type="button" disabled={form.shifts.length >= MAX_SHIFTS}
             onClick={() => setEditedCalendar({ shifts: [...form.shifts, nextShift(form)] })}>Add shift</button>
+          <label>Applies from<input aria-label="Calendar applies from" type="date" value={startsOn}
+            onChange={(event) => setStartsOn(event.target.value)} /></label>
           <button type="submit" disabled={setCalendar.isPending}>{setCalendar.isPending ? 'Saving...' : 'Save calendar'}</button>
-          {schedule.calendar && <button type="button" disabled={clearCalendar.isPending}
-            onClick={() => clearCalendar.mutate(undefined, { onSuccess: () => setEditedCalendar(null) })}>Remove calendar</button>}
+          {hasShifts && <button type="button" disabled={clearCalendar.isPending}
+            onClick={removeCalendar}>{startsOn ? `Remove calendar from ${startsOn}` : 'Remove calendar'}</button>}
           <span className="inspector-hint" style={{ flexBasis: '100%' }}>
             Times are in {schedule.timeZone}. A shift that ends at or before its start runs past midnight; the same time is all day.
             Shifts may touch (06:00–14:00 and 14:00–22:00) but not overlap; up to {MAX_SHIFTS} shifts.
+            Leave Applies from empty for today; earlier dates keep the shifts they had.
           </span>
           {calendarProblem && <p role="alert" style={{ flexBasis: '100%', margin: 0 }}>{calendarProblem}</p>}
+          {savedNote && <p role="status" aria-label="Calendar change" style={{ flexBasis: '100%', margin: 0 }}>{savedNote}</p>}
         </form>
+        <CalendarVersions versions={versions} today={today} pending={removeCalendarVersion.isPending}
+          onEdit={editVersion} onDelete={(line) => removeCalendarVersion.mutate(line.scheduleId)} />
 
-        {schedule.calendar && <>
+        {hasShifts && <>
           <form aria-label="Change a day" onSubmit={saveDay} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
             <label>Day<input type="date" value={dayForm.date} required
               onChange={(event) => setDayForm({ ...dayForm, date: event.target.value })} /></label>
@@ -292,5 +339,34 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
         <EquipmentHourlyCostPanel equipmentId={equipment.equipmentId} projectId={equipment.projectId} />
       </>}
     </section>
+  )
+}
+
+/**
+ * The versions of the equipment's calendar (docs/architecture/adr/ADR-014-equipment-calendar-history.md): shown once there is
+ * more than one or one still ahead. One that has not started can be loaded into the form (when it has shifts) or deleted.
+ */
+function CalendarVersions({ versions, today, pending, onEdit, onDelete }: {
+  versions: EquipmentCalendarVersionLineDto[]; today: string; pending: boolean
+  onEdit: (line: EquipmentCalendarVersionLineDto) => void; onDelete: (line: EquipmentCalendarVersionLineDto) => void
+}) {
+  if (versions.length < 2 && !versions.some((line) => versionUpcoming(line, today))) return null
+  return (
+    <div role="group" aria-label="Calendar versions">
+      <strong>Calendar versions</strong>
+      <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+        {versions.map((line) => (
+          <li key={line.scheduleId}>
+            {versionText(line, today)}
+            {versionUpcoming(line, today) && <>
+              {!line.alwaysRunning && <>{' '}<button type="button" aria-label={`Edit version from ${line.effectiveFrom}`}
+                onClick={() => onEdit(line)}>Edit</button></>}
+              {' '}<button type="button" aria-label={`Delete version from ${line.effectiveFrom}`} disabled={pending}
+                onClick={() => onDelete(line)}>Delete</button>
+            </>}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

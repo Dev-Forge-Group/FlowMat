@@ -28,6 +28,17 @@ const edge: CanvasEdgeViewModel = {
 }
 
 describe('connectionUndoInput', () => {
+  it('puts back a Split gateway\'s share or clears it (ADR-008)', () => {
+    expect(connectionUndoInput({ ...edge, splitKind: 'share', splitValue: 70 },
+      { connectionId: 'connection-1', splitKind: 'rest' }))
+      .toEqual({ connectionId: 'connection-1', splitKind: 'share', splitValue: 70 })
+    expect(connectionUndoInput({ ...edge, splitKind: 'rest', splitValue: null },
+      { connectionId: 'connection-1', clearSplit: true }))
+      .toEqual({ connectionId: 'connection-1', splitKind: 'rest' })
+    expect(connectionUndoInput(edge, { connectionId: 'connection-1', splitKind: 'fixed', splitValue: 2 }))
+      .toEqual({ connectionId: 'connection-1', clearSplit: true })
+  })
+
   it('puts back whether the connection was its gateway\'s default (ADR-006)', () => {
     expect(connectionUndoInput({ ...edge, defaultRoute: true }, { connectionId: 'connection-1', defaultRoute: false }))
       .toEqual({ connectionId: 'connection-1', defaultRoute: true })

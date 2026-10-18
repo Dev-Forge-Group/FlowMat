@@ -6,7 +6,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessExecutionPolicyRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessExecutionPolicyResponse;
 import org.myweb.flowmat.domain.workflow.domain.entity.Process;
@@ -27,25 +26,25 @@ public class ProcessExecutionPolicyService {
 
     private static final Set<String> BACKOFFS = Set.of("fixed", "exponential");
 
-    private final ProjectAccessService access;
+    private final WorkflowAccessService workflowAccess;
     private final ProcessRepository processes;
     private final EntityManager entities;
 
     public ProcessExecutionPolicyResponse get(String processId) {
-        Process process = access.requireProcessReadAccess(processId);
+        Process process = workflowAccess.requireProcessReadAccess(processId);
         // A node of a deleted workflow has no policy to show (EP2).
-        access.requireWorkflowReadAccess(process.getWorkflowId());
+        workflowAccess.requireWorkflowReadAccess(process.getWorkflowId());
         return response(process);
     }
 
     /** Under the node's row lock with the loaded version; all nulls go back to the default behavior. */
     @Transactional
     public ProcessExecutionPolicyResponse set(String processId, ProcessExecutionPolicyRequest request) {
-        Process process = access.requireProcessWriteAccess(processId);
+        Process process = workflowAccess.requireProcessWriteAccess(processId);
         entities.refresh(process, LockModeType.PESSIMISTIC_WRITE);
         if (!"N".equals(process.getDeletedYn())) throw new BusinessException(ErrorCode.NOT_FOUND);
         // Checked after the node lock, so a workflow deleted while this waited is refused (EP2).
-        access.requireWorkflowWriteAccess(process.getWorkflowId());
+        workflowAccess.requireWorkflowWriteAccess(process.getWorkflowId());
         if (request == null || request.expectedVersion() == null || request.expectedVersion() < 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "expectedVersion is required, a nonnegative integer.");
         }

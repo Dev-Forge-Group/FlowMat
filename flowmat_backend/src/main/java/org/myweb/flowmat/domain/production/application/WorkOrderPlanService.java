@@ -171,8 +171,9 @@ public class WorkOrderPlanService {
                 placed.stream().filter(other -> equipment.equipmentId().equals(other.getEquipmentId())))
             .toList();
         // Drafts are not planned work yet, as in readiness's "schedule" check. Equipment that runs work orders side by side
-        // does not keep this one apart from them (E12); its crew still does.
-        List<WorkOrder> planned = equipment.concurrentWorkOrders() ? List.of() : others.stream()
+        // does not keep this one apart from them (E12) unless it is full (E17); its crew still does.
+        Integer limit = equipment.maxConcurrent();
+        List<WorkOrder> planned = limit == null ? List.of() : others.stream()
             .filter(other -> WorkOrderServiceImpl.status(other).acceptsRuns())
             .filter(other -> other.getPlannedStartAt() != null && other.getPlannedEndAt() != null
                 && other.getPlannedEndAt().isAfter(other.getPlannedStartAt()))
@@ -207,10 +208,11 @@ public class WorkOrderPlanService {
                 continue;
             }
             OffsetDateTime end = wholeMinute(slot.end());
-            List<WorkOrder> clashes = planned.stream()
+            // One at a time, every overlap clashes; up to a limit, the orders that fill it first (E17).
+            List<WorkOrder> clashes = limit == null || limit == 1 ? planned.stream()
                 .filter(other -> other.getPlannedStartAt().isBefore(end) && other.getPlannedEndAt().isAfter(slot.start()))
                 .sorted(Comparator.comparing(WorkOrder::getPlannedStartAt))
-                .toList();
+                .toList() : EquipmentOverlap.full(planned, slot.start(), end, limit);
             Map<CrewBookingOf, List<String>> crewClashes = crewClashes(crewPlan, slot.start(), end, crewTime);
             if (clashes.isEmpty() && crewClashes.isEmpty()) {
                 List<String> waitedFor = shiftCrew.isEmpty() ? List.of()
@@ -221,7 +223,9 @@ public class WorkOrderPlanService {
                     crewHours(order.getProjectId(), crewPlan, slot.start(), end), waitedFor, List.copyOf(crewMovedPast),
                     equipment.efficiencyPercent());
             }
-            clashes.stream()
+            // Up to a limit there is room again when the first of the orders that fill it ends (E17).
+            List<WorkOrder> waited = limit != null && limit > 1 ? EquipmentOverlap.firstToEnd(clashes) : clashes;
+            waited.stream()
                 .map(WorkOrder::getWorkOrderNumber)
                 .filter(number -> !movedPast.contains(number))
                 .forEach(movedPast::add);
@@ -231,7 +235,7 @@ public class WorkOrderPlanService {
                     crewMovedPast.add(new WorkOrderPlanSuggestionResponse.CrewBooking(number, clash.getValue()));
                 }
             }
-            cursor = Stream.concat(clashes.stream().map(WorkOrder::getPlannedEndAt),
+            cursor = Stream.concat(waited.stream().map(WorkOrder::getPlannedEndAt),
                     crewClashes.keySet().stream().map(booking -> booking.order().getPlannedEndAt()))
                 .max(Comparator.naturalOrder())
                 .orElseThrow();

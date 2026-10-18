@@ -3,7 +3,9 @@ package org.myweb.flowmat.domain.catalog.api;
 import lombok.RequiredArgsConstructor;
 import jakarta.validation.Valid;
 import java.util.List;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentCreateRequest;
+import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDetails;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentUpdateRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentStatusChangeResponse;
@@ -61,9 +63,18 @@ public class EquipmentController {
         return ApiResponse.ok(null);
     }
 
-    /** A body that is not JSON, or a value of the wrong kind such as concurrentWorkOrders "yes" (E12). */
+    /**
+     * A body that is not JSON, or a value of the wrong kind such as concurrentWorkOrders "yes" (E12); a concurrentLimit that
+     * is not a whole number says so (E16).
+     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> unreadable() {
+    public ResponseEntity<ApiResponse<Void>> unreadable(HttpMessageNotReadableException exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof JsonMappingException mapping
+                && EquipmentDetails.WholeLimit.MESSAGE.equals(mapping.getOriginalMessage())) {
+                return ResponseEntity.badRequest().body(ApiResponse.error(EquipmentDetails.WholeLimit.MESSAGE));
+            }
+        }
         return ResponseEntity.badRequest().body(ApiResponse.error(
             "Send the equipment as JSON, with numbers as numbers and concurrentWorkOrders as true or false."));
     }

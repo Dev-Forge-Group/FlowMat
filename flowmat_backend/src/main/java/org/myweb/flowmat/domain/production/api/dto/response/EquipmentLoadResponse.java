@@ -23,6 +23,8 @@ public record EquipmentLoadResponse(
         BigDecimal efficiencyPercent,
         /** Runs several work orders at once (docs/domain/equipment.md E12): never overloaded, and overlaps do not clash. */
         boolean concurrentWorkOrders,
+        /** At most this many side by side (E16, E18); null for no limit, or when it runs one at a time. */
+        Integer concurrentLimit,
         boolean calendarSet,
         BigDecimal availableHours,
         BigDecimal downtimeHours,
@@ -30,9 +32,9 @@ public record EquipmentLoadResponse(
         BigDecimal plannedHours,
         /** Hours draft orders would add. */
         BigDecimal draftHours,
-        /** Planned over available, one decimal; null when nothing is available. */
+        /** Planned over available (times the side-by-side limit, E18), one decimal; null when nothing is available. */
         BigDecimal loadPercent,
-        /** Planned above available; never for equipment that runs work orders side by side. */
+        /** Planned above available (times the side-by-side limit); never for side-by-side equipment without a limit. */
         boolean overloaded,
         /** Open orders on the equipment without a planned start and end. */
         int unplannedOrders,

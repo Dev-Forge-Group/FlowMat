@@ -5,13 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
 import org.myweb.flowmat.domain.workflow.annotation.domain.CanvasAnnotation;
 import org.myweb.flowmat.domain.workflow.annotation.repository.CanvasAnnotationRepository;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessIoResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowGraphChangesResponse;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.application.WorkflowCanvasServiceImpl;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage.Type;
@@ -48,7 +48,7 @@ public class GraphSyncService {
     private final ProcessIoRepository processIoRepository;
     private final ProcessConnectionRepository processConnectionRepository;
     private final WorkflowRepository workflowRepository;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final CanvasAnnotationRepository canvasAnnotationRepository;
     private final ObjectMapper objectMapper;
 
@@ -89,7 +89,7 @@ public class GraphSyncService {
     }
 
     public WorkflowGraphChangesResponse getChangesSince(String workflowId, long sinceSeq) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireWorkflowReadAccess(workflowId);
         return graphChangeStore.getChangesSince(workflowId, sinceSeq);
     }
 

@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface WorkerRotaRepository extends JpaRepository<WorkerRota, String> {
 
-    Optional<WorkerRota> findByProjectIdAndUserId(String projectId, String userId);
+    Optional<WorkerRota> findByScheduleId(String scheduleId);
 
     List<WorkerRota> findAllByProjectIdAndUserIdIn(String projectId, Collection<String> userIds);
 }

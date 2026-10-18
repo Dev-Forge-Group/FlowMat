@@ -14,7 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
-import org.myweb.flowmat.domain.project.repository.ProjectRepository;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowTemplateCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowTemplateResponse;
 import org.myweb.flowmat.domain.workflow.domain.entity.WorkflowTemplate;
@@ -36,7 +36,7 @@ class WorkflowTemplateServiceImplTest {
     private WorkflowRepository workflowRepository;
 
     @Mock
-    private ProjectRepository projectRepository;
+    private ProjectWorkflowCommand projectWorkflows;
 
     @Mock
     private IdGenerator idGenerator;

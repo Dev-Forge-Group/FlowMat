@@ -34,6 +34,8 @@ export interface StepForm {
   valueMax?: string
   /** An inspection standard of the product to take the limits from (W13); blank to type them. */
   standardId?: string
+  /** The process the step belongs to (docs/architecture/adr/ADR-011-production-steps.md); blank for the whole run. */
+  processId?: string
 }
 
 export const EMPTY_STEP: StepForm = { text: '', required: true, recordsValue: false, valueLabel: '', valueMin: '', valueMax: '' }
@@ -44,9 +46,10 @@ export function stepPayload(form: StepForm): { input: WorkInstructionStepInput; 
   if (text.length > 500) return { input: null, error: 'A step can be at most 500 characters.' }
   const label = form.recordsValue ? form.valueLabel.trim() : ''
   const standardId = form.recordsValue ? form.standardId ?? '' : ''
+  const process = form.processId ? { processId: form.processId } : {}
   if (standardId) {
     // The standard sets the limits (W13); the server names the value after it when no name is typed.
-    return { input: { text, required: form.required, recordsValue: true, valueLabel: label || null, standardId }, error: null }
+    return { input: { text, required: form.required, recordsValue: true, valueLabel: label || null, standardId, ...process }, error: null }
   }
   const limit = (typed: string | undefined) => (form.recordsValue && (typed ?? '').trim() !== '' ? Number(typed) : null)
   const valueMin = limit(form.valueMin)
@@ -60,7 +63,7 @@ export function stepPayload(form: StepForm): { input: WorkInstructionStepInput; 
   return {
     input: {
       text, required: form.required, recordsValue: form.recordsValue, valueLabel: label || null,
-      ...(valueMin !== null ? { valueMin } : {}), ...(valueMax !== null ? { valueMax } : {}),
+      ...(valueMin !== null ? { valueMin } : {}), ...(valueMax !== null ? { valueMax } : {}), ...process,
     },
     error: null,
   }

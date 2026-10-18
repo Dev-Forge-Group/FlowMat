@@ -9,8 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +22,9 @@ import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccessView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.id.IdGenerator;
 
@@ -38,7 +37,7 @@ class FlowRunServiceTest {
     @Mock private FlowRunEventRecorder eventRecorder;
     @Mock private WorkflowProductionQuery workflowQuery;
     @Mock private ProjectAccessService accessService;
-    @Mock private EntityManager entityManager;
+    @Mock private WorkflowAccess workflowAccess;
     @Mock private IdGenerator idGenerator;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -48,15 +47,12 @@ class FlowRunServiceTest {
     void setUp() {
         service = new FlowRunService(runRepository, stepRepository, attemptRepository,
             eventRecorder, workflowQuery,
-            accessService, entityManager, idGenerator, objectMapper);
+            accessService, workflowAccess, idGenerator, objectMapper);
     }
 
     @Test
     void startsOnlyPublishedRevisionWithAuthenticatedActorAndFrozenInputs() throws Exception {
-        Workflow workflow = new Workflow();
-        workflow.setWorkflowId("workflow-1");
-        workflow.setProjectId("project-1");
-        when(accessService.requireWorkflowWriteAccess("workflow-1")).thenReturn(workflow);
+        when(workflowAccess.requireWriteAndLock("workflow-1")).thenReturn(new WorkflowAccessView("workflow-1", "project-1"));
         when(workflowQuery.findRevision("revision-1", "workflow-1"))
             .thenReturn(Optional.of(new WorkflowProductionQuery.Revision("revision-1", "published", null, 1)));
         when(accessService.requireCurrentUserId()).thenReturn("authenticated-user");
@@ -71,14 +67,12 @@ class FlowRunServiceTest {
         assertEquals("L-1", response.inputPayload().path("lot").asText());
         assertEquals("running", response.status());
         assertNotNull(response.startedAt());
-        verify(entityManager).lock(workflow, LockModeType.PESSIMISTIC_WRITE);
+        verify(workflowAccess).requireWriteAndLock("workflow-1");
     }
 
     @Test
     void refusesRetiredRevisionBeforeSavingRun() {
-        Workflow workflow = new Workflow();
-        workflow.setWorkflowId("workflow-1");
-        when(accessService.requireWorkflowWriteAccess("workflow-1")).thenReturn(workflow);
+        when(workflowAccess.requireWriteAndLock("workflow-1")).thenReturn(new WorkflowAccessView("workflow-1", null));
         when(workflowQuery.findRevision("revision-1", "workflow-1"))
             .thenReturn(Optional.of(new WorkflowProductionQuery.Revision("revision-1", "retired", null, 1)));
 

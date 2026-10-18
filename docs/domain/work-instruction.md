@@ -26,6 +26,7 @@
 | W13 | **검사 기준을 따르는 단계**(2026-10-11, V71): 값 기록 단계는 제품의 활성 `production`·`any` 검사 기준(`standardId`)을 따를 수 있다. 한계는 기준의 것을 복사하고, 함께 보낸 한계는 비었거나 같아야 한다(S6처럼 조용히 덮지 않음). 값 이름을 비우면 `검사 이름 단위`(예: `Moisture %`). 입고 기준은 입고 LOT용이라 거절 | 400 `A standard needs a step that records a value.` / 400 `A receipt standard is for incoming LOTs; follow a production one.` / 400 `The standard is not an active inspection standard of this product.` / 400 `The standard sets the limits; leave them empty or send the same.` |
 | W14 | 배포할 때 기준을 따르는 단계는 기준의 **지금** 한계를 다시 가져온다. 배포본은 그 뒤 기준이 바뀌어도 그대로(R1·R7은 단계의 복사본 기준). 새 revision(W4)은 연결을 복사하고 기준의 지금 한계를 가져온다. 기준이 비활성·삭제·입고 단계로 바뀌었으면 배포를 막는다(새 revision은 옛 한계를 둔 채 연결만 복사) | 409 `Step 1 follows the Moisture standard, which is no longer an active production standard; remove the step before releasing.` |
 | W15 | 응답 단계의 `standardStatus`: `current`(단계 한계 = 기준 한계), `changed`(기준 한계가 바뀜: 초안은 배포 때 가져오고, 배포본은 새 revision이 필요), `inactive`(더는 따를 수 없음). 기준이 없으면 null. `standardName`은 기준의 검사 이름 | |
+| W16 | 단계는 그것이 속한 공정(`processId`)을 가질 수 있다(2026-10-17, V91, [ADR-011](../architecture/adr/ADR-011-production-steps.md)). 같은 프로젝트의 지워지지 않은 공정만 된다. 비우면 실행 전체의 단계다. 응답에 `processId`와 `processName`이 있고, 새 revision(W4)으로 복사된다 | 400 `processId is not a process of this project.` |
 | R1 | 실행은 **첫 확인 때의 revision**을 따름. 확인 전에는 제품의 현재 배포본을 보여 줌. 실행 중에 새 revision이 배포돼도 진행 중인 체크리스트는 바뀌지 않고, 새 실행은 새 revision을 씀 | |
 | R2 | 열린 실행(pending·running)만 확인·취소 | 409 `Run R-… is finished; its checklist can no longer change.` |
 | R3 | 값을 기록하는 단계는 값이 있어야 확인 | 400 `Step 1 records Oven °C; enter it.` |
@@ -36,6 +37,7 @@
 | R8 | 한계 밖 값은 실행 상세에서 [부적합(NCR)](nonconformity.md) 발행을 **제안**한다(2026-10-03, 프런트만). 2026-10-11부터 확인이 남긴 검사가 불합격이면(R9–R10, 한계를 넘지 않았어도) 같은 방식으로 제안하고 제목은 `Step 2 Visual failed: cracked`(한계 밖이면 기존 제목이 우선). 누르면 대상은 그 실행과 제품, 심각도는 기본(불량 없음 → minor), 제목 `Step 1 Oven °C 250 outside 200–230`, 본문은 지침 제목·revision·단계·기록한 사람·시각. 그 실행에 같은 제목의 열린·닫힌 NCR이 있으면 버튼 대신 그 번호를 보여 준다(취소된 NCR은 세지 않음). 자동으로 만들지 않는다 | 발행 규칙은 NCR의 N1–N4 |
 | R9 | **기준을 따르는 단계의 확인은 그 실행의 검사도 남긴다**(2026-10-11, V72). 단계가 따르는 기준(W13)이 활성·생산용이고 한계가 하나 이상이며 실행 제품의 기준이고 값이 숫자면, 확인과 같은 트랜잭션에서 품질 검사(`standardId`, 실행, 제품, 측정값, 메모 `Work instruction step 1: 내용`)를 기록한다. 검사 이름·한계·단위·판정은 기준의 **지금** 값(S6·S7), 단계의 한계 밖 표시(R7)는 단계의 복사본. 한계 없는 기준은 R10, 더는 따를 수 없는 기준·숫자가 아닌 값은 확인만. 확인 취소(R6)는 검사를 지우지 않고(검사는 기록), 다시 확인하면 새 검사가 남아 실행 체크리스트는 최신 검사를 따른다. 응답 `checks[].inspectionId`·`inspectionResult` | |
 | R10 | **한계 없는 기준은 확인하는 사람이 판정**(2026-10-11, 마이그레이션 없음): 따르는 기준에 한계가 없으면 확인 요청에 `result`(pass·fail, 대소문자 무시)가 필요하고, 그 결과로 검사를 남긴다(측정값 없음, 메모 `Work instruction step 2: 내용 (기록한 값)`). 다른 단계에 `result`를 보내면 조용히 버리지 않고 거절 | 400 `Step 2 follows the Visual check; say whether it passed (pass or fail).` / 400 `Step 1 takes no result; its value decides the Moisture result.` / 400 `Step 3 takes no result; it does not follow a pass/fail standard.` |
+| R11 | 생산 실행의 공정 단계(ADR-011)를 완료할 때, 지침이 마감을 막게 되어 있으면(F1) 그 공정의 필수 단계를 모두 확인해야 한다. 막지 않게 되어 있으면 완료는 되고, 공정 단계 목록에 필요한 수(`instructionRequired`)와 확인한 수(`instructionDone`)가 나온다 | 409 `Confirm the required work instruction step 1 for Bake first.` |
 
 실행 마감(Finish)은 기본적으로 막지 않습니다. 화면이 확인되지 않은 필수 단계 수를 마감 버튼 옆에 알립니다(`2 required instruction steps not confirmed yet.`).
 
@@ -138,7 +140,7 @@ Instructions 탭의 기준 따르기(2026-10-11, W13–W15): 초안의 **Add ste
 
 ## 이후
 
-- 워크플로 공정(노드)별 지침과 실행 단계 연결(현재는 제품 단위)
+- ~~워크플로 공정(노드)별 지침과 실행 단계 연결~~ → W16, R11(2026-10-17, ADR-011). 검사 기준은 아직 지침 단계를 거쳐서만 공정과 이어진다
 - ~~필수 단계 미확인 시 마감 막기(설정으로)~~ → F1로 구현(V37). 검증: `WorkInstructionIntegrationTest`, `RunInstructionRevisionIntegrationTest`
 - ~~값 범위(한계)~~ → W6·R7(2026-10-03, V47). ~~한계 밖 값에서 부적합 제안~~ → R8(2026-10-03). ~~[검사 기준](inspection-standard.md)과의 연결(같은 한계를 두 곳에 적지 않기)~~ → W13–W15(2026-10-11, V71). ~~기준을 따르는 단계의 값 기록을 그 실행의 검사 기록으로도 남기기~~ → R9(2026-10-11, V72). ~~한계 없는(사람이 판정하는) 기준 단계에서 합격·불합격을 함께 고르기~~ → R10(2026-10-11). ~~확인이 남긴 불합격 검사에서 NCR로 바로 이어지기~~ → R8 확장(2026-10-11). ~~불합격 검사에서 불량(`defect_log`) 기록으로 바로 이어지기~~ → 확인이 남긴 검사도 실행 상세 Quality의 검사 목록에 나오고, 거기의 기존 **Log defect**가 그 검사를 불량의 근거로 채운다(2026-10-11 확인, 새 코드 없음)
 - 공정별 지침 첨부, 저장소 이관·보존기간에 따른 미참조 파일 회수

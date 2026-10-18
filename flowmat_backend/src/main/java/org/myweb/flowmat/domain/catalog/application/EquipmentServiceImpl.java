@@ -151,6 +151,7 @@ public class EquipmentServiceImpl implements EquipmentService {
         equipment.setLocation(optional(details.location()));
         equipment.setEfficiencyPercent(efficiency(details.efficiencyPercent()));
         equipment.setConcurrentWorkOrdersYn(Boolean.TRUE.equals(details.concurrentWorkOrders()) ? "Y" : "N");
+        equipment.setConcurrentWorkOrdersLimit(concurrentLimit(details));
     }
 
     /** Above 0 to 100 with up to two decimals; null keeps the rated output (E8). */
@@ -167,6 +168,21 @@ public class EquipmentServiceImpl implements EquipmentService {
         return value;
     }
 
+    /** With side-by-side work orders, at most 2 to 99 at once; none is no limit (E16). */
+    private static Integer concurrentLimit(EquipmentDetails details) {
+        Integer limit = details.concurrentLimit();
+        if (limit == null) {
+            return null;
+        }
+        if (!Boolean.TRUE.equals(details.concurrentWorkOrders())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "concurrentLimit needs concurrentWorkOrders.");
+        }
+        if (limit < 2 || limit > 99) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, EquipmentDetails.WholeLimit.MESSAGE);
+        }
+        return limit;
+    }
+
     private static BigDecimal nonNegative(BigDecimal value, String name) {
         if (value != null && value.signum() < 0) throw new BusinessException(ErrorCode.BAD_REQUEST, name + " must not be negative.");
         return value;
@@ -177,6 +193,7 @@ public class EquipmentServiceImpl implements EquipmentService {
             equipment.getEquipmentName(), equipment.getEquipmentType(), equipment.getEquipmentStatus(),
             new EquipmentDetails(equipment.getManufacturer(), equipment.getModelName(), equipment.getSerialNo(),
                 equipment.getCapacityPerHour(), equipment.getPowerKwh(), equipment.getWaterLiter(), equipment.getLocation(),
-                equipment.getEfficiencyPercent(), "Y".equals(equipment.getConcurrentWorkOrdersYn())));
+                equipment.getEfficiencyPercent(), "Y".equals(equipment.getConcurrentWorkOrdersYn()),
+                equipment.getConcurrentWorkOrdersLimit()));
     }
 }

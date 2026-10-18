@@ -6,6 +6,8 @@ import {
   type WorkInstructionDto,
 } from '../../../entities/production/api/useWorkInstructions'
 import { useInspectionStandardsQuery } from '../../../entities/quality/api/useInspectionStandards'
+import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQuery'
+import { useWorkflowCanvasQuery } from '../../../entities/workflow/api/useWorkflowCanvasQuery'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { ItemDto } from '../../../shared/types/api'
 import { pickableItems } from '../model/itemStatusModel'
@@ -105,6 +107,11 @@ function InstructionDetail({ instruction, revisions, projectId }: {
   const standardsQuery = useInspectionStandardsQuery(projectId, draft)
   const standards = followableStandards(standardsQuery.data ?? [], instruction.itemId)
   const followed = standards.find((one) => one.standardId === step.standardId)
+  // A step can name the process it belongs to (docs/architecture/adr/ADR-011-production-steps.md decision 6).
+  const workflowsQuery = useWorkflowsQuery(draft ? projectId : '')
+  const [processWorkflowId, setProcessWorkflowId] = useState('')
+  const processesQuery = useWorkflowCanvasQuery(processWorkflowId)
+  const processes = processesQuery.data?.nodes ?? []
   const released = revisions.find((one) => one.status === 'released')
   const failure = [mutations.update, mutations.addStep, mutations.removeStep, mutations.release, mutations.revise, mutations.remove]
     .find((mutation) => mutation.isError)
@@ -174,6 +181,7 @@ function InstructionDetail({ instruction, revisions, projectId }: {
           <li key={one.stepId}>
             {one.text}
             {!one.required && <span className="inspector-hint"> (optional)</span>}
+            {one.processName && <span className="inspector-hint"> · at {one.processName}</span>}
             {one.recordsValue && <span className="inspector-hint">
               {' '}· records {one.valueLabel ?? 'a value'}{limitText(one) && ` (${limitText(one)})`}
               {one.standardId && ` · follows ${one.standardName ?? 'a standard'}`}</span>}
@@ -208,6 +216,18 @@ function InstructionDetail({ instruction, revisions, projectId }: {
               onChange={(event) => setStep({ ...step, valueMin: event.target.value })} /></label>}
             {step.recordsValue && !followed && <label>Max <input type="number" step="any" value={step.valueMax ?? ''} style={{ width: 80 }}
               onChange={(event) => setStep({ ...step, valueMax: event.target.value })} /></label>}
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
+            <label>Workflow <select aria-label="Belongs to workflow" value={processWorkflowId}
+              onChange={(event) => { setProcessWorkflowId(event.target.value); setStep({ ...step, processId: '' }) }}>
+              <option value="">(the whole run)</option>
+              {(workflowsQuery.data ?? []).map((one) => <option key={one.workflowId} value={one.workflowId}>{one.workflowName}</option>)}
+            </select></label>
+            {processWorkflowId && <label>At process <select aria-label="Belongs to process" value={step.processId ?? ''}
+              onChange={(event) => setStep({ ...step, processId: event.target.value })}>
+              <option value="">(the whole run)</option>
+              {processes.map((node) => <option key={node.processId} value={node.processId}>{node.name}</option>)}
+            </select></label>}
           </div>
           <button type="submit" disabled={mutations.addStep.isPending}>Add step</button>
         </form>

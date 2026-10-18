@@ -41,6 +41,23 @@ export interface WorkerDayDto {
   updatedBy: string
 }
 
+/** One version of a worker's weekly shifts and rota: from the start (null) or a date, until the next (ADR-013). */
+export interface WorkerScheduleLineDto {
+  scheduleId: string
+  /** YYYY-MM-DD; null for the version from the start. */
+  effectiveFrom: string | null
+  /** The version that applies today. */
+  current: boolean
+}
+
+/** One version in full (docs/architecture/adr/ADR-013-rota-history.md). */
+export interface WorkerScheduleDto extends WorkerScheduleLineDto {
+  calendarSet: boolean
+  weeklyHours: number
+  shifts: WorkerShiftDto[]
+  rota: WorkerRotaDto | null
+}
+
 /** A worker's calendar in a project (docs/domain/worker-calendar.md WC5). */
 export interface WorkerCalendarDto {
   projectId: string
@@ -54,6 +71,8 @@ export interface WorkerCalendarDto {
   days?: WorkerDayDto[]
   /** Null or left out for one week (WC44). */
   rota?: WorkerRotaDto | null
+  /** The versions, earliest first; shifts and rota above are today's (ADR-013). Older answers leave it out. */
+  schedules?: WorkerScheduleLineDto[]
 }
 
 export type WorkerShiftInput = { shiftStart: string; shiftEnd: string; workDays: number[]; rotaWeek?: number }
@@ -90,11 +109,13 @@ function useRefresh(projectId: string) {
 export function useSetWorkerShiftsMutation(projectId: string) {
   const onSuccess = useRefresh(projectId)
   return useMutation({
-    mutationFn: async ({ userId, shifts, rota }: {
-      userId: string; shifts: WorkerShiftInput[]; rota?: { weeks: number; startsOn: string } | null
+    /** effectiveFrom: the date they apply from; left out, today (ADR-013). */
+    mutationFn: async ({ userId, shifts, rota, effectiveFrom }: {
+      userId: string; shifts: WorkerShiftInput[]; rota?: { weeks: number; startsOn: string } | null; effectiveFrom?: string
     }) =>
       unwrapApiResponse(await httpClient.put<ApiEnvelope<WorkerCalendarDto>>(
-        `${base(projectId)}/${encodeURIComponent(userId)}/shifts`, rota ? { shifts, rota } : { shifts })),
+        `${base(projectId)}/${encodeURIComponent(userId)}/shifts`,
+        { shifts, ...(rota ? { rota } : {}), ...(effectiveFrom ? { effectiveFrom } : {}) })),
     onSuccess,
   })
 }
@@ -143,12 +164,46 @@ export function useCopyWorkerDaysMutation(projectId: string) {
   })
 }
 
+/**
+ * Gives other workers one worker's weekly shifts and rota, each {@code offsetWeeks} further on in it, so teams take turns
+ * (docs/domain/worker-calendar.md WC51). Their own weekly shifts are replaced; their day changes and days off stay.
+ */
+export function useCopyWorkerShiftsMutation(projectId: string) {
+  const onSuccess = useRefresh(projectId)
+  return useMutation({
+    /** effectiveFrom: the date the copies apply from; left out, today (ADR-013). */
+    mutationFn: async ({ userId, targets, effectiveFrom }: {
+      userId: string; targets: { userId: string; offsetWeeks: number }[]; effectiveFrom?: string
+    }) =>
+      unwrapApiResponse(await httpClient.post<ApiEnvelope<WorkerCalendarDto[]>>(
+        `${base(projectId)}/${encodeURIComponent(userId)}/shifts/copy`, effectiveFrom ? { targets, effectiveFrom } : { targets })),
+    onSuccess,
+  })
+}
+
 export function useRemoveWorkerDayOffMutation(projectId: string) {
   const onSuccess = useRefresh(projectId)
   return useMutation({
     mutationFn: async ({ userId, dayOffId }: { userId: string; dayOffId: string }) =>
       unwrapApiResponse(await httpClient.delete<ApiEnvelope<WorkerCalendarDto>>(
         `${base(projectId)}/${encodeURIComponent(userId)}/days-off/${encodeURIComponent(dayOffId)}`)),
+    onSuccess,
+  })
+}
+
+/** One version of the worker's weekly shifts and rota, to edit one that has not started (ADR-013). */
+export async function fetchWorkerSchedule(projectId: string, userId: string, scheduleId: string): Promise<WorkerScheduleDto> {
+  return unwrapApiResponse(await httpClient.get<ApiEnvelope<WorkerScheduleDto>>(
+    `${base(projectId)}/${encodeURIComponent(userId)}/schedules/${encodeURIComponent(scheduleId)}`))
+}
+
+/** Deletes a version that has not started; one that has started stays as history (ADR-013 decision 4). */
+export function useRemoveWorkerScheduleMutation(projectId: string) {
+  const onSuccess = useRefresh(projectId)
+  return useMutation({
+    mutationFn: async ({ userId, scheduleId }: { userId: string; scheduleId: string }) =>
+      unwrapApiResponse(await httpClient.delete<ApiEnvelope<WorkerCalendarDto>>(
+        `${base(projectId)}/${encodeURIComponent(userId)}/schedules/${encodeURIComponent(scheduleId)}`)),
     onSuccess,
   })
 }

@@ -15,8 +15,8 @@ import org.myweb.flowmat.domain.project.domain.entity.ProjectMember;
 import org.myweb.flowmat.domain.project.repository.ProjectInviteRepository;
 import org.myweb.flowmat.domain.project.repository.ProjectMemberRepository;
 import org.myweb.flowmat.domain.project.repository.ProjectRepository;
-import org.myweb.flowmat.domain.user.domain.entity.User;
-import org.myweb.flowmat.domain.user.repository.UserRepository;
+import org.myweb.flowmat.domain.user.application.publicapi.UserQuery;
+import org.myweb.flowmat.domain.user.application.publicapi.UserView;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -41,7 +41,7 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectRepository projectRepository;
     private final ProjectAccessService projectAccessService;
-    private final UserRepository userRepository;
+    private final UserQuery userQuery;
     private final IdGenerator idGenerator;
     private final MailService mailService;
     private final SlackNotificationService slackNotificationService;
@@ -68,18 +68,18 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
         )) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "A pending invite already exists for this email.");
         }
-        if (invitedEmail.equalsIgnoreCase(resolveCurrentUser().getUserEmail())) {
+        if (invitedEmail.equalsIgnoreCase(resolveCurrentUser().userEmail())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "You cannot invite yourself.");
         }
 
-        User invitedUser = userRepository.findByUserEmail(invitedEmail).orElse(null);
+        UserView invitedUser = userQuery.findByEmail(invitedEmail).orElse(null);
         if (invitedUser != null) {
-            if (project.getOwnerId().equals(invitedUser.getUserId())) {
+            if (project.getOwnerId().equals(invitedUser.userId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "The project owner already has access.");
             }
             if (projectMemberRepository.existsByProjectIdAndUserIdAndMemberStatus(
                 project.getProjectId(),
-                invitedUser.getUserId(),
+                invitedUser.userId(),
                 ACTIVE_MEMBER
             )) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "The user is already an active project member.");
@@ -90,7 +90,7 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
         invite.setInviteId(idGenerator.generate());
         invite.setProjectId(project.getProjectId());
         invite.setInvitedEmail(invitedEmail);
-        invite.setInvitedUserId(invitedUser != null ? invitedUser.getUserId() : null);
+        invite.setInvitedUserId(invitedUser != null ? invitedUser.userId() : null);
         invite.setProjectRole(role);
         invite.setInviteStatus(INVITE_PENDING);
         invite.setInviteToken(UUID.randomUUID().toString());
@@ -99,7 +99,7 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
 
         ProjectInviteResponse saved = toResponse(projectInviteRepository.save(invite));
 
-        String inviterName = resolveCurrentUser().getUserName();
+        String inviterName = resolveCurrentUser().userName();
         mailService.sendProjectInvite(invitedEmail, project.getProjectName(), inviterName, saved.inviteToken(), role);
         slackNotificationService.sendProjectInviteAlert(project.getProjectName(), inviterName, invitedEmail, role);
 
@@ -115,10 +115,10 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Invite token was not found."));
         Project project = projectRepository.findByProjectIdAndDeletedYn(invite.getProjectId(), NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "The invited project no longer exists."));
-        String inviterName = userRepository.findByUserId(invite.getInvitedBy())
-            .map(User::getUserName)
+        String inviterName = userQuery.findById(invite.getInvitedBy())
+            .map(UserView::userName)
             .orElse(null);
-        User currentUser = resolveCurrentUser();
+        UserView currentUser = resolveCurrentUser();
 
         return new ProjectInvitePreviewResponse(
             project.getProjectName(),
@@ -128,7 +128,7 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
             invite.getInviteStatus(),
             invite.getExpiredAt(),
             invite.getExpiredAt() != null && invite.getExpiredAt().isBefore(OffsetDateTime.now()),
-            currentUser.getUserEmail() != null && currentUser.getUserEmail().equalsIgnoreCase(invite.getInvitedEmail())
+            currentUser.userEmail() != null && currentUser.userEmail().equalsIgnoreCase(invite.getInvitedEmail())
         );
     }
 
@@ -144,8 +144,8 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "This invite has expired.");
         }
 
-        User currentUser = resolveCurrentUser();
-        if (!currentUser.getUserEmail().equalsIgnoreCase(invite.getInvitedEmail())) {
+        UserView currentUser = resolveCurrentUser();
+        if (!currentUser.userEmail().equalsIgnoreCase(invite.getInvitedEmail())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "This invite is not addressed to the authenticated user.");
         }
 
@@ -153,12 +153,12 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserIdAndMemberStatus(
                 project.getProjectId(),
-                currentUser.getUserId(),
+                currentUser.userId(),
                 ACTIVE_MEMBER
             )
             .orElseGet(() -> createAcceptedMember(project, invite, currentUser));
 
-        invite.setInvitedUserId(currentUser.getUserId());
+        invite.setInvitedUserId(currentUser.userId());
         invite.setInviteStatus(INVITE_ACCEPTED);
         invite.setAcceptedAt(OffsetDateTime.now());
         projectInviteRepository.save(invite);
@@ -179,11 +179,11 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
         projectInviteRepository.save(invite);
     }
 
-    private ProjectMember createAcceptedMember(Project project, ProjectInvite invite, User currentUser) {
+    private ProjectMember createAcceptedMember(Project project, ProjectInvite invite, UserView currentUser) {
         ProjectMember member = new ProjectMember();
         member.setProjectMemberId(idGenerator.generate());
         member.setProjectId(project.getProjectId());
-        member.setUserId(currentUser.getUserId());
+        member.setUserId(currentUser.userId());
         member.setProjectRole(normalizeAssignableRole(invite.getProjectRole()));
         member.setMemberStatus(ACTIVE_MEMBER);
         member.setInvitedBy(invite.getInvitedBy());
@@ -192,9 +192,9 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
         return projectMemberRepository.save(member);
     }
 
-    private User resolveCurrentUser() {
+    private UserView resolveCurrentUser() {
         String userId = projectAccessService.requireCurrentUserId();
-        return userRepository.findByUserId(userId)
+        return userQuery.findById(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED, "Authenticated user was not found."));
     }
 

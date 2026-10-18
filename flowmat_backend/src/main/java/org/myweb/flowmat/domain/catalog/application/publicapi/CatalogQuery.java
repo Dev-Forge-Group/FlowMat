@@ -25,8 +25,14 @@ public interface CatalogQuery {
     /** Whether a unit with this code exists, ignoring case. */
     boolean isKnownUnitCode(String unitCode);
 
+    /** The type (e.g. mass, count) of the unit with this code, ignoring case; empty when no unit has the code. */
+    Optional<String> findUnitType(String unitCode);
+
     /** Items by id, deleted ones included so old references still show a code; ids that do not exist are left out. */
     Map<String, CatalogItemView> findItems(Collection<String> itemIds);
+
+    /** Items by id that are not deleted, whatever their project; ids that do not exist or are deleted are left out. */
+    Map<String, CatalogItemView> findActiveItems(Collection<String> itemIds);
 
     /** The project's items that are not deleted, oldest first. */
     List<CatalogItemView> findProjectItems(String projectId);

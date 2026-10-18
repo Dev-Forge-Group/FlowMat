@@ -13,10 +13,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockSnapshotResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
@@ -47,8 +45,7 @@ public class StockSnapshotService {
     private final InventoryTransactionRepository transactionRepository;
     private final InventoryRepository inventoryRepository;
     private final LotMasterRepository lotMasterRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final ProjectAccessService projectAccessService;
 
     public StockSnapshotResponse at(String projectId, OffsetDateTime at) {
@@ -68,15 +65,11 @@ public class StockSnapshotService {
             .filter(row -> row.getCreatedAt() != null && !row.getCreatedAt().isAfter(at))
             .forEach(row -> records.put(row.getInventoryId(), row));
 
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(
-                records.values().stream().map(Inventory::getItemId).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(
+            records.values().stream().map(Inventory::getItemId).collect(Collectors.toSet()));
         Map<String, LotMaster> lots = StreamSupport.stream(lotMasterRepository.findAllById(
                 records.values().stream().map(Inventory::getLotId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
             .collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
-        Map<String, String> units = StreamSupport.stream(unitMasterRepository.findAllById(
-                items.values().stream().map(Item::getUnitId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode, (first, second) -> first));
 
         List<StockSnapshotResponse.Row> rows = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
@@ -89,8 +82,8 @@ public class StockSnapshotService {
             if (quantity.signum() == 0 && reserved.signum() == 0) {
                 continue;
             }
-            Item item = items.get(record.getItemId());
-            BigDecimal unitCost = item != null && item.getUnitCost() != null && item.getUnitCost().signum() > 0 ? item.getUnitCost() : null;
+            CatalogItemView item = items.get(record.getItemId());
+            BigDecimal unitCost = item != null && item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
             BigDecimal value = unitCost == null ? null : scale(quantity.multiply(unitCost));
             if (value == null) {
                 complete = false;
@@ -101,9 +94,9 @@ public class StockSnapshotService {
             rows.add(new StockSnapshotResponse.Row(
                 record.getInventoryId(),
                 record.getItemId(),
-                item == null ? null : item.getItemCode(),
-                item == null ? null : item.getItemName(),
-                item == null ? null : units.get(item.getUnitId()),
+                item == null ? null : item.itemCode(),
+                item == null ? null : item.itemName(),
+                item == null ? null : item.unitCode(),
                 record.getLocation(),
                 record.getLotId(),
                 lot == null ? null : lot.getLotNo(),

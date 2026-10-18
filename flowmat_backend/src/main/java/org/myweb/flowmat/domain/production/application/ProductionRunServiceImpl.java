@@ -43,6 +43,7 @@ import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQue
 import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
 import org.myweb.flowmat.domain.rule.application.RuleEvaluationContext;
 import org.myweb.flowmat.domain.rule.application.RuleTarget;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.domain.entity.Process;
 import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -70,6 +71,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccess workflowAccess;
     private final ObjectMapper objectMapper;
     private final WorkflowProductionQuery workflowReferences;
     private final CatalogItemFactsQuery itemFacts;
@@ -88,7 +90,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
 
     @Override
     public List<ProductionRunResponse> listRuns(String workflowId) {
-        projectAccessService.requireWorkflowReadAccess(workflowId);
+        workflowAccess.requireRead(workflowId);
         return productionRunRepository.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtDesc(workflowId, NOT_DELETED)
             .stream()
             .map(ProductionRunServiceImpl::toResponse)

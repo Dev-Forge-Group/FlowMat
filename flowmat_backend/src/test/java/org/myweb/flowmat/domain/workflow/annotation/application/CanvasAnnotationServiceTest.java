@@ -29,6 +29,7 @@ import org.myweb.flowmat.domain.workflow.annotation.api.dto.request.CanvasAnnota
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
 import org.myweb.flowmat.domain.workflow.annotation.domain.CanvasAnnotation;
 import org.myweb.flowmat.domain.workflow.annotation.repository.CanvasAnnotationRepository;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -46,6 +47,9 @@ class CanvasAnnotationServiceTest {
 
     @Mock
     private ProjectAccessService projectAccessService;
+
+    @Mock
+    private WorkflowAccessService workflowAccess;
 
     @Mock
     private FractionalIndexService fractionalIndexService;
@@ -73,7 +77,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void listRequiresReadAccessAndReturnsMappedAnnotations() {
-        when(projectAccessService.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
         CanvasAnnotation stored = shapeAnnotation("ann-1");
         when(canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of(stored));
@@ -86,7 +90,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void createShapeWithoutShapeKindIsRejected() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of());
         CanvasAnnotationCreateRequest request = createRequest("shape", null, null, "New note");
@@ -99,7 +103,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void createFreehandWithoutPointsIsRejected() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of());
         CanvasAnnotationCreateRequest request = createRequest("freehand", null, null, null);
@@ -112,7 +116,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void createTextWithoutTextContentIsRejected() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of());
         CanvasAnnotationCreateRequest request = createRequest("text", null, null, null);
@@ -125,7 +129,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void createValidShapeSavesAndBroadcastsCreation() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(canvasAnnotationRepository.findAllByWorkflowIdAndDeletedYnOrderByZIndexAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of());
@@ -146,7 +150,7 @@ class CanvasAnnotationServiceTest {
     void patchDiscardsStaleIncomingVersionWithoutBroadcasting() {
         CanvasAnnotation existing = shapeAnnotation("ann-1");
         existing.setWorkflowId(WORKFLOW_ID);
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("ann-1", "N"))
             .thenReturn(Optional.of(existing));
         when(reconcileService.shouldDiscardIncoming(existing, 1, 5L)).thenReturn(true);
@@ -165,7 +169,7 @@ class CanvasAnnotationServiceTest {
     void patchAppliesUpdateAndBumpsVersion() {
         CanvasAnnotation existing = shapeAnnotation("ann-1");
         existing.setWorkflowId(WORKFLOW_ID);
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("ann-1", "N"))
             .thenReturn(Optional.of(existing));
@@ -184,7 +188,7 @@ class CanvasAnnotationServiceTest {
 
     @Test
     void patchOnMissingAnnotationThrowsNotFound() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("missing", "N")).thenReturn(Optional.empty());
         CanvasAnnotationPatchRequest request = new CanvasAnnotationPatchRequest(
             null, null, null, null, null, null, null, null, null, null, null, null, null
@@ -200,7 +204,7 @@ class CanvasAnnotationServiceTest {
     void deleteMarksSoftDeletedAndBroadcasts() {
         CanvasAnnotation existing = shapeAnnotation("ann-1");
         existing.setWorkflowId(WORKFLOW_ID);
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("ann-1", "N"))
             .thenReturn(Optional.of(existing));
@@ -217,8 +221,8 @@ class CanvasAnnotationServiceTest {
         first.setWorkflowId(WORKFLOW_ID);
         CanvasAnnotation second = shapeAnnotation("ann-2");
         second.setWorkflowId(WORKFLOW_ID);
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
-        when(projectAccessService.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("ann-1", "N")).thenReturn(Optional.of(first));
         when(canvasAnnotationRepository.findByAnnotationIdAndDeletedYn("ann-2", "N")).thenReturn(Optional.of(second));

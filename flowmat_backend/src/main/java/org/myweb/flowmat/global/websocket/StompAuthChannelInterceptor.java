@@ -2,7 +2,7 @@ package org.myweb.flowmat.global.websocket;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.security.AuthUser;
@@ -27,11 +27,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         Pattern.compile("^/(?:topic|app)/workflow/([^/]+)/(?:presence|node-move|graph)$");
 
     private final JwtProvider jwtProvider;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccess workflowAccess;
 
-    public StompAuthChannelInterceptor(JwtProvider jwtProvider, ProjectAccessService projectAccessService) {
+    public StompAuthChannelInterceptor(JwtProvider jwtProvider, WorkflowAccess workflowAccess) {
         this.jwtProvider = jwtProvider;
-        this.projectAccessService = projectAccessService;
+        this.workflowAccess = workflowAccess;
     }
 
     @Override
@@ -87,9 +87,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 userId = accessor.getUser().getName();
             }
             if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
-                projectAccessService.requireWorkflowReadAccess(workflowId, userId);
+                workflowAccess.requireRead(workflowId, userId);
             } else {
-                projectAccessService.requireWorkflowWriteAccess(workflowId, userId);
+                workflowAccess.requireWrite(workflowId, userId);
             }
         }
 

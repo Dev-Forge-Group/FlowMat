@@ -47,6 +47,11 @@ public class ProcessConnection extends CreatedUpdatedAuditEntity {
         return "Y".equals(defaultRouteYn);
     }
 
+    /** A Split gateway's share (ADR-008 decision 2, V89): share (a percent), fixed (a quantity) or rest; null elsewhere. */
+    private String splitKind;
+    @Column(precision = 19, scale = 4)
+    private BigDecimal splitValue;
+
     @Column(name = "version")
     private int version = 1;
 

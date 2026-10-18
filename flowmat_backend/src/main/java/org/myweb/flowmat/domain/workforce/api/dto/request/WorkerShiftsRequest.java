@@ -11,12 +11,18 @@ import java.util.List;
 /**
  * A worker's weekly shifts, all at once (docs/domain/worker-calendar.md WC2); an empty list clears them. With {@code rota}
  * they repeat every few weeks and each shift says its week (WC44); without it they are one week, as before.
+ * {@code effectiveFrom} is the date they apply from, today when left out (docs/architecture/adr/ADR-013-rota-history.md).
  */
-public record WorkerShiftsRequest(List<Shift> shifts, Rota rota) {
+public record WorkerShiftsRequest(List<Shift> shifts, Rota rota, String effectiveFrom) {
 
     /** The shifts without a rota, as callers sent them before V87. */
     public WorkerShiftsRequest(List<Shift> shifts) {
-        this(shifts, null);
+        this(shifts, null, null);
+    }
+
+    /** The shifts from today, as callers sent them before V93. */
+    public WorkerShiftsRequest(List<Shift> shifts, Rota rota) {
+        this(shifts, rota, null);
     }
 
     /**

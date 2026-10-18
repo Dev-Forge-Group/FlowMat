@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EquipmentDayDto, EquipmentDowntimeDto, EquipmentScheduleDto, EquipmentShiftDto } from '../../../entities/catalog/api/useEquipment'
 import type { EquipmentDto } from '../../../shared/types/api'
+import { dateInputValue } from './equipmentLoadModel'
 import {
   DEFAULT_CALENDAR_FORM,
   EMPTY_DAY_FORM,
@@ -23,7 +24,12 @@ import {
   nextWeek,
   shiftSummary,
   splitDowntimes,
+  projectToday,
+  startsOnProblem,
   toggleDay,
+  versionForm,
+  versionText,
+  versionUpcoming,
 } from './equipmentScheduleModel'
 
 function shift(shiftStart: string, shiftEnd: string, workDays: number[], shiftHours: number): EquipmentShiftDto {
@@ -207,5 +213,37 @@ describe('equipment for a work order', () => {
     expect(equipmentChoices(list, 'old').map((one) => one.equipmentId)).toEqual(['mix', 'old', 'oven'])
     expect(equipmentLabel(list[0])).toBe('MIX · mix name')
     expect(equipmentLabel(list[2])).toBe('oven name (maintenance)')
+  })
+})
+
+describe('calendar versions', () => {
+  const line = (effectiveFrom: string | null, current = false, alwaysRunning = false) =>
+    ({ scheduleId: `v-${effectiveFrom}`, effectiveFrom, current, alwaysRunning })
+
+  it('says which version applies now, which is ahead and which is history', () => {
+    expect(versionText(line(null, true), '2041-09-01')).toBe('From the start · now')
+    expect(versionText(line('2041-09-09'), '2041-09-01')).toBe('From 2041-09-09 · upcoming')
+    expect(versionText(line('2041-09-16', false, true), '2041-09-01')).toBe('From 2041-09-16 · around the clock · upcoming')
+    expect(versionText(line('2041-08-01'), '2041-09-01')).toBe('From 2041-08-01 · earlier')
+    expect(versionUpcoming(line('2041-09-01'), '2041-09-01')).toBe(false)
+    expect(versionUpcoming(line(null), '2041-09-01')).toBe(false)
+  })
+
+  it('refuses a start before today and loads a version into the form', () => {
+    expect(startsOnProblem('', '2041-09-01')).toBeNull()
+    expect(startsOnProblem('2041-09-01', '2041-09-01')).toBeNull()
+    expect(startsOnProblem('2041-08-31', '2041-09-01')).toBe('Pick today or a later date; change a past date with a day change.')
+    expect(versionForm({ ...line('2041-09-09'), shifts: [shift('06:00:00', '14:00:00', [1, 2], 8)], weeklyHours: 16 }))
+      .toEqual({ shifts: [{ shiftStart: '06:00', shiftEnd: '14:00', workDays: [1, 2] }] })
+    expect(versionForm({ ...line('2041-09-16', false, true), shifts: [], weeklyHours: 0 })).toEqual(DEFAULT_CALENDAR_FORM)
+  })
+
+  it('counts today in the project zone, not the browser', () => {
+    // 05:00 on the 9th in Seoul is still the 8th in New York.
+    const now = new Date('2041-09-08T20:00:00Z')
+    expect(projectToday('Asia/Seoul', now)).toBe('2041-09-09')
+    expect(projectToday('America/New_York', now)).toBe('2041-09-08')
+    expect(projectToday('Not/A_Zone', now)).toBe(dateInputValue(now))
+    expect(projectToday(undefined, now)).toBe(dateInputValue(now))
   })
 })

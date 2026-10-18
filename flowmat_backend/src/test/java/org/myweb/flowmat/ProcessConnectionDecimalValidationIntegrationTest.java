@@ -75,7 +75,8 @@ class ProcessConnectionDecimalValidationIntegrationTest extends IntegrationTestS
     @CsvSource({
         "flowRate, 9999999999.9999",
         "delayTimeSec, 99999999.99",
-        "lossRate, 9.9999"
+        // A loss rate is a fraction below 1 (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 2).
+        "lossRate, 0.9999"
     })
     void acceptsAndStoresTheExactDecimalBoundary(String field, String number) throws Exception {
         String connectionId = createConnection();

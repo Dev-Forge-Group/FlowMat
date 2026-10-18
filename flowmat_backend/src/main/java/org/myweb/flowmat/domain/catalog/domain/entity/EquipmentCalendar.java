@@ -29,6 +29,8 @@ public class EquipmentCalendar {
 
     /** ISO days of the week the shift starts on, such as "1,2,3,4,5" for Monday to Friday. */
     private String workDays;
+    /** The calendar version it belongs to (V94, docs/architecture/adr/ADR-014-equipment-calendar-history.md). */
+    private String scheduleId;
 
     private String updatedBy;
     private OffsetDateTime updatedAt;

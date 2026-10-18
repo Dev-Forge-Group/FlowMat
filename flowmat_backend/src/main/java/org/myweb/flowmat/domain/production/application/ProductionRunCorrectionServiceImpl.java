@@ -11,11 +11,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
-import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
-import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
-import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockQuery;
 import org.myweb.flowmat.domain.production.api.dto.request.RunCorrectionCreateRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.RunCorrectionLineRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.RunCorrectionResponse;
@@ -55,9 +53,8 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
     private final ProductionRunCorrectionLineRepository correctionLineRepository;
     private final ProductionRunServiceImpl productionRunService;
     private final ProjectAccessService projectAccessService;
-    private final InventoryRepository inventoryRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
-    private final LotMasterRepository lotMasterRepository;
+    private final StockQuery stockQuery;
+    private final LotQuery lotQuery;
     private final IdGenerator idGenerator;
     private final RunSetupService runSetupService;
     private final RunEquipmentTimeService runEquipmentTimeService;
@@ -341,23 +338,18 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
         if (output.getInventoryId() == null) {
             return;
         }
-        BigDecimal produced = inventoryTransactionRepository
-            .findAllByReferenceTypeAndReferenceId("production_run_item", output.getProductionRunItemId()).stream()
-            .map(InventoryTransaction::getQuantityDelta)
-            .filter(delta -> delta != null)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        Inventory stock = inventoryRepository.findByInventoryIdAndDeletedYn(output.getInventoryId(), NOT_DELETED).orElse(null);
-        if (produced.signum() <= 0 || stock == null) {
+        BigDecimal produced = stockQuery.quantityMovedBy("production_run_item", output.getProductionRunItemId());
+        BigDecimal available = stockQuery.availableQuantity(output.getInventoryId()).orElse(null);
+        if (produced.signum() <= 0 || available == null) {
             return;
         }
-        BigDecimal available = zeroIfNull(stock.getQuantity()).subtract(zeroIfNull(stock.getReservedQuantity()));
         if (available.compareTo(produced) >= 0) {
             return;
         }
+        LotView lot = output.getLotId() == null ? null : lotQuery.findLots(List.of(output.getLotId())).get(output.getLotId());
         String label = output.getLotId() == null
             ? "The stock this run produced"
-            : "LOT " + lotMasterRepository.findById(output.getLotId()).map(lot -> lot.getLotNo()).orElse(output.getLotId())
-                + " made by this run";
+            : "LOT " + (lot == null ? output.getLotId() : lot.lotNo()) + " made by this run";
         List<String> laterRuns = output.getLotId() == null ? List.of() : consumingRunNumbers(run, output.getLotId());
         throw new BusinessException(ErrorCode.CONFLICT, label + " was already used"
             + (laterRuns.isEmpty()

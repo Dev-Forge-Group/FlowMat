@@ -11,12 +11,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogUnitCostQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogUnitCostView;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
 import org.myweb.flowmat.domain.inventory.api.dto.response.InventoryCountHistoryResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
@@ -45,8 +43,7 @@ public class InventoryCountHistoryService {
     private final InventoryTransactionRepository transactionRepository;
     private final InventoryRepository inventoryRepository;
     private final LotMasterRepository lotMasterRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
     private final ProjectAccessService projectAccessService;
     private final CatalogUnitCostQuery unitCosts;
 
@@ -68,15 +65,11 @@ public class InventoryCountHistoryService {
         Map<String, Inventory> records = StreamSupport.stream(inventoryRepository.findAllById(
                 all.stream().map(InventoryTransaction::getInventoryId).collect(Collectors.toSet())).spliterator(), false)
             .collect(Collectors.toMap(Inventory::getInventoryId, Function.identity()));
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(
-                all.stream().map(InventoryTransaction::getItemId).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(
+            all.stream().map(InventoryTransaction::getItemId).collect(Collectors.toSet()));
         Map<String, LotMaster> lots = StreamSupport.stream(lotMasterRepository.findAllById(
                 all.stream().map(InventoryTransaction::getLotId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
             .collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
-        Map<String, String> units = StreamSupport.stream(unitMasterRepository.findAllById(
-                items.values().stream().map(Item::getUnitId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode, (first, second) -> first));
 
         List<InventoryCountHistoryResponse> counts = new ArrayList<>();
         for (Map.Entry<String, List<InventoryTransaction>> entry : byCount.entrySet()) {
@@ -101,8 +94,8 @@ public class InventoryCountHistoryService {
                 } else {
                     decrease = decrease.subtract(delta);
                 }
-                Item item = items.get(movement.getItemId());
-                BigDecimal unitCost = item != null && item.getUnitCost() != null && item.getUnitCost().signum() > 0 ? item.getUnitCost() : null;
+                CatalogItemView item = items.get(movement.getItemId());
+                BigDecimal unitCost = item != null && item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
                 if (unitCost == null) {
                     complete = false;
                 } else {
@@ -120,9 +113,9 @@ public class InventoryCountHistoryService {
                 lines.add(new InventoryCountHistoryResponse.Line(
                     movement.getInventoryId(),
                     movement.getItemId(),
-                    item == null ? null : item.getItemCode(),
-                    item == null ? null : item.getItemName(),
-                    item == null ? null : units.get(item.getUnitId()),
+                    item == null ? null : item.itemCode(),
+                    item == null ? null : item.itemName(),
+                    item == null ? null : item.unitCode(),
                     record == null ? null : record.getLocation(),
                     lot == null ? null : lot.getLotNo(),
                     scale(delta)

@@ -33,6 +33,8 @@ export interface EquipmentLoadRowDto {
   efficiencyPercent?: number | null
   /** Runs several work orders at once (docs/domain/equipment.md E12): never overloaded, and overlaps do not clash. */
   concurrentWorkOrders?: boolean
+  /** At most this many side by side (E16, E18): load is over the hours times this, overlaps clash above it. */
+  concurrentLimit?: number | null
   calendarSet: boolean
   availableHours: number
   downtimeHours: number

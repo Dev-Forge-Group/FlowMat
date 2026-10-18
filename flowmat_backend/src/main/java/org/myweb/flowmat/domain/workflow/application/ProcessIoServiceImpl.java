@@ -11,7 +11,6 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessIoCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessIoUpdateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessIoResponse;
@@ -52,7 +51,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     private final GraphSyncService graphSyncService;
     private final CatalogQuery catalogQuery;
     private final IdGenerator idGenerator;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final EntityManager entityManager;
 
     @Override
@@ -67,7 +66,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     @Transactional
     public ProcessIoResponse createProcessIo(ProcessIoCreateRequest request) {
         WorkflowText.requireStorable(request.processId(), "processId");
-        Process process = projectAccessService.requireProcessWriteAccess(request.processId());
+        Process process = workflowAccess.requireProcessWriteAccess(request.processId());
         WorkflowText.requireStorable(request.itemId(), "itemId");
         WorkflowText.requireStorable(request.ioName(), "ioName");
         WorkflowText.requireStorable(request.ioType(), "ioType");
@@ -107,7 +106,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
 
     @Override
     public ProcessIoResponse getProcessIo(String processIoId) {
-        ProcessIo processIo = projectAccessService.requireProcessIoReadAccess(processIoId);
+        ProcessIo processIo = workflowAccess.requireProcessIoReadAccess(processIoId);
         requireActiveWorkflowForRead(processIo.getProcessId());
         return ProcessIoResponse.from(processIo);
     }
@@ -115,7 +114,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     @Override
     @Transactional
     public ProcessIoResponse updateProcessIo(String processIoId, ProcessIoUpdateRequest request) {
-        ProcessIo processIo = projectAccessService.requireProcessIoWriteAccess(processIoId);
+        ProcessIo processIo = workflowAccess.requireProcessIoWriteAccess(processIoId);
         WorkflowText.requireStorable(request.itemId(), "itemId");
         WorkflowText.requireStorable(request.ioName(), "ioName");
         WorkflowText.requireStorable(request.ioType(), "ioType");
@@ -134,7 +133,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
         if (Boolean.TRUE.equals(request.clearItem())) {
             processIo.setItemId(null);
         } else if (hasText(request.itemId())) {
-            Process process = projectAccessService.requireProcessWriteAccess(processIo.getProcessId());
+            Process process = workflowAccess.requireProcessWriteAccess(processIo.getProcessId());
             processIo.setItemId(projectItemId(process, request.itemId()));
         }
         if (request.ioName() != null) {
@@ -200,7 +199,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
             }
         }
         ProcessIo saved = processIoRepository.save(processIo);
-        Process parentProcess = projectAccessService.requireProcessWriteAccess(saved.getProcessId());
+        Process parentProcess = workflowAccess.requireProcessWriteAccess(saved.getProcessId());
         graphSyncService.broadcast(Type.PORT_UPDATED, parentProcess.getWorkflowId(), saved.getProcessIoId());
         return ProcessIoResponse.from(saved);
     }
@@ -208,9 +207,9 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     @Override
     @Transactional
     public void deleteProcessIo(String processIoId) {
-        ProcessIo processIo = projectAccessService.requireProcessIoWriteAccess(processIoId);
+        ProcessIo processIo = workflowAccess.requireProcessIoWriteAccess(processIoId);
         lockWorkflowForPort(processIo);
-        Process parentProcess = projectAccessService.requireProcessWriteAccess(processIo.getProcessId());
+        Process parentProcess = workflowAccess.requireProcessWriteAccess(processIo.getProcessId());
         String workflowId = parentProcess.getWorkflowId();
         for (ProcessConnection connection : processConnectionRepository.findLiveConnectionsForPort(processIoId)) {
             connection.setDeletedYn(DELETED);
@@ -245,12 +244,12 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     }
 
     private void requireActiveWorkflowForRead(String processId) {
-        Process process = projectAccessService.requireProcessReadAccess(processId);
-        projectAccessService.requireWorkflowReadAccess(process.getWorkflowId());
+        Process process = workflowAccess.requireProcessReadAccess(processId);
+        workflowAccess.requireWorkflowReadAccess(process.getWorkflowId());
     }
 
     private void lockWorkflowForPort(ProcessIo port) {
-        Process process = projectAccessService.requireProcessWriteAccess(port.getProcessId());
+        Process process = workflowAccess.requireProcessWriteAccess(port.getProcessId());
         lockWorkflowForProcess(process);
         entityManager.refresh(port);
         if (!NOT_DELETED.equals(port.getDeletedYn())) {
@@ -259,7 +258,7 @@ public class ProcessIoServiceImpl implements ProcessIoService {
     }
 
     private void lockWorkflowForProcess(Process process) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(process.getWorkflowId());
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(process.getWorkflowId());
         entityManager.lock(workflow, LockModeType.PESSIMISTIC_WRITE);
         entityManager.refresh(workflow);
         if (!NOT_DELETED.equals(workflow.getDeletedYn())) {

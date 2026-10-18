@@ -10,18 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
 import org.myweb.flowmat.domain.bom.application.BomService;
 import org.myweb.flowmat.domain.bom.application.BomTree;
-import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
-import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
-import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.MaterialRequirementResponse;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
@@ -51,13 +47,12 @@ public class MaterialRequirementService {
     private final WorkOrderRepository workOrderRepository;
     private final ProductionRunRepository productionRunRepository;
     private final BomService bomService;
-    private final ItemRepository itemRepository;
+    private final CatalogQuery catalogQuery;
     private final UsableStock usableStock;
     private final ProjectAccessService projectAccessService;
     private final ProjectCalendarQuery projectCalendar;
     private final OpenRunInputs openRunInputs;
-    private final BomHeaderRepository bomHeaderRepository;
-    private final BomLineRepository bomLineRepository;
+    private final BomStructureQuery bomStructure;
     private final StockAllocationService stockAllocationService;
 
     public MaterialRequirementResponse summary(String projectId) {
@@ -128,22 +123,21 @@ public class MaterialRequirementService {
         // (docs/domain/stock-allocation.md).
         Map<String, BigDecimal> allocated = stockAllocationService.openByItem(active.stream().map(WorkOrder::getWorkOrderId).toList());
         // Undated, so the revisions effective on the project's today (docs/domain/multi-level-bom.md M3).
-        Map<String, BomHeader> approved = BomTree.approvedByItem(bomHeaderRepository, projectId, projectCalendar.today(projectId));
+        Map<String, String> approved = bomStructure.approvedBomIdByItem(projectId, projectCalendar.today(projectId));
         explodeSubAssemblies(projectId, approved, supply, allocated, required, units, needs, problems);
 
         Map<String, BigDecimal> usable = new HashMap<>(usableStock.byItem(projectId, required.keySet()));
         allocated.forEach((itemId, quantity) -> usable.merge(itemId, quantity, BigDecimal::add));
-        Map<String, Item> items = StreamSupport.stream(itemRepository.findAllById(required.keySet()).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(required.keySet());
         List<MaterialRequirementResponse.Line> lines = required.entrySet().stream()
             .map(entry -> {
-                Item item = items.get(entry.getKey());
+                CatalogItemView item = items.get(entry.getKey());
                 BigDecimal free = usable.getOrDefault(entry.getKey(), BigDecimal.ZERO);
                 BigDecimal planned = supply.getOrDefault(entry.getKey(), BigDecimal.ZERO);
                 return new MaterialRequirementResponse.Line(
                     entry.getKey(),
-                    item == null ? null : item.getItemCode(),
-                    item == null ? null : item.getItemName(),
+                    item == null ? null : item.itemCode(),
+                    item == null ? null : item.itemName(),
                     units.get(entry.getKey()),
                     scale(entry.getValue()),
                     scale(free),
@@ -166,7 +160,7 @@ public class MaterialRequirementService {
      */
     private void explodeSubAssemblies(
         String projectId,
-        Map<String, BomHeader> approved,
+        Map<String, String> approved,
         Map<String, BigDecimal> supply,
         Map<String, BigDecimal> allocated,
         Map<String, BigDecimal> required,
@@ -177,7 +171,7 @@ public class MaterialRequirementService {
         if (approved.isEmpty()) {
             return;
         }
-        Map<String, Integer> levels = BomTree.lowLevelCodes(BomTree.approvedChildren(bomHeaderRepository, bomLineRepository, projectId, null));
+        Map<String, Integer> levels = BomTree.lowLevelCodes(bomStructure.approvedChildren(projectId));
         Set<String> done = new HashSet<>();
         while (true) {
             String next = required.keySet().stream()
@@ -195,10 +189,10 @@ public class MaterialRequirementService {
             if (toMake.signum() <= 0) {
                 continue;
             }
-            String code = itemRepository.findByItemIdAndDeletedYn(next, NOT_DELETED).map(Item::getItemCode).orElse(next);
+            String code = catalogQuery.findActiveItem(next).map(CatalogItemView::itemCode).orElse(next);
             BomRequirementResponse below;
             try {
-                below = bomService.requirementsForRun(approved.get(next).getBomId(), projectId, next, toMake);
+                below = bomService.requirementsForRun(approved.get(next), projectId, next, toMake);
             } catch (BusinessException exception) {
                 problems.add(code + ": " + exception.getMessage());
                 continue;

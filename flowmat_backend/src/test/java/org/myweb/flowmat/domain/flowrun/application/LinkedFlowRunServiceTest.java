@@ -21,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRun;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
+import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -34,12 +36,16 @@ class LinkedFlowRunServiceTest {
     @Mock private EntityManager entityManager;
     @Mock private FlowRunEventRecorder eventRecorder;
     @Mock private IdGenerator idGenerator;
+    @Mock private FlowRunStepRepository stepRepository;
+    @Mock private FlowRunService runService;
+    @Mock private WorkflowProductionQuery workflowQuery;
 
     private LinkedFlowRunService service;
 
     @BeforeEach
     void setUp() {
-        service = new LinkedFlowRunService(repository, eventRecorder, entityManager, idGenerator);
+        service = new LinkedFlowRunService(repository, eventRecorder, entityManager, idGenerator, stepRepository, runService,
+            workflowQuery, MAPPER);
     }
 
     @Test

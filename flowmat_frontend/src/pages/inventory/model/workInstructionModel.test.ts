@@ -57,6 +57,10 @@ describe('revisions', () => {
 describe('steps and links', () => {
   it('checks what is sent', () => {
     expect(stepPayload(EMPTY_STEP).error).toBe('Write what the step is.')
+    // A step can name its process (ADR-011); blank keeps it for the whole run.
+    expect(stepPayload({ ...EMPTY_STEP, text: 'Check the oven', processId: 'p-bake' }).input)
+      .toEqual({ text: 'Check the oven', required: true, recordsValue: false, valueLabel: null, processId: 'p-bake' })
+    expect(stepPayload({ ...EMPTY_STEP, text: 'Sweep', processId: '' }).input).not.toHaveProperty('processId')
     expect(stepPayload({ text: ' Preheat ', required: true, recordsValue: true, valueLabel: ' Oven °C ' }))
       .toEqual({ input: { text: 'Preheat', required: true, recordsValue: true, valueLabel: 'Oven °C' }, error: null })
     expect(stepPayload({ text: 'Sweep', required: false, recordsValue: false, valueLabel: 'ignored' }).input?.valueLabel).toBeNull()

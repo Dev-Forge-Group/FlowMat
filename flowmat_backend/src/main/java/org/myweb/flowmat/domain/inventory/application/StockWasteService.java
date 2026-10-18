@@ -7,14 +7,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockWasteResponse;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
@@ -36,8 +32,7 @@ public class StockWasteService {
 
     private final ProjectAccessService projectAccessService;
     private final InventoryTransactionRepository inventoryTransactionRepository;
-    private final ItemRepository itemRepository;
-    private final UnitMasterRepository unitMasterRepository;
+    private final CatalogQuery catalogQuery;
 
     private enum Reason { EXPIRED, DEFECT, COUNT_LOSS }
 
@@ -63,22 +58,18 @@ public class StockWasteService {
             byItem.put(totals.getItemId(), lost);
         }
 
-        Map<String, Item> items = itemRepository.findAllById(byItem.keySet()).stream()
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, String> unitCodes = unitMasterRepository.findAllById(items.values().stream()
-                .map(Item::getUnitId).filter(Objects::nonNull).distinct().toList()).stream()
-            .collect(Collectors.toMap(UnitMaster::getUnitId, UnitMaster::getUnitCode));
+        Map<String, CatalogItemView> items = catalogQuery.findItems(byItem.keySet());
         List<StockWasteResponse.Line> lines = new ArrayList<>();
         BigDecimal[] reasonValues = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
         boolean complete = true;
         for (Map.Entry<String, Map<Reason, BigDecimal>> entry : byItem.entrySet()) {
-            Item item = items.get(entry.getKey());
+            CatalogItemView item = items.get(entry.getKey());
             Map<Reason, BigDecimal> lost = entry.getValue();
             BigDecimal expired = lost.getOrDefault(Reason.EXPIRED, BigDecimal.ZERO);
             BigDecimal defect = lost.getOrDefault(Reason.DEFECT, BigDecimal.ZERO);
             BigDecimal countLoss = lost.getOrDefault(Reason.COUNT_LOSS, BigDecimal.ZERO);
             BigDecimal total = expired.add(defect).add(countLoss);
-            BigDecimal cost = item == null || item.getUnitCost() == null || item.getUnitCost().signum() <= 0 ? null : item.getUnitCost();
+            BigDecimal cost = item == null || item.unitCost() == null || item.unitCost().signum() <= 0 ? null : item.unitCost();
             if (cost == null) {
                 complete = false;
             } else {
@@ -86,9 +77,9 @@ public class StockWasteService {
                 reasonValues[1] = reasonValues[1].add(defect.multiply(cost));
                 reasonValues[2] = reasonValues[2].add(countLoss.multiply(cost));
             }
-            String unit = item == null || item.getUnitId() == null ? null : unitCodes.get(item.getUnitId());
-            lines.add(new StockWasteResponse.Line(entry.getKey(), item == null ? null : item.getItemCode(),
-                item == null ? null : item.getItemName(), unit, expired, defect, countLoss, total,
+            String unit = item == null ? null : item.unitCode();
+            lines.add(new StockWasteResponse.Line(entry.getKey(), item == null ? null : item.itemCode(),
+                item == null ? null : item.itemName(), unit, expired, defect, countLoss, total,
                 cost == null ? null : total.multiply(cost)));
         }
         lines.sort(Comparator.comparing(StockWasteResponse.Line::value, Comparator.nullsLast(Comparator.reverseOrder()))

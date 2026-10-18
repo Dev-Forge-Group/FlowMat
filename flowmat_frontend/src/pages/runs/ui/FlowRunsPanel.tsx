@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import { errorMessage } from '../../../shared/lib/errorMessage'
+import { delayText } from '../model/delayText'
 import type { ApiEnvelope, WorkflowDto, WorkflowRevisionDetailDto, WorkflowRevisionDto } from '../../../shared/types/api'
 
 type FlowRun = {
@@ -31,6 +32,23 @@ type FlowRunStep = {
   errorMessage: string | null
   inputSnapshot: unknown
   outputSnapshot: unknown
+  /** A Join step's branches that can still bring something, 0 once passed; absent for other steps (ADR-007). */
+  joinWaiting?: number | null
+}
+
+/**
+ * A Join step's line (docs/architecture/adr/ADR-007-join-gateway.md decision 11): the steps that arrived and, while it
+ * waits, how many branches can still bring something.
+ */
+function joinLine(step: FlowRunStep, steps: FlowRunStep[]): string {
+  const arrivals = (step.inputSnapshot as { arrivals?: { sourceStepId?: string }[] } | null)?.arrivals
+  const from = Array.isArray(arrivals) ? arrivals.map((arrival) => {
+    const source = steps.find((one) => one.stepId === arrival.sourceStepId)
+    return source ? `#${source.sequenceNo}` : (arrival.sourceStepId ?? '').slice(0, 8)
+  }) : []
+  const joined = `joins step${from.length === 1 ? '' : 's'} ${from.join(', ')}`
+  if (step.status !== 'planned') return joined
+  return `${joined} · waiting for ${step.joinWaiting} branch${step.joinWaiting === 1 ? '' : 'es'}`
 }
 
 type FlowRunStepLineage = {
@@ -56,6 +74,8 @@ type FlowRunAttempt = {
   errorMessage: string | null
   /** When a running attempt times out (docs/domain/flow-run-execution-policy.md EP7). */
   timeoutAt?: string | null
+  /** When a production-linked attempt was marked late for passing it; it keeps running (docs/domain/flow-run.md F12). */
+  overdueAt?: string | null
 }
 
 type FlowRunEvent = {
@@ -70,7 +90,40 @@ type FlowRunEvent = {
 }
 
 type NodeOption = { processId: string; processName: string }
-type ConnectionOption = { connectionId: string; label: string; failurePolicy: string }
+
+/**
+ * The connection delay that set a step's scheduled time (docs/architecture/adr/ADR-010-connection-delay.md decision 9), as
+ * long as nobody rescheduled it since, and whether it was then held to the work order equipment's next working time
+ * (docs/architecture/adr/ADR-015-shift-aware-delay.md decision 5).
+ */
+function delayLine(step: FlowRunStep, events: FlowRunEvent[]): string {
+  const scheduled = events.filter((event) => event.eventType === 'step_scheduled' && event.stepId === step.stepId)
+  const latest = scheduled[scheduled.length - 1]
+  const payload = latest?.payload as { reason?: unknown; delaySeconds?: unknown; readyAt?: unknown } | null | undefined
+  if (payload?.reason !== 'connection_delay' || typeof payload.delaySeconds !== 'number' || payload.delaySeconds <= 0) return ''
+  const held = typeof payload.readyAt === 'string' ? ", then the equipment's next working time" : ''
+  return ` · after a ${delayText(payload.delaySeconds)} delay${held}`
+}
+
+type ConnectionOption = { connectionId: string; label: string; failurePolicy: string; splitKind: string | null }
+
+/**
+ * What the step received when it is not what was sent on: a Split's share (docs/architecture/adr/ADR-008-quantity-split.md
+ * decision 11) and what its connection lost on the way (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 10).
+ * A Join's arrivals have their own line.
+ */
+function receivedLine(step: FlowRunStep, connections: ConnectionOption[], events: FlowRunEvent[]): string | null {
+  if (step.joinWaiting != null) return null
+  const loss = events.find((event) => event.eventType === 'transfer_loss' && event.stepId === step.sourceStepId
+    && (event.payload as { connectionId?: unknown } | null)?.connectionId === step.sourceConnectionId)
+    ?.payload as { lost?: unknown } | undefined
+  const split = connections.find((connection) => connection.connectionId === step.sourceConnectionId)?.splitKind
+  if (!split && !loss) return null
+  const input = step.inputSnapshot as { quantity?: unknown; unit?: unknown } | null
+  if (typeof input?.quantity !== 'number') return null
+  const unit = typeof input.unit === 'string' ? ` ${input.unit}` : ''
+  return `received ${input.quantity}${unit}${typeof loss?.lost === 'number' ? ` · lost ${loss.lost}${unit}` : ''}`
+}
 
 function revisionNodes(snapshot: unknown): NodeOption[] {
   if (!snapshot || typeof snapshot !== 'object' || !('processes' in snapshot)) return []
@@ -92,7 +145,8 @@ function revisionConnections(snapshot: unknown): ConnectionOption[] {
       ? value.connectionLabel : value.connectionId.slice(0, 8)
     const failurePolicy = 'failurePolicy' in value && typeof value.failurePolicy === 'string'
       ? value.failurePolicy : 'stop'
-    return [{ connectionId: value.connectionId, label, failurePolicy }]
+    const splitKind = 'splitKind' in value && typeof value.splitKind === 'string' ? value.splitKind : null
+    return [{ connectionId: value.connectionId, label, failurePolicy, splitKind }]
   })
 }
 
@@ -468,26 +522,28 @@ export function FlowRunsPanel({
                 <span>{step.status}</span>
                 {/* A planned step that keeps its last failure waits to retry (docs/domain/flow-run-execution-policy.md EP10). */}
                 {step.status === 'planned' && step.errorCode && <span>waiting to retry</span>}
-                {step.scheduledAt && <span>Scheduled: {new Date(step.scheduledAt).toLocaleString()}</span>}
-                {step.sourceStepId && <span title={step.sourceStepId}>
+                {step.scheduledAt && <span>Scheduled: {new Date(step.scheduledAt).toLocaleString()}{delayLine(step, events)}</span>}
+                {step.joinWaiting != null && <span>{joinLine(step, steps)}</span>}
+                {step.sourceStepId && step.joinWaiting == null && <span title={step.sourceStepId}>
                   from step #{steps.find((source) => source.stepId === step.sourceStepId)?.sequenceNo
                     ?? step.sourceStepId.slice(0, 8)}
                 </span>}
-                {step.sourceConnectionId && <span>
+                {step.sourceConnectionId && step.joinWaiting == null && <span>
                   via {connections.find((connection) => connection.connectionId === step.sourceConnectionId)?.label
                     ?? step.sourceConnectionId.slice(0, 8)}
                   {' · '}on failure: {connections.find((connection) => connection.connectionId === step.sourceConnectionId)?.failurePolicy
                     ?? 'stop'}
                 </span>}
+                {receivedLine(step, connections, events) && <span>{receivedLine(step, connections, events)}</span>}
                 {step.errorCode && <span role="alert">{step.errorCode}</span>}
                 <button type="button" onClick={() => setExpandedStepId(expandedStepId === step.stepId ? '' : step.stepId)}>
                   {expandedStepId === step.stepId ? 'Hide attempts' : 'Show attempts'}
                 </button>
                 {selectedRun.status === 'running' && !selectedRun.productionRunId && (
                   <>
-                    {step.status === 'planned' && <button type="button" disabled={actionMutation.isPending}
+                    {step.status === 'planned' && step.joinWaiting == null && <button type="button" disabled={actionMutation.isPending}
                       onClick={() => void act(`${basePath}/steps/${encodeURIComponent(step.stepId)}/start`)}>Start</button>}
-                    {step.status === 'planned' && <button type="button" disabled={scheduleMutation.isPending}
+                    {step.status === 'planned' && step.joinWaiting == null && <button type="button" disabled={scheduleMutation.isPending}
                       onClick={() => {
                         scheduleMutation.reset()
                         setScheduleEditStepId(step.stepId)
@@ -593,7 +649,8 @@ export function FlowRunsPanel({
                       {attempt.startedAt && <div>Started: {new Date(attempt.startedAt).toLocaleString()}</div>}
                       {attempt.endedAt && <div>Ended: {new Date(attempt.endedAt).toLocaleString()}</div>}
                       {attempt.status === 'running' && attempt.timeoutAt
-                        && <div>Times out: {new Date(attempt.timeoutAt).toLocaleString()}</div>}
+                        && <div>{selectedRun.productionRunId ? (attempt.overdueAt ? 'Late since' : 'Due by') : 'Times out'}:{' '}
+                          {new Date(attempt.timeoutAt).toLocaleString()}</div>}
                       {attempt.retryAt && <div>Retry scheduled: {new Date(attempt.retryAt).toLocaleString()}</div>}
                       {attempt.errorMessage && <div>Reason: {attempt.errorMessage}</div>}
                     </div>

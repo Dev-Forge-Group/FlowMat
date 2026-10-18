@@ -85,14 +85,24 @@ export interface TimelineBar {
  * One equipment's orders as bars on the week [from, to) (docs/domain/equipment-load.md "타임라인"): each planned window
  * clipped to the week, earliest first, in the first lane that is free by then. Approved and running orders whose planned
  * windows overlap clash, as readiness's "schedule" check says; drafts are not planned work yet and never clash. On
- * equipment that runs work orders side by side (docs/domain/equipment.md E12) nothing clashes.
+ * equipment that runs work orders side by side (docs/domain/equipment.md E12) nothing clashes, unless more than its
+ * {@code limit} run at once at some moment of the order (E18).
  */
-export function timelineBars(orders: EquipmentLoadOrderDto[], from: string, to: string, sideBySide = false): { bars: TimelineBar[]; lanes: number } {
+export function timelineBars(orders: EquipmentLoadOrderDto[], from: string, to: string, sideBySide = false,
+  limit: number | null = null): { bars: TimelineBar[]; lanes: number } {
   const weekStartAt = Date.parse(from)
   const length = Date.parse(to) - weekStartAt
   const planned = orders.filter((order) => order.workOrderStatus !== 'draft')
   const overlaps = (left: EquipmentLoadOrderDto, right: EquipmentLoadOrderDto) =>
     Date.parse(left.plannedStartAt) < Date.parse(right.plannedEndAt) && Date.parse(right.plannedStartAt) < Date.parse(left.plannedEndAt)
+  // The most planned orders running at once at some moment of this one, itself included.
+  const busiest = (order: EquipmentLoadOrderDto) => {
+    const start = Date.parse(order.plannedStartAt)
+    const end = Date.parse(order.plannedEndAt)
+    const moments = [start, ...planned.map((other) => Date.parse(other.plannedStartAt)).filter((at) => at > start && at < end)]
+    return Math.max(...moments.map((at) => planned
+      .filter((other) => Date.parse(other.plannedStartAt) <= at && at < Date.parse(other.plannedEndAt)).length))
+  }
   const shown = orders
     .map((order) => ({
       order,
@@ -118,7 +128,9 @@ export function timelineBars(orders: EquipmentLoadOrderDto[], from: string, to: 
       width: Math.max(((end - start) / length) * 100, 0.5),
       lane,
       draft,
-      clash: !draft && !sideBySide && planned.some((other) => other.workOrderId !== order.workOrderId && overlaps(order, other)),
+      clash: !draft && (sideBySide
+        ? limit !== null && busiest(order) > limit
+        : planned.some((other) => other.workOrderId !== order.workOrderId && overlaps(order, other))),
       title: `${orderLine(order)} · ${stamp(order.plannedStartAt)} → ${stamp(order.plannedEndAt)}`,
     }
   })

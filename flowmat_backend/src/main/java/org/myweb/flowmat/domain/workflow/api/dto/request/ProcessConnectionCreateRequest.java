@@ -32,7 +32,10 @@ public record ProcessConnectionCreateRequest(
     @DecimalMin("0.0") BigDecimal capacity,
     String failurePolicy,
     /** An Exclusive gateway's default connection (ADR-006); false when left out. */
-    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean defaultRoute
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean defaultRoute,
+    /** A Split gateway's share on this connection (ADR-008): share (a percent), fixed or rest; none when left out. */
+    String splitKind,
+    BigDecimal splitValue
 ) {
     public static final class PriorityDeserializer extends JsonDeserializer<Integer> {
         @Override

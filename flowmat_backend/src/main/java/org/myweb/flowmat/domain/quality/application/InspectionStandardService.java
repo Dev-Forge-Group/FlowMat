@@ -7,15 +7,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
-import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
-import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
+import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunQuery;
+import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.request.InspectionStandardRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.QualityInspectionCreateRequest;
@@ -47,9 +44,8 @@ public class InspectionStandardService {
 
     private final InspectionStandardRepository standardRepository;
     private final QualityInspectionRepository inspectionRepository;
-    private final ItemRepository itemRepository;
-    private final ProductionRunRepository productionRunRepository;
-    private final ProductionRunItemRepository productionRunItemRepository;
+    private final CatalogQuery catalogQuery;
+    private final ProductionRunQuery productionRunQuery;
     private final ProjectAccessService projectAccessService;
     private final IdGenerator idGenerator;
 
@@ -61,7 +57,7 @@ public class InspectionStandardService {
         List<InspectionStandard> standards = standardRepository.findAllByProjectIdAndDeletedYn(project, NOT_DELETED).stream()
             .filter(standard -> item == null || item.equals(standard.getItemId()))
             .toList();
-        Map<String, Item> items = items(standards.stream().map(InspectionStandard::getItemId).collect(Collectors.toSet()));
+        Map<String, CatalogItemView> items = items(standards.stream().map(InspectionStandard::getItemId).collect(Collectors.toSet()));
         return standards.stream()
             .sorted(Comparator.comparing((InspectionStandard standard) -> code(items.get(standard.getItemId())))
                 .thenComparing(standard -> standard.getInspectionType().toLowerCase(Locale.ROOT))
@@ -74,13 +70,12 @@ public class InspectionStandardService {
     public InspectionStandardResponse create(InspectionStandardRequest request) {
         String projectId = required(request.projectId(), "projectId");
         projectAccessService.requireProjectWriteAccess(projectId);
-        Item item = itemRepository.findByItemIdAndDeletedYn(required(request.itemId(), "itemId"), NOT_DELETED)
-            .filter(found -> projectId.equals(found.getProjectId()))
+        CatalogItemView item = catalogQuery.findProjectItem(projectId, required(request.itemId(), "itemId"))
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The item was not found in this project."));
         InspectionStandard standard = new InspectionStandard();
         standard.setStandardId(idGenerator.generate());
         standard.setProjectId(projectId);
-        standard.setItemId(item.getItemId());
+        standard.setItemId(item.itemId());
         standard.setActiveYn("Y");
         standard.setDeletedYn(NOT_DELETED);
         apply(standard, request);
@@ -100,7 +95,7 @@ public class InspectionStandardService {
         if (request.active() != null) {
             standard.setActiveYn(request.active() ? "Y" : "N");
         }
-        Item item = itemRepository.findById(standard.getItemId()).orElse(null);
+        CatalogItemView item = catalogQuery.findItems(List.of(standard.getItemId())).get(standard.getItemId());
         requireNoOverlap(standard, item);
         standard.setUpdatedBy(projectAccessService.requireCurrentUserId());
         return toResponse(standardRepository.saveAndFlush(standard), item);
@@ -122,22 +117,22 @@ public class InspectionStandardService {
      * check on the same item. Required checks first.
      */
     public RunQualityChecklistResponse checklist(String productionRunId) {
-        ProductionRun run = productionRunRepository.findByProductionRunIdAndDeletedYn(required(productionRunId, "productionRunId"), NOT_DELETED)
+        ProductionRunView run = productionRunQuery.findRun(required(productionRunId, "productionRunId"))
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        projectAccessService.requireProjectReadAccess(run.getProjectId());
+        projectAccessService.requireProjectReadAccess(run.projectId());
         Set<String> outputs = new LinkedHashSet<>();
-        if (run.getTargetItemId() != null) {
-            outputs.add(run.getTargetItemId());
+        if (run.targetItemId() != null) {
+            outputs.add(run.targetItemId());
         }
-        productionRunItemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc(run.getProductionRunId()).stream()
-            .filter(recording -> !recording.isCancelled() && "output".equals(recording.getDirection()))
-            .forEach(recording -> outputs.add(recording.getItemId()));
+        productionRunQuery.findRecordings(run.productionRunId()).stream()
+            .filter(recording -> "output".equals(recording.direction()))
+            .forEach(recording -> outputs.add(recording.itemId()));
         List<InspectionStandard> standards = outputs.isEmpty() ? List.of()
             : standardRepository.findAllByItemIdInAndDeletedYn(outputs, NOT_DELETED).stream()
                 .filter(standard -> "Y".equals(standard.getActiveYn()) && !"receipt".equals(standard.getStage()))
                 .toList();
-        List<QualityInspection> inspections = inspectionRepository.findAllByProductionRunIdOrderByInspectedAtDesc(run.getProductionRunId());
-        Map<String, Item> items = items(outputs);
+        List<QualityInspection> inspections = inspectionRepository.findAllByProductionRunIdOrderByInspectedAtDesc(run.productionRunId());
+        Map<String, CatalogItemView> items = items(outputs);
         List<RunQualityChecklistResponse.Line> lines = standards.stream()
             .sorted(Comparator.comparing((InspectionStandard standard) -> !"Y".equals(standard.getRequiredYn()))
                 .thenComparing(standard -> code(items.get(standard.getItemId())))
@@ -148,7 +143,7 @@ public class InspectionStandardService {
         int requiredPassed = (int) lines.stream().filter(line -> line.required() && QualityInspection.PASS.equals(line.status())).count();
         int requiredMissing = (int) lines.stream().filter(line -> line.required() && "missing".equals(line.status())).count();
         int failed = (int) lines.stream().filter(line -> QualityInspection.FAIL.equals(line.status())).count();
-        return new RunQualityChecklistResponse(run.getProductionRunId(), required, requiredPassed, requiredMissing, failed, lines);
+        return new RunQualityChecklistResponse(run.productionRunId(), required, requiredPassed, requiredMissing, failed, lines);
     }
 
     /** The standard an inspection names: live, active and in the project. */
@@ -204,7 +199,7 @@ public class InspectionStandardService {
     }
 
     /** One standard per item and check at a time: two stages overlap when they are equal or either is "any". */
-    private void requireNoOverlap(InspectionStandard candidate, Item item) {
+    private void requireNoOverlap(InspectionStandard candidate, CatalogItemView item) {
         for (InspectionStandard other : standardRepository.findAllByItemIdAndDeletedYn(candidate.getItemId(), NOT_DELETED)) {
             boolean overlaps = other.getStage().equals(candidate.getStage())
                 || "any".equals(other.getStage()) || "any".equals(candidate.getStage());
@@ -225,12 +220,12 @@ public class InspectionStandardService {
             .orElse(null);
     }
 
-    private static RunQualityChecklistResponse.Line line(InspectionStandard standard, Item item, QualityInspection inspection) {
+    private static RunQualityChecklistResponse.Line line(InspectionStandard standard, CatalogItemView item, QualityInspection inspection) {
         return new RunQualityChecklistResponse.Line(
             standard.getStandardId(),
             standard.getItemId(),
-            item == null ? null : item.getItemCode(),
-            item == null ? null : item.getItemName(),
+            item == null ? null : item.itemCode(),
+            item == null ? null : item.itemName(),
             standard.getInspectionType(),
             standard.getStage(),
             standard.getStandardMin(),
@@ -244,13 +239,13 @@ public class InspectionStandardService {
         );
     }
 
-    private static InspectionStandardResponse toResponse(InspectionStandard standard, Item item) {
+    private static InspectionStandardResponse toResponse(InspectionStandard standard, CatalogItemView item) {
         return new InspectionStandardResponse(
             standard.getStandardId(),
             standard.getProjectId(),
             standard.getItemId(),
-            item == null ? null : item.getItemCode(),
-            item == null ? null : item.getItemName(),
+            item == null ? null : item.itemCode(),
+            item == null ? null : item.itemName(),
             standard.getInspectionType(),
             standard.getStage(),
             standard.getStandardMin(),
@@ -262,9 +257,8 @@ public class InspectionStandardService {
         );
     }
 
-    private Map<String, Item> items(Set<String> itemIds) {
-        return StreamSupport.stream(itemRepository.findAllById(itemIds).spliterator(), false)
-            .collect(Collectors.toMap(Item::getItemId, Function.identity()));
+    private Map<String, CatalogItemView> items(Set<String> itemIds) {
+        return catalogQuery.findItems(itemIds);
     }
 
     private InspectionStandard findLive(String standardId) {
@@ -272,8 +266,8 @@ public class InspectionStandardService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
-    private static String code(Item item) {
-        return item == null ? "" : item.getItemCode();
+    private static String code(CatalogItemView item) {
+        return item == null ? "" : item.itemCode();
     }
 
     private static boolean differs(BigDecimal sent, BigDecimal standard) {

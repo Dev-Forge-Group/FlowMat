@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -53,6 +54,9 @@ class WorkflowEditorDocumentServiceTest {
     private ProjectAccessService projectAccessService;
 
     @Mock
+    private WorkflowAccessService workflowAccess;
+
+    @Mock
     private GraphSyncService graphSyncService;
 
     @Spy
@@ -72,7 +76,7 @@ class WorkflowEditorDocumentServiceTest {
 
     @Test
     void getDocumentRequiresReadAccessAndReturnsDefaultDocumentWhenMissing() {
-        when(projectAccessService.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowReadAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(documentRepository.findById(WORKFLOW_ID)).thenReturn(Optional.empty());
         when(elementRepository.findAllByWorkflowIdAndDeletedYnOrderByElementOrderAscCreatedAtAsc(WORKFLOW_ID, "N"))
             .thenReturn(List.of());
@@ -87,7 +91,7 @@ class WorkflowEditorDocumentServiceTest {
 
     @Test
     void saveDocumentPersistsPolygonAndLineElements() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(documentRepository.findByWorkflowIdForUpdate(WORKFLOW_ID)).thenReturn(Optional.empty());
         when(elementRepository.findAllByWorkflowIdAndDeletedYnOrderByElementOrderAscCreatedAtAsc(WORKFLOW_ID, "N"))
@@ -127,7 +131,7 @@ class WorkflowEditorDocumentServiceTest {
     void saveDocumentSoftDeletesElementsMissingFromFullDocumentSave() {
         WorkflowEditorDocument document = document();
         WorkflowEditorElement stale = storedElement("old-1", "rectangle", 1);
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
         when(documentRepository.findByWorkflowIdForUpdate(WORKFLOW_ID)).thenReturn(Optional.of(document));
         when(elementRepository.findAllByWorkflowIdAndDeletedYnOrderByElementOrderAscCreatedAtAsc(WORKFLOW_ID, "N"))
@@ -147,7 +151,7 @@ class WorkflowEditorDocumentServiceTest {
 
     @Test
     void saveDocumentRejectsLineWithoutEndpoints() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         EditorDocumentSaveRequest request = new EditorDocumentSaveRequest(
             1,
             camera(0, 0, 1),
@@ -163,7 +167,7 @@ class WorkflowEditorDocumentServiceTest {
 
     @Test
     void saveDocumentRejectsDuplicateElementIds() {
-        when(projectAccessService.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
+        when(workflowAccess.requireWorkflowWriteAccess(WORKFLOW_ID)).thenReturn(workflow);
         EditorDocumentSaveRequest request = new EditorDocumentSaveRequest(
             1,
             camera(0, 0, 1),

@@ -3,7 +3,7 @@ package org.myweb.flowmat.domain.workflow.collab;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.dto.PresenceMessage;
 import org.myweb.flowmat.domain.workflow.collab.dto.AnnotationPresencePayload;
 import org.myweb.flowmat.global.security.AuthUser;
@@ -26,7 +26,7 @@ public class PresenceController {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final WorkflowSessionRegistry sessionRegistry;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @MessageMapping("/workflow/{workflowId}/presence")
     public void relay(
@@ -40,7 +40,7 @@ public class PresenceController {
             log.warn("Dropping malformed presence message for workflowId={}", workflowId);
             return;
         }
-        projectAccessService.requireWorkflowReadAccess(workflowId, userId);
+        workflowAccess.requireWorkflowReadAccess(workflowId, userId);
         if (!isValid(message)) {
             log.warn("Dropping invalid presence message for workflowId={}, userId={}", workflowId, userId);
             return;

@@ -11,7 +11,6 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
-import com.tngtech.archunit.library.freeze.FreezingArchRule;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -20,10 +19,9 @@ import java.util.regex.Pattern;
 /**
  * The module rule of docs/architecture/adr/ADR-002-module-dependency.md, Stage A: a bounded context
  * ({@code org.myweb.flowmat.domain.<context>}) uses only its own repositories and reaches other contexts through their
- * {@code application.publicapi}. The violations that existed when the rule came in are frozen in
- * {@code src/test/resources/archunit_store}; that list may only shrink, and any new violation fails this test. Fixed
- * violations drop out of the store by themselves. {@code global} and {@code batch} are not bounded contexts and are not
- * checked.
+ * {@code application.publicapi}. The violations frozen when the rule came in (105 on 2026-10-02) were all removed by
+ * 2026-10-18 (docs/architecture/adr/ADR-012-workflow-access-boundary.md), so there is no frozen list any more and any
+ * violation fails this test. {@code global} and {@code batch} are not bounded contexts and are not checked.
  */
 @AnalyzeClasses(packages = "org.myweb.flowmat", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -32,9 +30,8 @@ class ModuleBoundaryTest {
     private static final Pattern REPOSITORY = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.repository(\\..*)?$");
 
     @ArchTest
-    static final ArchRule repositoriesStayInsideTheirBoundedContext = FreezingArchRule.freeze(
-        classes().that().resideInAPackage("org.myweb.flowmat.domain..")
-            .should(useOnlyTheirOwnContextsRepositories()));
+    static final ArchRule repositoriesStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
+        .should(useOnlyTheirOwnContextsRepositories());
 
     private static ArchCondition<JavaClass> useOnlyTheirOwnContextsRepositories() {
         return new ArchCondition<>("use only their own bounded context's repositories") {
@@ -44,8 +41,7 @@ class ModuleBoundaryTest {
                 if (!own.matches()) {
                     return;
                 }
-                // One violation per class and foreign repository, named without signatures or line numbers, so a frozen
-                // violation still matches after unrelated edits (a new constructor parameter, a moved method).
+                // One violation per class and foreign repository, named without signatures or line numbers.
                 Set<String> repositories = new TreeSet<>();
                 for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
                     JavaClass target = dependency.getTargetClass().getBaseComponentType();

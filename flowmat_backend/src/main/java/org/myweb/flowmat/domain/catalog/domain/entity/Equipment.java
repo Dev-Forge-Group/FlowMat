@@ -47,5 +47,8 @@ public class Equipment extends CreatedUpdatedAuditEntity {
     @JdbcTypeCode(SqlTypes.CHAR)
     private String concurrentWorkOrdersYn = "N";
 
+    /** At most this many at once when concurrentWorkOrdersYn is Y, 2 to 99; null is no limit (V90, E16). */
+    private Integer concurrentWorkOrdersLimit;
+
     private String location;
 }

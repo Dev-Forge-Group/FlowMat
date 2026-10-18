@@ -3,8 +3,8 @@ package org.myweb.flowmat.domain.workflow.application;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
 import org.myweb.flowmat.domain.project.domain.entity.Project;
-import org.myweb.flowmat.domain.project.repository.ProjectRepository;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowUpdateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowResponse;
@@ -27,10 +27,11 @@ public class WorkflowServiceImpl implements WorkflowService {
     private static final String DELETED = "Y";
 
     private final WorkflowRepository workflowRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectWorkflowCommand projectWorkflows;
     private final IdGenerator idGenerator;
     private final GraphSyncService graphSyncService;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @Override
     public List<WorkflowResponse> listWorkflows(String projectId) {
@@ -58,22 +59,19 @@ public class WorkflowServiceImpl implements WorkflowService {
         workflow.setDeletedYn(NOT_DELETED);
 
         Workflow savedWorkflow = workflowRepository.save(workflow);
-        if (project.getCurrentWorkflowId() == null) {
-            project.setCurrentWorkflowId(savedWorkflow.getWorkflowId());
-            projectRepository.save(project);
-        }
+        projectWorkflows.workflowAdded(project.getProjectId(), savedWorkflow.getWorkflowId());
         return toResponse(savedWorkflow);
     }
 
     @Override
     public WorkflowResponse getWorkflow(String workflowId) {
-        return toResponse(projectAccessService.requireWorkflowReadAccess(workflowId));
+        return toResponse(workflowAccess.requireWorkflowReadAccess(workflowId));
     }
 
     @Override
     @Transactional
     public WorkflowResponse updateWorkflow(String workflowId, WorkflowUpdateRequest request) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         if (hasText(request.workflowName())) {
             workflow.setWorkflowName(request.workflowName().trim());
         }
@@ -94,16 +92,13 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     @Transactional
     public void deleteWorkflow(String workflowId) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         workflow.setDeletedYn(DELETED);
         workflow.setWorkflowStatus("deleted");
         workflowRepository.save(workflow);
 
-        Project project = projectAccessService.requireProjectWriteAccess(workflow.getProjectId());
-        if (workflow.getWorkflowId().equals(project.getCurrentWorkflowId())) {
-            project.setCurrentWorkflowId(null);
-            projectRepository.save(project);
-        }
+        projectAccessService.requireProjectWriteAccess(workflow.getProjectId());
+        projectWorkflows.workflowRemoved(workflow.getProjectId(), workflow.getWorkflowId());
     }
 
     private static WorkflowResponse toResponse(Workflow workflow) {

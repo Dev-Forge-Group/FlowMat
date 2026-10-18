@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -43,12 +44,13 @@ public class WorkflowEditorDocumentService {
     private final WorkflowEditorElementRepository elementRepository;
     private final EntityManager entityManager;
     private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final ObjectMapper objectMapper;
     private final GraphSyncService graphSyncService;
 
     @Transactional(readOnly = true)
     public EditorDocumentResponse getDocument(String workflowId) {
-        Workflow workflow = projectAccessService.requireWorkflowReadAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowReadAccess(workflowId);
         WorkflowEditorDocument document = documentRepository.findById(workflow.getWorkflowId()).orElse(null);
         List<WorkflowEditorElement> elements = elementRepository
             .findAllByWorkflowIdAndDeletedYnOrderByElementOrderAscCreatedAtAsc(workflow.getWorkflowId(), NOT_DELETED);
@@ -56,7 +58,7 @@ public class WorkflowEditorDocumentService {
     }
 
     public EditorDocumentResponse saveDocument(String workflowId, EditorDocumentSaveRequest request) {
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(workflowId);
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
         validateDocument(request);
         // The document row does not exist on its first save. Lock the parent row
         // so concurrent creators serialize before checking expectedVersion.

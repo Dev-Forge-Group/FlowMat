@@ -21,6 +21,8 @@ public class FlowRunStepAttempt {
     private OffsetDateTime retryAt;
     /** When this attempt times out (docs/domain/flow-run-execution-policy.md EP7); null without a time limit. */
     private OffsetDateTime timeoutAt;
+    /** When a production-linked attempt passed {@code timeoutAt} and was marked late instead of failing (docs/domain/flow-run.md F12). */
+    private OffsetDateTime overdueAt;
     private String errorCode;
     private String errorMessage;
 }

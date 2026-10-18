@@ -11,13 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
-import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
-import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.RunMaterialUsageResponse;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
@@ -45,11 +42,10 @@ public class RunMaterialUsageService {
 
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
-    private final ItemRepository itemRepository;
+    private final CatalogQuery catalogQuery;
     private final UnitConverter unitConverter;
-    private final UnitMasterRepository unitMasterRepository;
     private final ProjectAccessService projectAccessService;
-    private final BomLineRepository bomLineRepository;
+    private final BomStructureQuery bomStructure;
 
     public RunMaterialUsageResponse usage(String productionRunId) {
         ProductionRun run = productionRunRepository.findByProductionRunIdAndDeletedYn(productionRunId, "N")
@@ -57,7 +53,7 @@ public class RunMaterialUsageService {
         projectAccessService.requireProjectReadAccess(run.getProjectId());
 
         // Plan and actual per item in the item's own unit.
-        Map<String, Item> items = new LinkedHashMap<>();
+        Map<String, CatalogItemView> items = new LinkedHashMap<>();
         Map<String, BigDecimal> planned = new HashMap<>();
         Map<String, BigDecimal> actual = new HashMap<>();
         Set<String> unconvertible = new HashSet<>();
@@ -72,17 +68,17 @@ public class RunMaterialUsageService {
                 if (quantity == null) {
                     continue;
                 }
-                Item item = items.computeIfAbsent(recording.getItemId(), id -> itemRepository.findById(id).orElse(null));
+                CatalogItemView item = items.computeIfAbsent(recording.getItemId(), id -> catalogQuery.findItems(List.of(id)).get(id));
                 if (item == null) {
                     items.remove(recording.getItemId());
                     continue;
                 }
                 try {
-                    BigDecimal inItemUnit = unitConverter.toItemUnit(quantity, recording.getUnit(), item.getUnitId()).quantity();
-                    (plan ? planned : actual).merge(item.getItemId(), inItemUnit, BigDecimal::add);
+                    BigDecimal inItemUnit = unitConverter.toItemUnit(quantity, recording.getUnit(), item.unitId()).quantity();
+                    (plan ? planned : actual).merge(item.itemId(), inItemUnit, BigDecimal::add);
                 } catch (BusinessException e) {
                     if (!plan) {
-                        unconvertible.add(item.getItemId());
+                        unconvertible.add(item.itemId());
                     }
                 }
             }
@@ -99,8 +95,8 @@ public class RunMaterialUsageService {
         List<RunMaterialUsageResponse.Line> lines = new ArrayList<>();
         BigDecimal varianceCost = BigDecimal.ZERO;
         boolean complete = true;
-        for (Item item : items.values()) {
-            String itemId = item.getItemId();
+        for (CatalogItemView item : items.values()) {
+            String itemId = item.itemId();
             boolean inBom = planned.containsKey(itemId);
             BigDecimal plan = inBom ? scale(planned.get(itemId)) : null;
             BigDecimal standard = !inBom ? scale(BigDecimal.ZERO)
@@ -110,22 +106,22 @@ public class RunMaterialUsageService {
             BigDecimal variance = used == null || standard == null ? null : used.subtract(standard);
             BigDecimal percent = variance == null || standard.signum() == 0 ? null
                 : variance.multiply(HUNDRED).divide(standard, 2, RoundingMode.HALF_UP);
-            BigDecimal unitCost = item.getUnitCost() != null && item.getUnitCost().signum() > 0 ? item.getUnitCost() : null;
+            BigDecimal unitCost = item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
             BigDecimal lineCost = variance == null || unitCost == null ? null : scale(variance.multiply(unitCost));
             if (lineCost != null) {
                 varianceCost = varianceCost.add(lineCost);
             } else if (variance == null || variance.signum() != 0) {
                 complete = false;
             }
-            lines.add(new RunMaterialUsageResponse.Line(itemId, item.getItemCode(), item.getItemName(), unitCodeOf(item), inBom,
+            lines.add(new RunMaterialUsageResponse.Line(itemId, item.itemCode(), item.itemName(), item.unitCode(), inBom,
                 plan, standard, used, variance, percent, unitCost, lineCost));
         }
         // Recordings come back in id order, which is random; list materials as the BOM lists them, then the rest by code.
         Map<String, Integer> bomOrder = new HashMap<>();
         if (run.getBomId() != null) {
-            List<BomLine> bomLines = bomLineRepository.findAllByBomIdOrderBySortOrderAscBomLineIdAsc(run.getBomId());
-            for (int index = 0; index < bomLines.size(); index++) {
-                bomOrder.putIfAbsent(bomLines.get(index).getChildItemId(), index);
+            List<String> bomItems = bomStructure.lineItemIds(run.getBomId());
+            for (int index = 0; index < bomItems.size(); index++) {
+                bomOrder.putIfAbsent(bomItems.get(index), index);
             }
         }
         lines.sort(Comparator
@@ -137,10 +133,5 @@ public class RunMaterialUsageService {
 
     private static BigDecimal scale(BigDecimal value) {
         return value.setScale(SCALE, RoundingMode.HALF_UP);
-    }
-
-    private String unitCodeOf(Item item) {
-        return item.getUnitId() == null ? null
-            : unitMasterRepository.findById(item.getUnitId()).map(UnitMaster::getUnitCode).orElse(null);
     }
 }

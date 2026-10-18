@@ -20,6 +20,9 @@ export interface WorkInstructionStepDto {
   standardName?: string | null
   /** current; changed: the standard's limits changed since; inactive: it can no longer be followed (W15). */
   standardStatus?: 'current' | 'changed' | 'inactive' | null
+  /** The process the step belongs to and its name (docs/architecture/adr/ADR-011-production-steps.md); null for the whole run. */
+  processId?: string | null
+  processName?: string | null
 }
 
 /** One revision of a product's work instruction (docs/domain/work-instruction.md). */
@@ -94,6 +97,8 @@ export interface WorkInstructionStepInput {
   valueMax?: number
   /** Follow this inspection standard's limits instead of typing them (W13). */
   standardId?: string
+  /** The process the step belongs to (ADR-011); left out for the whole run. */
+  processId?: string
 }
 
 const listKey = (projectId: string) => ['work-instructions', projectId]

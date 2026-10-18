@@ -1044,6 +1044,8 @@ export interface EquipmentDetailsDto {
   efficiencyPercent?: number | null
   /** Several work orders may run on it at once (docs/domain/equipment.md E12); older answers leave it out. */
   concurrentWorkOrders?: boolean
+  /** With concurrentWorkOrders, at most this many at once, 2 to 99; null for no limit (E16). */
+  concurrentLimit?: number | null
 }
 
 export interface EquipmentDto {
@@ -1131,6 +1133,9 @@ export interface ProcessConnectionDto {
   failurePolicy: 'stop' | 'skip' | 'retry'
   /** An Exclusive gateway's default connection (ADR-006); older answers leave it out. */
   defaultRoute?: boolean
+  /** A Split gateway's share (ADR-008): share (a percent), fixed (a quantity) or rest; null for other connections. */
+  splitKind?: 'share' | 'fixed' | 'rest' | null
+  splitValue?: number | null
   version: number
   versionNonce: number
 }

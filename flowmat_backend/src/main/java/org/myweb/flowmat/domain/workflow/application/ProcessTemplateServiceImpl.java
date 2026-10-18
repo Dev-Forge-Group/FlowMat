@@ -3,7 +3,6 @@ package org.myweb.flowmat.domain.workflow.application;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessTemplateApplyRequest;
 import org.myweb.flowmat.global.rbac.PermissionService;
 import org.myweb.flowmat.global.rbac.SystemPermission;
@@ -37,7 +36,7 @@ public class ProcessTemplateServiceImpl implements ProcessTemplateService {
     private final WorkflowRepository workflowRepository;
     private final ProcessRepository processRepository;
     private final IdGenerator idGenerator;
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
     private final PermissionService permissionService;
 
     @Override
@@ -130,7 +129,7 @@ public class ProcessTemplateServiceImpl implements ProcessTemplateService {
     @Transactional
     public ProcessResponse applyTemplate(String templateId, ProcessTemplateApplyRequest request) {
         ProcessTemplate template = findReadableTemplate(templateId);
-        Workflow workflow = projectAccessService.requireWorkflowWriteAccess(request.workflowId());
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(request.workflowId());
 
         Process process = new Process();
         process.setProcessId(idGenerator.generate());

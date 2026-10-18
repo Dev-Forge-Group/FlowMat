@@ -1,9 +1,13 @@
 package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,16 +25,33 @@ final class FlowRunGraph {
     private static final Set<String> POLICIES = Set.of("stop", "skip", "retry");
 
     record Route(String connectionId, String targetNodeId) {}
+    /** What a connection's loss took on the way (ADR-009 decision 3): {@code sent} = {@code arrived} + {@code lost}. */
+    record Loss(BigDecimal sent, BigDecimal rate, BigDecimal lost, BigDecimal arrived) {}
+
     /**
      * What a finished step's output does on one outgoing connection. {@code reason} is set for an Exclusive gateway's
      * connections (ADR-006): {@code first_match}, {@code default}, {@code condition_false}, {@code exclusive_not_chosen} or
-     * {@code default_not_needed}. It is null for an ordinary connection, which is filtered only by its condition.
+     * {@code default_not_needed}; for a Split's (ADR-008): {@code split} or {@code split_empty}; and {@code loss_empty} when a
+     * connection's loss leaves nothing (ADR-009). It is null for an ordinary connection, which is filtered only by its
+     * condition. {@code quantity} is what the next step receives when that is not the output's: a Split's share, or what is
+     * left after the connection's {@code loss}.
      */
-    record Decision(String connectionId, String targetNodeId, boolean willRoute, String reason) {
+    record Decision(String connectionId, String targetNodeId, boolean willRoute, String reason, BigDecimal quantity,
+        Loss loss) {
+        Decision(String connectionId, String targetNodeId, boolean willRoute, String reason, BigDecimal quantity) {
+            this(connectionId, targetNodeId, willRoute, reason, quantity, null);
+        }
+
+        Decision(String connectionId, String targetNodeId, boolean willRoute, String reason) {
+            this(connectionId, targetNodeId, willRoute, reason, null, null);
+        }
+
         Decision(String connectionId, String targetNodeId, boolean willRoute) {
-            this(connectionId, targetNodeId, willRoute, null);
+            this(connectionId, targetNodeId, willRoute, null, null, null);
         }
     }
+
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     /**
      * A node's execution policy from its published revision; nodes without one run as before: no time limit, 3 retries
@@ -55,7 +76,8 @@ final class FlowRunGraph {
     /** {@code priority} and {@code order} (as drawn) rank an Exclusive gateway's connections; {@code defaultRoute} is its fallback. */
     private record Edge(String id, String target, String fromIoId, String toIoId,
         ConditionExpression condition, BigDecimal capacity, String unit, String failurePolicy, int priority,
-        boolean defaultRoute, int order) {}
+        boolean defaultRoute, int order, String splitKind, BigDecimal splitValue, BigDecimal lossRate,
+        BigDecimal delaySeconds) {}
 
     private final List<String> roots;
     private final Map<String, List<Edge>> outgoing;
@@ -64,10 +86,14 @@ final class FlowRunGraph {
     private final Map<String, PortSchema> portSchemas;
     private final Map<String, NodePolicy> policies;
     private final Set<String> exclusiveNodes;
+    private final Set<String> joinNodes;
+    private final Set<String> splitNodes;
+    /** The connections into each node, as drawn. */
+    private final Map<String, List<String>> incoming;
 
     private FlowRunGraph(List<String> roots, Map<String, List<Edge>> outgoing, Map<String, Edge> byId,
         Map<String, ConditionExpression> portRules, Map<String, PortSchema> portSchemas, Map<String, NodePolicy> policies,
-        Set<String> exclusiveNodes) {
+        Set<String> exclusiveNodes, Set<String> joinNodes, Map<String, List<String>> incoming, Set<String> splitNodes) {
         this.roots = List.copyOf(roots);
         this.outgoing = outgoing;
         this.byId = byId;
@@ -75,6 +101,9 @@ final class FlowRunGraph {
         this.portSchemas = portSchemas;
         this.policies = policies;
         this.exclusiveNodes = Set.copyOf(exclusiveNodes);
+        this.joinNodes = Set.copyOf(joinNodes);
+        this.splitNodes = Set.copyOf(splitNodes);
+        this.incoming = incoming;
     }
 
     static FlowRunGraph from(JsonNode snapshot) {
@@ -85,6 +114,8 @@ final class FlowRunGraph {
         }
         Map<String, Integer> indegree = new LinkedHashMap<>();
         Set<String> exclusiveNodes = new HashSet<>();
+        Set<String> joinNodes = new HashSet<>();
+        Set<String> splitNodes = new HashSet<>();
         for (JsonNode process : processes) {
             String id = requiredText(process, "processId");
             if (indegree.putIfAbsent(id, 0) != null) {
@@ -92,6 +123,8 @@ final class FlowRunGraph {
             }
             // Revisions published before ADR-006 have no gateways and route as before.
             if ("exclusive".equalsIgnoreCase(textOrNull(process.path("nodeType")))) exclusiveNodes.add(id);
+            if ("join".equalsIgnoreCase(textOrNull(process.path("nodeType")))) joinNodes.add(id);
+            if ("split".equalsIgnoreCase(textOrNull(process.path("nodeType")))) splitNodes.add(id);
         }
         Map<String, NodePolicy> policies = new HashMap<>();
         JsonNode nodePolicies = snapshot.path("nodePolicies");
@@ -139,6 +172,12 @@ final class FlowRunGraph {
         }
         Map<String, List<Edge>> outgoing = new HashMap<>();
         Map<String, Edge> byId = new HashMap<>();
+        Map<String, List<String>> incoming = new HashMap<>();
+        // Revisions published before ADR-009 (schemaVersion 1) carry loss rates that do not apply (decision 8), and those
+        // before ADR-010 (schemaVersion 2) delays (decision 7).
+        int schemaVersion = snapshot.path("schemaVersion").asInt(1);
+        boolean lossApplies = schemaVersion >= 2;
+        boolean delayApplies = schemaVersion >= 3;
         for (JsonNode connection : connections) {
             String id = requiredText(connection, "connectionId");
             String source = requiredText(connection, "fromProcessId");
@@ -171,13 +210,47 @@ final class FlowRunGraph {
             JsonNode priorityNode = connection.path("priority");
             int priority = priorityNode.isIntegralNumber() && priorityNode.canConvertToInt() ? priorityNode.intValue() : 0;
             boolean defaultRoute = connection.path("defaultRoute").asBoolean(false);
+            String splitKind = textOrNull(connection.path("splitKind"));
+            JsonNode splitValueNode = connection.path("splitValue");
+            BigDecimal splitValue = splitValueNode.isNumber() ? splitValueNode.decimalValue() : null;
+            JsonNode lossNode = connection.path("lossRate");
+            BigDecimal lossRate = null;
+            if (lossApplies && lossNode.isNumber() && lossNode.decimalValue().signum() != 0) {
+                lossRate = lossNode.decimalValue();
+                // Publishing refuses it (LOSS_RATE_RANGE).
+                if (lossRate.signum() < 0 || lossRate.compareTo(BigDecimal.ONE) >= 0) {
+                    throw conflict("Published revision has an invalid lossRate: " + id);
+                }
+            }
+            JsonNode delayNode = connection.path("delayTimeSec");
+            BigDecimal delaySeconds = null;
+            if (delayApplies && delayNode.isNumber() && delayNode.decimalValue().signum() != 0) {
+                delaySeconds = delayNode.decimalValue();
+                // Publishing refuses it (DELAY_RANGE).
+                if (delaySeconds.signum() < 0) {
+                    throw conflict("Published revision has an invalid delayTimeSec: " + id);
+                }
+            }
             Edge edge = new Edge(id, target, fromIoId, toIoId, condition, capacity, unit, policy, priority, defaultRoute,
-                byId.size());
+                byId.size(), splitKind, splitValue, lossRate, delaySeconds);
             if (byId.putIfAbsent(id, edge) != null) {
                 throw conflict("Published revision has duplicate connection IDs.");
             }
             outgoing.computeIfAbsent(source, ignored -> new ArrayList<>()).add(edge);
+            incoming.computeIfAbsent(target, ignored -> new ArrayList<>()).add(id);
             indegree.put(target, indegree.get(target) + 1);
+        }
+        for (String join : joinNodes) {
+            // Publishing refuses it (JOIN_WITHOUT_INPUT); a Join with nothing to wait for would start as a root.
+            if (indegree.get(join) == 0) {
+                throw conflict("Published revision Join " + join + " has no incoming connection.");
+            }
+        }
+        for (String split : splitNodes) {
+            // Publishing refuses it (SPLIT_WITHOUT_INPUT); a Split with nothing to divide would start as a root.
+            if (indegree.get(split) == 0) {
+                throw conflict("Published revision Split " + split + " has no incoming connection.");
+            }
         }
         List<String> roots = indegree.entrySet().stream()
             .filter(entry -> entry.getValue() == 0).map(Map.Entry::getKey).toList();
@@ -195,7 +268,8 @@ final class FlowRunGraph {
         if (visited != indegree.size()) {
             throw conflict("Graph revisions with cycles cannot execute.");
         }
-        return new FlowRunGraph(roots, outgoing, byId, portRules, portSchemas, policies, exclusiveNodes);
+        return new FlowRunGraph(roots, outgoing, byId, portRules, portSchemas, policies, exclusiveNodes, joinNodes, incoming,
+            splitNodes);
     }
 
     List<String> roots() {
@@ -205,6 +279,65 @@ final class FlowRunGraph {
     /** Whether the node is an Exclusive gateway, which the server passes at once (ADR-006 decision 4). */
     boolean exclusive(String nodeId) {
         return exclusiveNodes.contains(nodeId);
+    }
+
+    /** Whether the node is a Split gateway, which divides what arrives and the server passes at once (ADR-008). */
+    boolean split(String nodeId) {
+        return splitNodes.contains(nodeId);
+    }
+
+    /** Whether the node is a gateway the server passes at once: an Exclusive, a Join or a Split (ADR-006 to ADR-008). */
+    boolean gateway(String nodeId) {
+        return exclusiveNodes.contains(nodeId) || joinNodes.contains(nodeId) || splitNodes.contains(nodeId);
+    }
+
+    /** The connection's delay (docs/architecture/adr/ADR-010-connection-delay.md), null without one or before ADR-010. */
+    Duration delay(String connectionId) {
+        BigDecimal seconds = delaySeconds(connectionId);
+        return seconds.signum() == 0 ? null : Duration.ofNanos(seconds.movePointRight(9).longValue());
+    }
+
+    /** The connection's delay in seconds as published, 0 without one. */
+    BigDecimal delaySeconds(String connectionId) {
+        Edge edge = byId.get(connectionId);
+        return edge == null || edge.delaySeconds() == null ? BigDecimal.ZERO : edge.delaySeconds();
+    }
+
+    /** Whether what goes along the connection is not the step's output: a Split's share or a loss (ADR-008, ADR-009). */
+    boolean quantityChanges(String nodeId, String connectionId) {
+        Edge edge = byId.get(connectionId);
+        return splitNodes.contains(nodeId) || edge != null && edge.lossRate() != null;
+    }
+
+    /** The output with its quantity replaced: one share of a Split (ADR-008 decision 7), or what is left after a loss. */
+    static JsonNode withQuantity(JsonNode output, BigDecimal quantity) {
+        ObjectNode copy = ((ObjectNode) output).deepCopy();
+        copy.put("quantity", quantity);
+        return copy;
+    }
+
+    /** Whether the node is a Join gateway, which waits for its branches and the server passes on once (ADR-007). */
+    boolean join(String nodeId) {
+        return joinNodes.contains(nodeId);
+    }
+
+    /**
+     * How many connections into the Join a step at one of {@code liveNodes} can still route along, now or further on
+     * (ADR-007 decision 2). The graph has no cycles, so the walk ends; 0 means nothing more can arrive.
+     */
+    int stillComing(String joinNodeId, Collection<String> liveNodes) {
+        Set<String> reachable = new HashSet<>();
+        Set<String> seen = new HashSet<>();
+        ArrayDeque<String> queue = new ArrayDeque<>(liveNodes);
+        while (!queue.isEmpty()) {
+            String node = queue.removeFirst();
+            if (!seen.add(node)) continue;
+            for (Edge edge : outgoing.getOrDefault(node, List.of())) {
+                reachable.add(edge.id());
+                queue.addLast(edge.target());
+            }
+        }
+        return (int) incoming.getOrDefault(joinNodeId, List.of()).stream().filter(reachable::contains).count();
     }
 
     NodePolicy policy(String nodeId) {
@@ -231,14 +364,16 @@ final class FlowRunGraph {
         if (exclusiveNodes.contains(nodeId)) {
             return exclusivePreview(nodeId, output, values);
         }
+        if (splitNodes.contains(nodeId)) {
+            return splitPreview(nodeId, output, values);
+        }
         List<Decision> decisions = new ArrayList<>();
         for (Edge edge : outgoing.getOrDefault(nodeId, List.of())) {
             if (edge.condition() != null && !edge.condition().evaluate(values)) {
                 decisions.add(new Decision(edge.id(), edge.target(), false));
                 continue;
             }
-            requireTransfer(edge, output, values);
-            decisions.add(new Decision(edge.id(), edge.target(), true));
+            decisions.add(transfer(edge, output, values, null, null));
         }
         return decisions;
     }
@@ -264,13 +399,11 @@ final class FlowRunGraph {
             chosen = edges.stream().filter(Edge::defaultRoute).findFirst().orElse(null);
             reason = "default";
         }
-        if (chosen != null) {
-            requireTransfer(chosen, output, values);
-        }
+        Decision routed = chosen == null ? null : transfer(chosen, output, values, reason, null);
         List<Decision> decisions = new ArrayList<>();
         for (Edge edge : edges) {
             if (edge == chosen) {
-                decisions.add(new Decision(edge.id(), edge.target(), true, reason));
+                decisions.add(routed);
             } else if (edge.defaultRoute()) {
                 decisions.add(new Decision(edge.id(), edge.target(), false, "default_not_needed"));
             } else if (edge.condition() != null && !edge.condition().evaluate(values)) {
@@ -282,8 +415,107 @@ final class FlowRunGraph {
         return decisions;
     }
 
-    /** What a connection's transfer must pass: its capacity and unit, and both ports' schema and rule (GR-04). */
-    private void requireTransfer(Edge edge, JsonNode output, Map<String, Object> values) {
+    /**
+     * A Split gateway's shares (ADR-008 decisions 2-7), in the order drawn: fixed quantities, percents of the whole rounded to
+     * 4 decimals, and the rest; the rounding difference goes to the rest, else to the last percent drawn, so the shares add up
+     * to the whole. A share of 0 does not go on. Each share passes its connection's transfer rules with its own quantity.
+     */
+    private List<Decision> splitPreview(String nodeId, JsonNode output, Map<String, Object> values) {
+        if (!(values.get("quantity") instanceof BigDecimal total)) {
+            throw conflict("Split " + nodeId + " needs outputSnapshot.quantity to divide.");
+        }
+        if (total.signum() < 0) {
+            throw conflict("Split " + nodeId + " cannot divide a negative quantity.");
+        }
+        List<Edge> edges = outgoing.getOrDefault(nodeId, List.of());
+        if (edges.isEmpty()) {
+            // A Split that leads nowhere (SPLIT_SINGLE_ROUTE warns) ends here like any last step.
+            return List.of();
+        }
+        Map<String, BigDecimal> amounts = new HashMap<>();
+        BigDecimal assigned = BigDecimal.ZERO;
+        Edge rest = null;
+        Edge lastShare = null;
+        for (Edge edge : edges) {
+            if ("rest".equals(edge.splitKind())) {
+                rest = edge;
+                continue;
+            }
+            BigDecimal amount;
+            if ("share".equals(edge.splitKind()) && edge.splitValue() != null) {
+                amount = total.multiply(edge.splitValue()).divide(HUNDRED, 4, RoundingMode.HALF_UP);
+                lastShare = edge;
+            } else if ("fixed".equals(edge.splitKind()) && edge.splitValue() != null) {
+                amount = edge.splitValue();
+            } else {
+                throw conflict("Published revision Split " + nodeId + " connection " + edge.id() + " has no share.");
+            }
+            amounts.put(edge.id(), amount);
+            assigned = assigned.add(amount);
+        }
+        BigDecimal left = total.subtract(assigned);
+        if (rest != null) {
+            amounts.put(rest.id(), left);
+        } else if (lastShare != null) {
+            amounts.merge(lastShare.id(), left, BigDecimal::add);
+        } else if (left.signum() != 0) {
+            throw conflict("Split " + nodeId + " leaves " + plain(left) + " undivided.");
+        }
+        if (amounts.values().stream().anyMatch(amount -> amount.signum() < 0)) {
+            throw conflict("Split " + nodeId + " gives out " + plain(assigned) + " but has " + plain(total) + ".");
+        }
+        List<Decision> decisions = new ArrayList<>();
+        for (Edge edge : edges) {
+            BigDecimal amount = amounts.get(edge.id());
+            if (amount.signum() == 0) {
+                decisions.add(new Decision(edge.id(), edge.target(), false, "split_empty", amount));
+                continue;
+            }
+            JsonNode share = withQuantity(output, amount);
+            decisions.add(transfer(edge, share, values(share), "split", amount));
+        }
+        return decisions;
+    }
+
+    private static String plain(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * A connection's transfer (GR-03, GR-07, GR-08) and its loss (docs/architecture/adr/ADR-009-connection-loss-rate.md
+     * decisions 3-7): the capacity, the unit and the output port see what is sent, the input port what arrives. When a
+     * positive quantity is all lost to rounding, nothing goes on.
+     */
+    private Decision transfer(Edge edge, JsonNode sent, Map<String, Object> sentValues, String reason, BigDecimal share) {
+        Loss loss = loss(edge, sentValues);
+        if (loss != null && loss.arrived().signum() == 0) {
+            requireTransfer(edge, sent, sentValues, null, null);
+            return new Decision(edge.id(), edge.target(), false, "loss_empty", loss.arrived(), loss);
+        }
+        JsonNode arriving = loss == null ? sent : withQuantity(sent, loss.arrived());
+        requireTransfer(edge, sent, sentValues, arriving, loss == null ? sentValues : values(arriving));
+        return new Decision(edge.id(), edge.target(), true, reason, loss == null ? share : loss.arrived(), loss);
+    }
+
+    /** A connection's loss on a positive quantity, what arrives rounded to 4 decimals HALF_UP (ADR-009 decision 3). */
+    private static Loss loss(Edge edge, Map<String, Object> values) {
+        if (edge.lossRate() == null || !(values.get("quantity") instanceof BigDecimal sent) || sent.signum() <= 0) {
+            return null;
+        }
+        BigDecimal arrived = sent.multiply(BigDecimal.ONE.subtract(edge.lossRate())).setScale(4, RoundingMode.HALF_UP);
+        // A quantity with more than 4 decimals can round up past itself; no more arrives than was sent.
+        if (arrived.compareTo(sent) > 0) {
+            arrived = sent;
+        }
+        return new Loss(sent, edge.lossRate(), sent.subtract(arrived), arrived);
+    }
+
+    /**
+     * What a connection's transfer must pass: its capacity and unit, and both ports' schema and rule (GR-04). The input
+     * port sees what arrives; nothing arriving leaves it unchecked.
+     */
+    private void requireTransfer(Edge edge, JsonNode output, Map<String, Object> values, JsonNode arriving,
+        Map<String, Object> arrivingValues) {
         if (edge.capacity() != null) {
             Object quantity = values.get("quantity");
             if (!(quantity instanceof BigDecimal amount)) {
@@ -298,9 +530,9 @@ final class FlowRunGraph {
             throw conflict("Connection " + edge.id() + " unit does not match outputSnapshot.unit.");
         }
         requirePortSchema(edge.fromIoId(), output);
-        requirePortSchema(edge.toIoId(), output);
+        if (arriving != null) requirePortSchema(edge.toIoId(), arriving);
         requirePortRule(edge.fromIoId(), values);
-        requirePortRule(edge.toIoId(), values);
+        if (arriving != null) requirePortRule(edge.toIoId(), arrivingValues);
     }
 
     private void requirePortRule(String portId, Map<String, Object> values) {

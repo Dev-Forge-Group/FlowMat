@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useCurrentUserQuery } from '../../../entities/auth/api/useCurrentUserQuery'
+import { useProjectTimeZone } from '../../../entities/project/api/useProjectTimeZone'
 import {
-  useAddWorkerDayOffMutation, useCopyWorkerDaysMutation, useRemoveWorkerDayMutation, useRemoveWorkerDayOffMutation, useSetWorkerDayMutation,
+  fetchWorkerSchedule, useAddWorkerDayOffMutation, useCopyWorkerDaysMutation, useCopyWorkerShiftsMutation, useRemoveWorkerDayMutation,
+  useRemoveWorkerDayOffMutation, useRemoveWorkerScheduleMutation, useSetWorkerDayMutation,
   useSetWorkerShiftsMutation, useWorkerCalendarsQuery,
-  type WorkerCalendarDto, type WorkerShiftInput,
+  type WorkerCalendarDto, type WorkerScheduleLineDto, type WorkerShiftInput,
 } from '../../../entities/workforce/api/useWorkerCalendars'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import {
-  DAY_NAMES, ROTA_WEEKS, dayOffText, rotaProblem, rotaShiftText, rotaText, weeklyText, workerDayText,
+  DAY_NAMES, ROTA_WEEKS, dayOffText, rotaProblem, rotaShiftText, rotaText, scheduleText, scheduleUpcoming, startsOnProblem, weeklyText,
+  workerDayText,
 } from '../model/workerCalendarModel'
 import { dateInputValue, weekStart } from '../../inventory/model/equipmentLoadModel'
 import { EMPTY_DAY_FORM, copyableDays, dayPayload, nextDayShift, type DayForm } from '../../inventory/model/equipmentScheduleModel'
@@ -20,6 +23,15 @@ import { WorkerLoadBoard } from './WorkerLoadBoard'
 export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
   const me = useCurrentUserQuery().data?.userId
   const query = useWorkerCalendarsQuery(projectId)
+  const timeZone = useProjectTimeZone(projectId).query.data?.timeZone
+  let today = dateInputValue(new Date())
+  if (timeZone) {
+    try {
+      today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    } catch {
+      // Keep the browser date if this browser cannot read the project's zone.
+    }
+  }
   const workers = Array.isArray(query.data) ? query.data : []
   const iAmOwner = workers.some((worker) => worker.owner && worker.userId === me)
   const [loadOpen, setLoadOpen] = useState(false)
@@ -35,7 +47,7 @@ export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
             {worker.userId}{worker.owner ? ' (owner)' : ''} · {weeklyText(worker)}
             {worker.daysOff.length > 0 && ` · ${worker.daysOff.length} day${worker.daysOff.length === 1 ? '' : 's'} off listed`}
           </summary>
-          <WorkerCalendarEditor projectId={projectId} worker={worker} editable={iAmOwner || worker.userId === me}
+          <WorkerCalendarEditor projectId={projectId} worker={worker} today={today} editable={iAmOwner || worker.userId === me}
             copyTargets={iAmOwner ? workers.filter((one) => one.userId !== worker.userId).map((one) => one.userId) : []} />
         </details>
       ))}
@@ -50,8 +62,8 @@ export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
 type ShiftRow = { shiftStart: string; shiftEnd: string; workDays: number[]; rotaWeek: number }
 
 /** {@code copyTargets}: the other workers this one's day changes may be copied to (the owner's view only, WC42). */
-function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
-  projectId: string; worker: WorkerCalendarDto; editable: boolean; copyTargets: string[]
+function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets }: {
+  projectId: string; worker: WorkerCalendarDto; today: string; editable: boolean; copyTargets: string[]
 }) {
   const setShifts = useSetWorkerShiftsMutation(projectId)
   const addDayOff = useAddWorkerDayOffMutation(projectId)
@@ -65,6 +77,9 @@ function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
   const [rotaIssue, setRotaIssue] = useState<string | null>(null)
   const [dayOff, setDayOff] = useState({ firstDay: '', lastDay: '', reason: '' })
   const { firstDay, lastDay, reason } = dayOff
+  // Empty is today; a later date saves the shifts as the version from then (ADR-013).
+  const [startsOn, setStartsOn] = useState('')
+  const savedFrom = setShifts.variables?.effectiveFrom
 
   function update(index: number, patch: Partial<ShiftRow>) {
     setRows((current) => current.map((row, one) => (one === index ? { ...row, ...patch } : row)))
@@ -76,14 +91,26 @@ function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
   }
 
   function save() {
-    const problem = rotaProblem(rotaWeeks, rotaStart, rows.map((row) => row.rotaWeek))
+    const problem = rotaProblem(rotaWeeks, rotaStart, rows.map((row) => row.rotaWeek)) ?? startsOnProblem(startsOn, today)
     setRotaIssue(problem)
     if (problem) return
     // Without a rota every shift is in its one week, so the weeks are not sent (WC44).
     const inRota = rotaWeeks > 1
     const shifts: WorkerShiftInput[] = rows.map((row) => ({ shiftStart: row.shiftStart, shiftEnd: row.shiftEnd, workDays: row.workDays,
       ...(inRota ? { rotaWeek: row.rotaWeek } : {}) }))
-    setShifts.mutate({ userId: worker.userId, shifts, rota: inRota ? { weeks: rotaWeeks, startsOn: rotaStart } : null })
+    setShifts.mutate({ userId: worker.userId, shifts, rota: inRota ? { weeks: rotaWeeks, startsOn: rotaStart } : null,
+      ...(startsOn ? { effectiveFrom: startsOn } : {}) })
+  }
+
+  /** Loads a version that has not started into the form, to change it (ADR-013). */
+  function edit(line: WorkerScheduleLineDto) {
+    setRotaIssue(null)
+    fetchWorkerSchedule(projectId, worker.userId, line.scheduleId).then((version) => {
+      setRows(version.shifts.map(({ shiftStart, shiftEnd, workDays, rotaWeek }) => ({ shiftStart, shiftEnd, workDays, rotaWeek: rotaWeek ?? 1 })))
+      setRotaWeeks(version.rota?.weeks ?? 1)
+      setRotaStart(version.rota?.startsOn ?? '')
+      setStartsOn(line.effectiveFrom ?? '')
+    }, (error: unknown) => setRotaIssue(errorMessage(error, 'Failed to load the version.')))
   }
 
   function chooseWeeks(weeks: number) {
@@ -106,6 +133,7 @@ function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
           ? <p>No shifts set.</p>
           : <ul>{worker.shifts.map((shift) => <li key={shift.shiftId}>{rotaShiftText(shift, worker.rota)}</li>)}</ul>}
         {worker.rota && <p>{rotaText(worker.rota)}</p>}
+        <ScheduleVersions projectId={projectId} worker={worker} today={today} />
         {worker.daysOff.length > 0 && <ul>{worker.daysOff.map((off) => <li key={off.dayOffId}>Off {dayOffText(off)}</li>)}</ul>}
         {(worker.days ?? []).length > 0 && <ul>{(worker.days ?? []).map((day) => <li key={day.date}>{workerDayText(day)}</li>)}</ul>}
         <p className="inspector-hint">Only the project owner or {worker.userId} can change this calendar.</p>
@@ -148,11 +176,17 @@ function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
             { shiftStart: '09:00', shiftEnd: '17:00', workDays: [1, 2, 3, 4, 5], rotaWeek: current[current.length - 1]?.rotaWeek ?? 1 }])}>
           Add shift
         </button>
+        <label>Starts on <input aria-label="Shifts start on" type="date" min={today} value={startsOn}
+          onChange={(event) => setStartsOn(event.target.value)} /></label>
         <button type="button" onClick={save} disabled={setShifts.isPending}>{setShifts.isPending ? 'Saving...' : 'Save shifts'}</button>
       </div>
+      <span className="inspector-hint">Leave Starts on empty for today. Earlier dates keep the shifts they had.</span>
       {rotaIssue && <p role="alert">{rotaIssue}</p>}
       {setShifts.isError && <p role="alert">{errorMessage(setShifts.error, 'Failed to save the shifts.')}</p>}
-      {setShifts.isSuccess && <p role="status">Shifts saved: {weeklyText(setShifts.data)}.</p>}
+      {setShifts.isSuccess && <p role="status">{savedFrom && savedFrom > today
+        ? `Shifts saved from ${savedFrom}; until then the current shifts stay.`
+        : `Shifts saved: ${weeklyText(setShifts.data)}.`}</p>}
+      <ScheduleVersions projectId={projectId} worker={worker} today={today} onEdit={edit} />
 
       <div>
         <strong>Days off</strong>
@@ -176,7 +210,106 @@ function WorkerCalendarEditor({ projectId, worker, editable, copyTargets }: {
         {addDayOff.isError && <p role="alert">{errorMessage(addDayOff.error, 'Failed to add the day off.')}</p>}
         {removeDayOff.isError && <p role="alert">{errorMessage(removeDayOff.error, 'Failed to remove the day off.')}</p>}
       </div>
+      {worker.calendarSet && copyTargets.length > 0 && <WorkerShiftCopy projectId={projectId} worker={worker} today={today} targets={copyTargets} />}
       <WorkerDayChanges projectId={projectId} worker={worker} copyTargets={copyTargets} />
+    </div>
+  )
+}
+
+/**
+ * The worker's saved weekly shifts and rota given to other workers (docs/domain/worker-calendar.md WC51-WC54): with a rota
+ * each chosen worker can be some weeks further on, so teams take turns.
+ */
+function WorkerShiftCopy({ projectId, worker, today, targets }: { projectId: string; worker: WorkerCalendarDto; today: string; targets: string[] }) {
+  const copy = useCopyWorkerShiftsMutation(projectId)
+  const weeks = worker.rota?.weeks ?? 1
+  // Each chosen worker and the rota week they work while this worker works week 1.
+  const [chosen, setChosen] = useState<Record<string, number>>({})
+  const [copied, setCopied] = useState<string | null>(null)
+  // Empty is today; a later date gives them the shifts from then (ADR-013).
+  const [copyFrom, setCopyFrom] = useState('')
+  const picked = Object.keys(chosen)
+
+  function toggle(userId: string, on: boolean) {
+    setChosen((current) => {
+      const next = { ...current }
+      if (on) next[userId] = 1
+      else delete next[userId]
+      return next
+    })
+  }
+
+  function send() {
+    const names = picked
+    setCopied(null)
+    const from = copyFrom
+    copy.mutate({ userId: worker.userId, targets: names.map((userId) => ({ userId, offsetWeeks: chosen[userId] - 1 })),
+      ...(from ? { effectiveFrom: from } : {}) }, {
+      onSuccess: () => {
+        setCopied(`Copied ${worker.userId}'s shifts to ${names.join(', ')}${from ? ` from ${from}` : ''}.`)
+        setChosen({})
+      },
+    })
+  }
+
+  return (
+    <div role="group" aria-label="Copy shifts to other workers" style={{ display: 'grid', gap: 4 }}>
+      <strong>Copy shifts to other workers</strong>
+      <span className="inspector-hint">
+        The saved weekly shifts{weeks > 1 ? ' and rota' : ''}. Their own weekly shifts are replaced; their day changes and days
+        off stay.
+      </span>
+      {targets.map((userId) => (
+        <div key={userId} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label>
+            <input type="checkbox" aria-label={`Copy to ${userId}`} checked={userId in chosen}
+              onChange={(event) => toggle(userId, event.target.checked)} /> {userId}
+          </label>
+          {weeks > 1 && userId in chosen && <label>works week <select aria-label={`${userId} rota week`} value={chosen[userId]}
+            onChange={(event) => setChosen((current) => ({ ...current, [userId]: Number(event.target.value) }))}>
+            {ROTA_WEEKS.slice(0, weeks).map((week) => <option key={week} value={week}>{week}</option>)}
+          </select> when {worker.userId} works week 1</label>}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <label>Starting <input aria-label="Copies start on" type="date" min={today} value={copyFrom}
+          onChange={(event) => setCopyFrom(event.target.value)} /></label>
+        <button type="button" onClick={send} disabled={picked.length === 0 || copy.isPending}>
+          {copy.isPending ? 'Copying...' : `Copy to ${picked.length} worker${picked.length === 1 ? '' : 's'}`}
+        </button>
+      </div>
+      {copied && <p role="status">{copied}</p>}
+      {copy.isError && <p role="alert">{errorMessage(copy.error, 'Failed to copy the shifts.')}</p>}
+    </div>
+  )
+}
+
+/**
+ * The versions of the worker's weekly shifts (docs/architecture/adr/ADR-013-rota-history.md): shown once there is more than one
+ * or one still ahead. One that has not started can be loaded into the form ({@code onEdit}) or deleted.
+ */
+function ScheduleVersions({ projectId, worker, today, onEdit }: {
+  projectId: string; worker: WorkerCalendarDto; today: string; onEdit?: (line: WorkerScheduleLineDto) => void
+}) {
+  const remove = useRemoveWorkerScheduleMutation(projectId)
+  const lines = Array.isArray(worker.schedules) ? worker.schedules : []
+  if (lines.length < 2 && !lines.some((line) => scheduleUpcoming(line, today))) return null
+  return (
+    <div role="group" aria-label="Shift versions">
+      <strong>Shift versions</strong>
+      <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+        {lines.map((line) => (
+          <li key={line.scheduleId}>
+            {scheduleText(line, today)}
+            {onEdit && scheduleUpcoming(line, today) && <>
+              {' '}<button type="button" aria-label={`Edit version from ${line.effectiveFrom}`} onClick={() => onEdit(line)}>Edit</button>
+              {' '}<button type="button" aria-label={`Delete version from ${line.effectiveFrom}`} disabled={remove.isPending}
+                onClick={() => remove.mutate({ userId: worker.userId, scheduleId: line.scheduleId })}>Delete</button>
+            </>}
+          </li>
+        ))}
+      </ul>
+      {remove.isError && <p role="alert">{errorMessage(remove.error, 'Failed to delete the version.')}</p>}
     </div>
   )
 }

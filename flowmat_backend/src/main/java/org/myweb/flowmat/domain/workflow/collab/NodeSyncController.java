@@ -2,7 +2,7 @@ package org.myweb.flowmat.domain.workflow.collab;
 
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.dto.NodeMoveMessage;
 import org.myweb.flowmat.global.security.AuthUser;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Controller;
 @RequiredArgsConstructor
 public class NodeSyncController {
 
-    private final ProjectAccessService projectAccessService;
+    private final WorkflowAccessService workflowAccess;
 
     @MessageMapping("/workflow/{workflowId}/node-move")
     @SendTo("/topic/workflow/{workflowId}/node-move")
@@ -30,7 +30,7 @@ public class NodeSyncController {
         Principal principal
     ) {
         String userId = resolveUserId(principal);
-        projectAccessService.requireWorkflowWriteAccess(workflowId, userId);
+        workflowAccess.requireWorkflowWriteAccess(workflowId, userId);
         if (message == null || message.processId() == null || message.processId().isBlank()
             || message.processId().length() > 128
             || !Double.isFinite(message.x()) || !Double.isFinite(message.y())

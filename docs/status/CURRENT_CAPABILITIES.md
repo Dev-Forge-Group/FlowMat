@@ -8,6 +8,8 @@
 
 상태는 설계 범위의 구현 여부를 뜻한다. 운영 환경 검증 여부는 별도로 확인한다.
 
+개발 DB(세션 DB 5434) 적용 현황: V83까지 2026-10-16, V87까지 2026-10-17에 복제본 리허설 뒤 적용했다. 아래 행의 "V52–V87 … 개발 DB 미적용"은 적용 전에 쓴 기록이다. V88–V94는 아직이다.
+
 ## 검증 기록
 
 아래는 각 시점의 결과다. 서로 다른 시점의 건수를 합산하지 않는다. 기능표의 최초 확인 기준은 2026-10-03의 `45f5df0`(V1–V41)과 당시 커밋 전 작업 트리(V42–V51)다.
@@ -87,19 +89,19 @@
 |---|---|---|
 | FM-RUN-001 Workflow Revision | 완료 | 에디터에서 바로 발행 없음(폐기 화면은 2026-10-03) |
 | FM-RUN-002 Flow Run 일반화 | 완료 | 실행 종류 4가지, 생산 실행과 1:1 연결 |
-| FM-RUN-003 Node Step | 완료 | 수동·그래프 라우팅, 출처 단계 |
+| FM-RUN-003 Node Step | 완료 | 수동·그래프 라우팅, 출처 단계, 생산 실행의 공정 단계(2el, ADR-011), 생산 단계 늦음 표시(2en, V92) |
 | FM-RUN-004 Attempt | 완료 | |
 | FM-RUN-005 실행 정책 | 대부분(로컬) | 연결 실패 정책 + 노드 정책(시간 제한·재시도 횟수와 간격·동시 실행 제한, 2cp/V67, [설계](../domain/flow-run-execution-policy.md)), 노드 인스펙터 편집 화면(2di, EP13). 대기열·자동 실행기 없음. [ADR-004](../architecture/adr/ADR-004-flow-run-execution-policy.md) Accepted(구현 전) |
 | FM-RUN-006 Event Ledger | 완료 | 보정·취소 이벤트 없음 |
 | FM-FLOW-001 Port Contract | 완료 | `formula`는 저장만 |
-| FM-FLOW-002 Connection Contract | 대부분 | 지연·손실률 미적용, 우선순위는 Exclusive 게이트웨이의 연결에만 적용(2eb, GR-14), 합류·분할 없음 |
-| FM-PLAN-001 Operation Type | 1단계 | [ADR-006](../architecture/adr/ADR-006-operation-types.md) **Accepted**(2026-10-17). Exclusive 게이트웨이 구현(2eb, V85, 로컬 검증, [연결 계약](../domain/process-port-connection-contract.md) GR-13–GR-20): priority 순 첫 연결, 기본 연결, 없으면 `NO_ROUTE` 실패. Join 미승인, Subflow·수량 분할 없음 |
-| FM-PLAN-002 Capacity Resource | 일부 | 설비 시간당 산출·부하표·작업지시 계획 기간 제안, 작업자 부하표(교대 대 인력으로 잡힌 작업지시 시간·같은 때 겹침, 2dw, 로컬 검증만, [작업자 달력](../domain/worker-calendar.md) WC17–WC23), 인력의 교대·다른 작업지시를 따르는 계획 제안(2dx, WC24–WC28), 인력마다 몫(%, 2dz, V83, WC36–WC40), 설비 효율(시간당 산출 × 효율, 2ea, V84, [설비](../domain/equipment.md) E8–E11), 동시 작업 설비(겹치는 작업지시를 비켜 가지 않음·과부하 아님, 2ec, V86, E12–E15) |
-| FM-PLAN-003 Calendar | 일부 | 설비 교대(설비당 여러 개·요일별, V43)·날짜별 교대(V45, 기간·설비 간 복사)·정지 기간·프로젝트 휴일. 작업자(구성원) 주간 교대·쉬는 날·날짜별 교대(2dy, V82, 다른 작업자로 복사 2ed)와 일하는 시간(2du, V80, 로컬 검증만, [작업자 달력](../domain/worker-calendar.md)); 작업지시에 필요한 사람(crew)과 준비 점검·계획 제안의 그 사람들 시간(2dv, V81) |
+| FM-FLOW-002 Connection Contract | 대부분 | 흐름률 미적용, 손실률은 새 발행본부터 연결을 지날 때 적용(2ei, [ADR-009](../architecture/adr/ADR-009-connection-loss-rate.md), GR-37–GR-44), 지연은 새 발행본부터 다음 단계의 예정 시각(2ej, [ADR-010](../architecture/adr/ADR-010-connection-delay.md), GR-45–GR-52), 생산 실행에서는 작업지시 설비의 근무 밖이면 다음 가용 시간으로(2et, [ADR-015](../architecture/adr/ADR-015-shift-aware-delay.md)), 우선순위는 Exclusive 게이트웨이의 연결에만 적용(2eb, GR-14), 합류는 Join 게이트웨이(2ef, GR-21–GR-28), 수량 분할은 Split 게이트웨이(2eh, GR-29–GR-36) |
+| FM-PLAN-001 Operation Type | 1단계 | [ADR-006](../architecture/adr/ADR-006-operation-types.md) **Accepted**(2026-10-17). Exclusive 게이트웨이 구현(2eb, V85, 로컬 검증, [연결 계약](../domain/process-port-connection-contract.md) GR-13–GR-20): priority 순 첫 연결, 기본 연결, 없으면 `NO_ROUTE` 실패. Join 게이트웨이 구현(2ef, V88, 로컬 검증, [ADR-007](../architecture/adr/ADR-007-join-gateway.md), [연결 계약](../domain/process-port-connection-contract.md) GR-21–GR-28): 더 올 수 있는 갈래가 없을 때 한 번 합류. Split 게이트웨이 구현(2eh, V89, 로컬 검증, [ADR-008](../architecture/adr/ADR-008-quantity-split.md), [연결 계약](../domain/process-port-connection-contract.md) GR-29–GR-36): 나가는 연결마다 고정량·비율(소수 4자리, 차이는 나머지가)·나머지로 수량을 나누고, 0인 몫은 보내지 않음. Subflow 없음 |
+| FM-PLAN-002 Capacity Resource | 일부 | 설비 시간당 산출·부하표·작업지시 계획 기간 제안, 작업자 부하표(교대 대 인력으로 잡힌 작업지시 시간·같은 때 겹침, 2dw, 로컬 검증만, [작업자 달력](../domain/worker-calendar.md) WC17–WC23), 인력의 교대·다른 작업지시를 따르는 계획 제안(2dx, WC24–WC28), 인력마다 몫(%, 2dz, V83, WC36–WC40), 설비 효율(시간당 산출 × 효율, 2ea, V84, [설비](../domain/equipment.md) E8–E11), 동시 작업 설비(겹치는 작업지시를 비켜 가지 않음·과부하 아님, 2ec, V86, E12–E15), 동시 작업 수(최대 N개, 꽉 찬 순간만 비켜 감·가용 × N, 2ek, V90, E16–E19) |
+| FM-PLAN-003 Calendar | 일부 | 설비 교대(설비당 여러 개·요일별, V43, 시작일이 있는 판 2es, V94)·날짜별 교대(V45, 기간·설비 간 복사)·정지 기간·프로젝트 휴일. 작업자(구성원) 주간 교대·쉬는 날·날짜별 교대(2dy, V82, 다른 작업자로 복사 2ed)·순환 근무표(2–8주, 2ee, V87)·팀 근무표(사람마다 몇 주 앞서게 복사, 2eg)·근무표 이력(시작일이 있는 판, 2er, V93)과 일하는 시간(2du, V80, 로컬 검증만, [작업자 달력](../domain/worker-calendar.md)); 작업지시에 필요한 사람(crew)과 준비 점검·계획 제안의 그 사람들 시간(2dv, V81) |
 | FM-PLAN-004 Setup/Changeover | 대부분 | 비용·setup 묶음 없음 |
 | FM-MFG-001 Multi-level BOM | 대부분 | 다단계 역전개·원가 누적, 유효기간 명령/날짜 조회·여러 draft/단일 pending 구현. 계획 날짜 선택(2cb)·다중 승인(2cc)·팬텀(2ci·2cn)은 로컬 구현, 대체 자재 남음 |
 | FM-MFG-002 By-product/Waste | 대부분 | 배출·부산물 가치 없음 |
-| FM-MFG-003 Work Instruction | 대부분 | 지침 revision 첨부 구현(2bz). 공정별 지침은 남음 |
+| FM-MFG-003 Work Instruction | 대부분 | 지침 revision 첨부 구현(2bz). 공정별 지침 단계와 공정 단계 완료 막기(2el, V91, [ADR-011](../architecture/adr/ADR-011-production-steps.md)) |
 | FM-MFG-004 Quality/Issue | 완료 | 검사 기준·불량·NCR·CAPA |
 | FM-WMS-001 Location hierarchy | 완료 | |
 | FM-WMS-002 Putaway/Pick | 완료 | 위치 간 이동은 작업이 아니라 바로 실행하는 명령 |

@@ -5,9 +5,11 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerDayCopyRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerDayOffRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerDayRequest;
+import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftCopyRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftsRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAvailabilityResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerCalendarResponse;
+import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleResponse;
 import org.myweb.flowmat.domain.workforce.application.WorkerCalendarService;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
@@ -89,12 +91,36 @@ public class WorkerCalendarController {
         return ApiResponse.ok(service.copyDays(projectId, userId, request));
     }
 
+    /** The worker's weekly shifts and rota given to other workers, each some weeks further on in the rota (WC51). */
+    @PostMapping("/{userId}/shifts/copy")
+    public ApiResponse<List<WorkerCalendarResponse>> copyShifts(@PathVariable("projectId") String projectId,
+                                                                @PathVariable("userId") String userId,
+                                                                @RequestBody(required = false) WorkerShiftCopyRequest request) {
+        return ApiResponse.ok(service.copyShifts(projectId, userId, request));
+    }
+
     @GetMapping("/{userId}/availability")
     public ApiResponse<WorkerAvailabilityResponse> availability(@PathVariable("projectId") String projectId,
                                                                 @PathVariable("userId") String userId,
                                                                 @RequestParam(value = "from", required = false) String from,
                                                                 @RequestParam(value = "to", required = false) String to) {
         return ApiResponse.ok(service.availability(projectId, userId, from, to));
+    }
+
+    /** One version of the worker's weekly shifts and rota (docs/architecture/adr/ADR-013-rota-history.md). */
+    @GetMapping("/{userId}/schedules/{scheduleId}")
+    public ApiResponse<WorkerScheduleResponse> schedule(@PathVariable("projectId") String projectId,
+                                                        @PathVariable("userId") String userId,
+                                                        @PathVariable("scheduleId") String scheduleId) {
+        return ApiResponse.ok(service.schedule(projectId, userId, scheduleId));
+    }
+
+    /** Deletes a version that has not started yet (ADR-013). */
+    @DeleteMapping("/{userId}/schedules/{scheduleId}")
+    public ApiResponse<WorkerCalendarResponse> removeSchedule(@PathVariable("projectId") String projectId,
+                                                              @PathVariable("userId") String userId,
+                                                              @PathVariable("scheduleId") String scheduleId) {
+        return ApiResponse.ok(service.removeSchedule(projectId, userId, scheduleId));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

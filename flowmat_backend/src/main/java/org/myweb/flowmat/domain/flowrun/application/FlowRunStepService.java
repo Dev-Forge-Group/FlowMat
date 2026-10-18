@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStepCompleteRequest;
 import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStepCreateRequest;
@@ -28,10 +29,12 @@ import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunStepResponse;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStep;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepAttempt;
+import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepSource;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunEventRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
+import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepSourceRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -45,6 +48,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FlowRunStepService {
+    private static final String JOIN_IS_PASSED = "A Join step waits for its branches; the server passes it on (ADR-007).";
+
     private final FlowRunRepository runRepository;
     private final FlowRunStepRepository stepRepository;
     private final FlowRunStepAttemptRepository attemptRepository;
@@ -56,6 +61,7 @@ public class FlowRunStepService {
     private final ObjectMapper objectMapper;
     private final FlowRunService runService;
     private final FlowRunRouter router;
+    private final FlowRunStepSourceRepository sourceRepository;
     private final JdbcTemplate jdbc;
 
     @Transactional
@@ -97,13 +103,24 @@ public class FlowRunStepService {
      */
     @Transactional
     public FlowRunStepResponse start(String runId, String stepId) {
-        FlowRun run = writableRun(runId); // The parent row serializes all step transitions and sequence allocation.
+        // The parent row serializes all step transitions and sequence allocation.
+        return start(writableRun(runId), stepId);
+    }
+
+    /**
+     * As {@link #start(String, String)} on a run the caller has locked and may change, such as a production-linked one
+     * (docs/architecture/adr/ADR-011-production-steps.md decision 2).
+     */
+    @Transactional
+    public FlowRunStepResponse start(FlowRun run, String stepId) {
+        String runId = run.getFlowRunId();
         FlowRunStep step = requireStep(runId, stepId);
         if (!"planned".equals(step.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Only a planned step can start.");
         }
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (step.getScheduledAt() != null && step.getScheduledAt().isAfter(now)) {
+        // A production step held for the equipment's next shift may go early once its equipment works (ADR-015 decision 6).
+        if (step.getScheduledAt() != null && step.getScheduledAt().isAfter(now) && !router.mayStartEarly(run, step, now)) {
             throw new BusinessException(ErrorCode.CONFLICT, "Step cannot start before its scheduledAt.");
         }
         String actor = accessService.requireCurrentUserId();
@@ -115,7 +132,11 @@ public class FlowRunStepService {
         if (retryAt != null && retryAt.isAfter(now)) {
             throw new BusinessException(ErrorCode.CONFLICT, "Step cannot start before its retryAt.");
         }
-        FlowRunGraph.NodePolicy policy = graph(run).policy(step.getNodeId());
+        FlowRunGraph graph = graph(run);
+        if (graph.join(step.getNodeId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, JOIN_IS_PASSED);
+        }
+        FlowRunGraph.NodePolicy policy = graph.policy(step.getNodeId());
         Integer limit = policy.concurrencyLimit();
         if (limit != null) {
             long running = runningOnNode(run, step.getNodeId());
@@ -130,7 +151,11 @@ public class FlowRunStepService {
 
     @Transactional
     public FlowRunStepResponse schedule(String runId, String stepId, FlowRunStepScheduleRequest request) {
-        FlowRunStep step = writableStep(runId, stepId);
+        FlowRun run = writableRun(runId); // The parent row serializes all step transitions and sequence allocation.
+        FlowRunStep step = requireStep(runId, stepId);
+        if ("graph".equals(run.getExecutionMode()) && graph(run).join(step.getNodeId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, JOIN_IS_PASSED);
+        }
         if (!"planned".equals(step.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Only a planned step can be rescheduled.");
         }
@@ -140,6 +165,12 @@ public class FlowRunStepService {
         if (retryAt != null && (scheduledAt == null || scheduledAt.isBefore(retryAt))) {
             throw new BusinessException(ErrorCode.CONFLICT,
                 "Step waits to retry until " + retryAt + "; schedule it at or after then.");
+        }
+        // A step after a connection's delay keeps it (docs/architecture/adr/ADR-010-connection-delay.md decision 5).
+        OffsetDateTime readyAt = inputReadyAt(run, step);
+        if (readyAt != null && (scheduledAt == null || scheduledAt.isBefore(readyAt))) {
+            throw new BusinessException(ErrorCode.CONFLICT,
+                "Step's input is ready at " + readyAt + "; schedule it at or after then.");
         }
         step.setScheduledAt(scheduledAt);
         stepRepository.saveAndFlush(step);
@@ -164,7 +195,13 @@ public class FlowRunStepService {
 
     @Transactional
     public FlowRunStepResponse complete(String runId, String stepId, FlowRunStepCompleteRequest request) {
-        FlowRun run = writableRun(runId);
+        return complete(writableRun(runId), stepId, request);
+    }
+
+    /** As {@link #complete(String, String, FlowRunStepCompleteRequest)} on a run the caller has locked and may change (ADR-011). */
+    @Transactional
+    public FlowRunStepResponse complete(FlowRun run, String stepId, FlowRunStepCompleteRequest request) {
+        String runId = run.getFlowRunId();
         FlowRunStep step = requireStep(runId, stepId);
         FlowRunStepAttempt attempt = runningAttempt(step, request == null ? null : request.attemptNo());
         JsonNode output = request != null && request.outputSnapshot() != null
@@ -181,10 +218,14 @@ public class FlowRunStepService {
         stepRepository.saveAndFlush(step);
         appendEvent(runId, stepId, "step_completed", readJson(step.getOutputSnapshot()));
         if (graph != null) {
-            // An Exclusive gateway on the way that finds no connection fails the run (ADR-006 decision 3).
-            String failure = router.follow(runId, graph, stepId, decisions, output, accessService.requireCurrentUserId());
+            // A gateway on the way may end the run (ADR-006 decision 3); Joins nothing more can reach go on (ADR-007).
+            FlowRunRouter.Failure failure = router.follow(runId, graph, stepId, decisions, output,
+                accessService.requireCurrentUserId(), true);
+            if (failure == null) {
+                failure = router.settle(runId, graph, true);
+            }
             if (failure != null) {
-                runService.failLocked(run, FlowRunRouter.NO_ROUTE, failure, null);
+                runService.failLocked(run, failure.code(), failure.message(), null);
             }
         }
         return response(step);
@@ -210,7 +251,13 @@ public class FlowRunStepService {
 
     @Transactional
     public FlowRunStepResponse fail(String runId, String stepId, FlowRunStepFailRequest request) {
-        FlowRun run = writableRun(runId);
+        return fail(writableRun(runId), stepId, request);
+    }
+
+    /** As {@link #fail(String, String, FlowRunStepFailRequest)} on a run the caller has locked and may change (ADR-011). */
+    @Transactional
+    public FlowRunStepResponse fail(FlowRun run, String stepId, FlowRunStepFailRequest request) {
+        String runId = run.getFlowRunId();
         FlowRunStep step = requireStep(runId, stepId);
         FlowRunStepAttempt attempt = runningAttempt(step, request.attemptNo());
         recordFailure(run, step, attempt, request.errorCode().trim(), request.errorMessage(),
@@ -219,27 +266,34 @@ public class FlowRunStepService {
     }
 
     /**
-     * Fails a running graph attempt whose node time limit passed, as the system (EP7). Checked again under the run lock,
-     * so overlapping sweeps record it once; false when there was nothing to do.
+     * Fails a running graph attempt whose node time limit passed, as the system (EP7). A production-linked attempt is only
+     * marked late, since a person works it (docs/domain/flow-run.md F12). Checked again under the run lock, so overlapping
+     * sweeps record it once; false when there was nothing to do.
      */
     @Transactional
     public boolean timeOut(String attemptId) {
         String runId = attemptRepository.findFlowRunIdByAttemptId(attemptId).orElse(null);
         if (runId == null) return false;
         FlowRun run = runRepository.findLockedByFlowRunId(runId).orElse(null);
-        if (run == null || !"running".equals(run.getStatus()) || run.getProductionRunId() != null
-            || !"graph".equals(run.getExecutionMode())) {
+        if (run == null || !"running".equals(run.getStatus()) || !"graph".equals(run.getExecutionMode())) {
             return false;
         }
         // Loaded only after the lock, so a report or another sweep that ended it is seen.
         FlowRunStepAttempt attempt = attemptRepository.findById(attemptId).orElse(null);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         if (attempt == null || !"running".equals(attempt.getStatus()) || attempt.getTimeoutAt() == null
-            || attempt.getTimeoutAt().isAfter(now)) {
+            || attempt.getTimeoutAt().isAfter(now) || attempt.getOverdueAt() != null) {
             return false;
         }
         FlowRunStep step = requireStep(runId, attempt.getStepId());
         if (!"running".equals(step.getStatus())) return false;
+        if (run.getProductionRunId() != null) {
+            attempt.setOverdueAt(now);
+            attemptRepository.save(attempt);
+            eventRecorder.record(runId, step.getStepId(), "step_overdue", objectMapper.createObjectNode()
+                .put("attemptNo", attempt.getAttemptNo()).put("timeoutAt", attempt.getTimeoutAt().toString()), null);
+            return true;
+        }
         long seconds = Duration.between(attempt.getStartedAt(), attempt.getTimeoutAt()).getSeconds();
         eventRecorder.record(runId, step.getStepId(), "step_timed_out", objectMapper.createObjectNode()
             .put("attemptNo", attempt.getAttemptNo()).put("timeoutAt", attempt.getTimeoutAt().toString()), null);
@@ -249,50 +303,92 @@ public class FlowRunStepService {
     }
 
     public List<FlowRunStepResponse> list(String runId) {
-        readableRun(runId);
-        return stepRepository.findAllByFlowRunIdOrderBySequenceNoAsc(runId).stream().map(this::response).toList();
+        FlowRun run = readableRun(runId);
+        List<FlowRunStep> steps = stepRepository.findAllByFlowRunIdOrderBySequenceNoAsc(runId);
+        Map<String, Integer> waiting = joinWaiting(run, steps);
+        return steps.stream().map(step -> response(step, waiting)).toList();
+    }
+
+    /** For each Join step, how many of its connections can still bring something; 0 once passed (ADR-007 decision 11). */
+    private Map<String, Integer> joinWaiting(FlowRun run, List<FlowRunStep> steps) {
+        Set<String> joins = sourceRepository.findAllByFlowRunIdOrderByStepIdAscArrivalNoAsc(run.getFlowRunId()).stream()
+            .map(FlowRunStepSource::getStepId)
+            .collect(Collectors.toSet());
+        if (joins.isEmpty()) {
+            return Map.of();
+        }
+        FlowRunGraph graph = graph(run);
+        Map<String, Integer> waiting = new HashMap<>();
+        for (FlowRunStep step : steps) {
+            if (joins.contains(step.getStepId())) {
+                waiting.put(step.getStepId(), "planned".equals(step.getStatus())
+                    ? graph.stillComing(step.getNodeId(), FlowRunRouter.liveNodes(steps, step)) : 0);
+            }
+        }
+        return waiting;
     }
 
     public FlowRunStepLineageResponse lineage(String runId, String stepId) {
         readableRun(runId);
         List<FlowRunStep> steps = stepRepository.findAllByFlowRunIdOrderBySequenceNoAsc(runId);
+        // A Join step has a parent for each arrival (ADR-007 decision 8); any other step has its one source.
+        Map<String, List<String>> joined = new HashMap<>();
+        for (FlowRunStepSource source : sourceRepository.findAllByFlowRunIdOrderByStepIdAscArrivalNoAsc(runId)) {
+            joined.computeIfAbsent(source.getStepId(), ignored -> new ArrayList<>()).add(source.getSourceStepId());
+        }
         Map<String, FlowRunStep> byId = new HashMap<>();
         Map<String, List<FlowRunStep>> children = new HashMap<>();
         for (FlowRunStep step : steps) {
             byId.put(step.getStepId(), step);
-            if (step.getSourceStepId() != null) {
-                children.computeIfAbsent(step.getSourceStepId(), ignored -> new ArrayList<>()).add(step);
+        }
+        for (FlowRunStep step : steps) {
+            for (String parent : parents(step, joined)) {
+                children.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(step);
             }
         }
         FlowRunStep selected = byId.get(stepId);
         if (selected == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
-        List<FlowRunStepResponse> ancestors = new ArrayList<>();
-        Set<String> visited = new HashSet<>();
-        visited.add(stepId);
-        FlowRunStep parent = selected;
-        while (parent.getSourceStepId() != null) {
-            parent = byId.get(parent.getSourceStepId());
-            if (parent == null || !visited.add(parent.getStepId())) {
+        Set<String> ancestorIds = new HashSet<>();
+        ArrayDeque<String> up = new ArrayDeque<>(parents(selected, joined));
+        while (!up.isEmpty()) {
+            String parentId = up.removeFirst();
+            FlowRunStep parent = byId.get(parentId);
+            if (parent == null || parentId.equals(stepId)) {
                 throw new BusinessException(ErrorCode.CONFLICT, "Flow run step lineage is invalid.");
             }
-            ancestors.add(response(parent));
+            if (ancestorIds.add(parentId)) {
+                up.addAll(parents(parent, joined));
+            }
         }
-        java.util.Collections.reverse(ancestors);
+        // Earliest first; a chain reads from the start step to the parent, as before.
+        List<FlowRunStepResponse> ancestors = steps.stream()
+            .filter(step -> ancestorIds.contains(step.getStepId())).map(this::response).toList();
 
         Set<String> descendantIds = new HashSet<>();
         ArrayDeque<FlowRunStep> queue = new ArrayDeque<>(children.getOrDefault(stepId, List.of()));
         while (!queue.isEmpty()) {
             FlowRunStep child = queue.removeFirst();
-            if (!descendantIds.add(child.getStepId()) || child.getStepId().equals(stepId)) {
+            if (child.getStepId().equals(stepId)) {
                 throw new BusinessException(ErrorCode.CONFLICT, "Flow run step lineage is invalid.");
             }
-            queue.addAll(children.getOrDefault(child.getStepId(), List.of()));
+            // Branches that meet again at a Join reach it more than once.
+            if (descendantIds.add(child.getStepId())) {
+                queue.addAll(children.getOrDefault(child.getStepId(), List.of()));
+            }
         }
         List<FlowRunStepResponse> descendants = steps.stream()
             .filter(step -> descendantIds.contains(step.getStepId())).map(this::response).toList();
         return new FlowRunStepLineageResponse(response(selected), ancestors, descendants);
+    }
+
+    private static List<String> parents(FlowRunStep step, Map<String, List<String>> joined) {
+        List<String> arrivals = joined.get(step.getStepId());
+        if (arrivals != null) {
+            return arrivals;
+        }
+        return step.getSourceStepId() == null ? List.of() : List.of(step.getSourceStepId());
     }
 
     public List<FlowRunStepAttemptResponse> attempts(String runId, String stepId) {
@@ -302,7 +398,7 @@ public class FlowRunStepService {
             .map(attempt -> new FlowRunStepAttemptResponse(
                 attempt.getAttemptId(), attempt.getStepId(), attempt.getAttemptNo(), attempt.getStatus(),
                 attempt.getStartedAt(), attempt.getEndedAt(), attempt.getRetryAt(),
-                attempt.getErrorCode(), attempt.getErrorMessage(), attempt.getTimeoutAt()))
+                attempt.getErrorCode(), attempt.getErrorMessage(), attempt.getTimeoutAt(), attempt.getOverdueAt()))
             .toList();
     }
 
@@ -345,6 +441,13 @@ public class FlowRunStepService {
             step.setStatus("skipped");
             stepRepository.save(step);
             eventRecorder.record(run.getFlowRunId(), step.getStepId(), "step_skipped", payload, actorId);
+            stepRepository.flush();
+            // A skipped branch brings nothing more, so a Join waiting on it may go on; no report is left to reject it
+            // when its output cannot (ADR-007 decision 9).
+            FlowRunRouter.Failure failure = router.settle(run.getFlowRunId(), graph, false);
+            if (failure != null) {
+                runService.failLocked(run, failure.code(), failure.message(), null);
+            }
         } else if ("retry".equals(policy) && attempt.getAttemptNo() <= node.retryLimit()) {
             long delay = node.delayBeforeRetry(attempt.getAttemptNo());
             if (delay > 0) {
@@ -408,11 +511,6 @@ public class FlowRunStepService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         accessService.requireProjectReadAccess(run.getProjectId());
         return run;
-    }
-
-    private FlowRunStep writableStep(String runId, String stepId) {
-        writableRun(runId); // The parent row serializes all step transitions and sequence allocation.
-        return requireStep(runId, stepId);
     }
 
     /** The run's published revision, read through the workflow context's public query (ADR-002, EP11). */
@@ -482,11 +580,15 @@ public class FlowRunStepService {
     }
 
     private FlowRunStepResponse response(FlowRunStep step) {
+        return response(step, Map.of());
+    }
+
+    private FlowRunStepResponse response(FlowRunStep step, Map<String, Integer> joinWaiting) {
         return new FlowRunStepResponse(step.getStepId(), step.getFlowRunId(), step.getNodeId(),
             step.getSourceConnectionId(), step.getSourceStepId(), step.getStatus(),
             step.getSequenceNo(), step.getScheduledAt(), step.getStartedAt(),
             step.getEndedAt(), readJson(step.getInputSnapshot()), readJson(step.getOutputSnapshot()),
-            step.getErrorCode(), step.getErrorMessage());
+            step.getErrorCode(), step.getErrorMessage(), joinWaiting.get(step.getStepId()));
     }
 
     private String writeJson(JsonNode value) {
@@ -495,6 +597,17 @@ public class FlowRunStepService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Flow run step JSON could not be serialized.", exception);
         }
+    }
+
+    /** When the step's input is ready after its connection's delay (ADR-010), or null when no delay applies. */
+    private OffsetDateTime inputReadyAt(FlowRun run, FlowRunStep step) {
+        if (!"graph".equals(run.getExecutionMode()) || step.getSourceStepId() == null) {
+            return null;
+        }
+        FlowRunGraph graph = graph(run);
+        return stepRepository.findById(step.getSourceStepId())
+            .map(source -> router.readyAt(graph, source, step.getSourceConnectionId()))
+            .orElse(null);
     }
 
     private OffsetDateTime parseScheduledAt(String value) {

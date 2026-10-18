@@ -2,8 +2,8 @@ package org.myweb.flowmat.domain.production.application;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.domain.entity.Equipment;
-import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogEquipmentView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderResponse;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
@@ -26,7 +26,7 @@ public class WorkOrderEquipmentService {
     private static final String NOT_DELETED = "N";
 
     private final WorkOrderRepository workOrderRepository;
-    private final EquipmentRepository equipmentRepository;
+    private final CatalogQuery catalogQuery;
     private final ProductionRunRepository productionRunRepository;
     private final ProjectAccessService projectAccessService;
 
@@ -42,11 +42,10 @@ public class WorkOrderEquipmentService {
         }
         String id = equipmentId == null || equipmentId.isBlank() ? null : equipmentId.trim();
         if (id != null) {
-            Equipment equipment = equipmentRepository.findByEquipmentIdAndDeletedYn(id, NOT_DELETED)
-                .filter(found -> order.getProjectId().equals(found.getProjectId()))
+            CatalogEquipmentView equipment = catalogQuery.findProjectEquipment(order.getProjectId(), id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The equipment is not in this project."));
-            if ("inactive".equals(equipment.getEquipmentStatus())) {
-                throw new BusinessException(ErrorCode.CONFLICT, equipment.getEquipmentName() + " is inactive; choose other equipment.");
+            if ("inactive".equals(equipment.equipmentStatus())) {
+                throw new BusinessException(ErrorCode.CONFLICT, equipment.equipmentName() + " is inactive; choose other equipment.");
             }
         }
         order.setEquipmentId(id);

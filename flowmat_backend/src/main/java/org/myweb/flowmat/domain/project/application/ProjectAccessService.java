@@ -8,14 +8,6 @@ import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.domain.project.domain.entity.ProjectMember;
 import org.myweb.flowmat.domain.project.repository.ProjectMemberRepository;
 import org.myweb.flowmat.domain.project.repository.ProjectRepository;
-import org.myweb.flowmat.domain.workflow.domain.entity.Process;
-import org.myweb.flowmat.domain.workflow.domain.entity.ProcessConnection;
-import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
-import org.myweb.flowmat.domain.workflow.repository.ProcessConnectionRepository;
-import org.myweb.flowmat.domain.workflow.repository.ProcessIoRepository;
-import org.myweb.flowmat.domain.workflow.repository.ProcessRepository;
-import org.myweb.flowmat.domain.workflow.repository.WorkflowRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.rbac.PermissionService;
@@ -39,10 +31,6 @@ public class ProjectAccessService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
-    private final WorkflowRepository workflowRepository;
-    private final ProcessRepository processRepository;
-    private final ProcessIoRepository processIoRepository;
-    private final ProcessConnectionRepository processConnectionRepository;
     private final PermissionService permissionService;
 
     public String requireCurrentUserId() {
@@ -130,76 +118,6 @@ public class ProjectAccessService {
         return resolveProjectRole(project, requireCurrentUserId());
     }
 
-    public Workflow requireWorkflowReadAccess(String workflowId) {
-        return requireWorkflowReadAccess(workflowId, requireCurrentUserId());
-    }
-
-    public Workflow requireWorkflowReadAccess(String workflowId, String userId) {
-        Workflow workflow = workflowRepository.findByWorkflowIdAndDeletedYn(workflowId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectReadAccess(workflow.getProjectId(), userId);
-        return workflow;
-    }
-
-    public Workflow requireWorkflowWriteAccess(String workflowId) {
-        return requireWorkflowWriteAccess(workflowId, requireCurrentUserId());
-    }
-
-    public Workflow requireWorkflowWriteAccess(String workflowId, String userId) {
-        Workflow workflow = workflowRepository.findByWorkflowIdAndDeletedYn(workflowId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectWriteAccess(workflow.getProjectId(), userId);
-        return workflow;
-    }
-
-    public Process requireProcessReadAccess(String processId) {
-        Process process = processRepository.findByProcessIdAndDeletedYn(processId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectReadAccess(process.getProjectId(), requireCurrentUserId());
-        return process;
-    }
-
-    public Process requireProcessWriteAccess(String processId) {
-        Process process = processRepository.findByProcessIdAndDeletedYn(processId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectWriteAccess(process.getProjectId(), requireCurrentUserId());
-        return process;
-    }
-
-    public ProcessIo requireProcessIoReadAccess(String processIoId) {
-        ProcessIo processIo = processIoRepository.findByProcessIoIdAndDeletedYn(processIoId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        requireProcessReadAccess(processIo.getProcessId());
-        return processIo;
-    }
-
-    public ProcessIo requireProcessIoWriteAccess(String processIoId) {
-        ProcessIo processIo = processIoRepository.findByProcessIoIdAndDeletedYn(processIoId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        requireProcessWriteAccess(processIo.getProcessId());
-        return processIo;
-    }
-
-    public ProcessConnection requireConnectionReadAccess(String connectionId) {
-        ProcessConnection connection = processConnectionRepository.findByConnectionIdAndDeletedYn(connectionId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectReadAccess(connection.getProjectId(), requireCurrentUserId());
-        return connection;
-    }
-
-    public ProcessConnection requireConnectionWriteAccess(String connectionId) {
-        ProcessConnection connection = processConnectionRepository.findByConnectionIdAndDeletedYn(connectionId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectWriteAccess(connection.getProjectId(), requireCurrentUserId());
-        return connection;
-    }
-
-    private void ensureProjectReadAccess(String projectId, String userId) {
-        Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectReadAccess(project, userId);
-    }
-
     private void ensureProjectReadAccess(Project project, String userId) {
         if (userId == null || userId.isBlank()) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
@@ -215,12 +133,6 @@ public class ProjectAccessService {
         if (!isActiveMember) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Project membership is required.");
         }
-    }
-
-    private void ensureProjectWriteAccess(String projectId, String userId) {
-        Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        ensureProjectWriteAccess(project, userId);
     }
 
     private void ensureProjectWriteAccess(Project project, String userId) {

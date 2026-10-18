@@ -12,6 +12,8 @@ import java.util.List;
  * @param daysOff     days off that have not ended more than 31 days ago, earliest first
  * @param days        dates with their own shifts (WC29) from 31 days ago on, earliest first
  * @param rota        how the shifts repeat (WC44); null for one week
+ * @param schedules   the versions of the weekly shifts and rota, earliest first; {@code shifts} and {@code rota} are the
+ *                    current one's (docs/architecture/adr/ADR-013-rota-history.md)
  */
 public record WorkerCalendarResponse(
     String projectId,
@@ -22,7 +24,8 @@ public record WorkerCalendarResponse(
     List<Shift> shifts,
     List<DayOff> daysOff,
     List<Day> days,
-    Rota rota
+    Rota rota,
+    List<Schedule> schedules
 ) {
 
     /** One weekly shift, its start and end as "HH:mm", the hours of one shift and its rota week (1 without a rota). */
@@ -32,6 +35,10 @@ public record WorkerCalendarResponse(
 
     /** Every {@code weeks} weeks from the Monday {@code startsOn}; {@code currentWeek} is the rota week of today. */
     public record Rota(int weeks, LocalDate startsOn, int currentWeek) {
+    }
+
+    /** A version from {@code effectiveFrom} (null: from the start) until the next; {@code current} is the one of today. */
+    public record Schedule(String scheduleId, LocalDate effectiveFrom, boolean current) {
     }
 
     public record DayOff(String dayOffId, LocalDate firstDay, LocalDate lastDay, String reason, String createdBy) {
