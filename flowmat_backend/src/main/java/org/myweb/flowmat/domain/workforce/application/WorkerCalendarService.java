@@ -36,6 +36,7 @@ import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftCopyRequest
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftsRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAvailabilityResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerCalendarResponse;
+import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleResponse;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerHours;
@@ -53,6 +54,7 @@ import org.myweb.flowmat.domain.workforce.repository.WorkerShiftRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
+import org.myweb.flowmat.global.util.StorableText;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,6 +88,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
     private final WorkerDayShiftRepository dayShiftRepository;
     private final WorkerRotaRepository rotaRepository;
     private final WorkerScheduleRepository scheduleRepository;
+    private final WorkerScheduleHistoryService history;
     private final ProjectAccessService access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
@@ -142,6 +145,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
     public WorkerCalendarResponse setShifts(String projectId, String userId, WorkerShiftsRequest request) {
         requireEditor(projectId, userId);
         LocalDate from = effectiveFrom(projectId, request == null ? null : request.effectiveFrom());
+        String reason = versionReason(request == null ? null : request.reason());
         List<WorkerShiftsRequest.Shift> requested = request == null || request.shifts() == null ? List.of() : request.shifts();
         WorkerShiftsRequest.Rota askedRota = request == null ? null : request.rota();
         int weeks = 1;
@@ -169,7 +173,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             }
         }
         requireNoOverlap(plans, weeks);
-        writeShifts(projectId, userId, plans, weeks, startsOn, from);
+        writeShifts(projectId, userId, plans, weeks, startsOn, from, reason);
         return response(projectId, userId, members.ownerOf(projectId));
     }
 
@@ -189,6 +193,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             throw bad("Choose 1 to " + MAX_COPY_TARGETS + " workers to copy to.");
         }
         LocalDate from = effectiveFrom(projectId, request.effectiveFrom());
+        String reason = versionReason(request.reason());
         Version version = versionOn(versions(projectId, List.of(userId)).getOrDefault(userId, List.of()), from);
         List<WorkerShift> source = version == null ? List.of() : version.shifts().stream()
             .sorted(Comparator.comparing(WorkerShift::getShiftStart).thenComparing(WorkerShift::getWorkerShiftId))
@@ -229,7 +234,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         for (Map.Entry<String, Integer> target : offsets.entrySet()) {
             // Starting that many weeks earlier puts them that many weeks further on in the rota (WC45).
             LocalDate startsOn = rota == null ? null : rota.getStartsOn().minusWeeks(target.getValue());
-            writeShifts(projectId, target.getKey(), plans, weeks, startsOn, from);
+            writeShifts(projectId, target.getKey(), plans, weeks, startsOn, from, reason);
             copied.add(response(projectId, target.getKey(), owner));
         }
         return copied;
@@ -237,9 +242,11 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
 
     /**
      * Makes these the worker's weekly shifts and rota from {@code from} (WC2, WC44): saving again from the same date changes
-     * that version, one version a day (ADR-013 decision 5). A rota without shifts would repeat nothing.
+     * that version, one version a day (ADR-013 decision 5), and its reason with it (ADR-017 decision 3). A rota without shifts
+     * would repeat nothing.
      */
-    private void writeShifts(String projectId, String userId, List<ShiftPlan> plans, int weeks, LocalDate startsOn, LocalDate from) {
+    private void writeShifts(String projectId, String userId, List<ShiftPlan> plans, int weeks, LocalDate startsOn, LocalDate from,
+                             String reason) {
         shiftRepository.lockKey("worker-shift:" + projectId + ":" + userId);
         String actor = access.requireCurrentUserId();
         OffsetDateTime now = OffsetDateTime.now();
@@ -259,9 +266,11 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             rotaRepository.findByScheduleId(schedule.getScheduleId()).ifPresent(rotaRepository::delete);
             rotaRepository.flush();
         }
+        schedule.setReason(reason);
         schedule.setUpdatedBy(actor);
         schedule.setUpdatedAt(now);
         scheduleRepository.saveAndFlush(schedule);
+        List<WorkerShift> saved = new ArrayList<>();
         for (ShiftPlan plan : plans) {
             WorkerShift shift = new WorkerShift();
             shift.setWorkerShiftId(ids.generate());
@@ -275,10 +284,12 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             shift.setUpdatedBy(actor);
             shift.setUpdatedAt(now);
             shiftRepository.save(shift);
+            saved.add(shift);
         }
         shiftRepository.flush();
+        WorkerRota rota = null;
         if (weeks > 1 && !plans.isEmpty()) {
-            WorkerRota rota = new WorkerRota();
+            rota = new WorkerRota();
             rota.setWorkerRotaId(ids.generate());
             rota.setProjectId(projectId);
             rota.setUserId(userId);
@@ -289,6 +300,8 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             rota.setUpdatedAt(now);
             rotaRepository.saveAndFlush(rota);
         }
+        // Each save stays in the history, also when it changes a version saved before (ADR-024).
+        history.record(schedule, "saved", saved, rota, actor, now);
     }
 
     /** One version of the worker's weekly shifts and rota (ADR-013 decision 7). */
@@ -304,7 +317,15 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         Lines lines = lines(schedule.getScheduleId(), today);
         return new WorkerScheduleResponse(schedule.getScheduleId(), schedule.getEffectiveFrom(),
             current != null && current.getScheduleId().equals(schedule.getScheduleId()), !lines.shifts().isEmpty(),
-            lines.weeklyHours(), lines.shifts(), lines.rota());
+            lines.weeklyHours(), lines.shifts(), lines.rota(), schedule.getReason(), schedule.getUpdatedBy(), schedule.getUpdatedAt());
+    }
+
+    /** Every save and removal of the worker's versions, newest first, at most 100 (docs/architecture/adr/ADR-024-version-save-history.md). */
+    @Transactional(readOnly = true)
+    public List<WorkerScheduleHistoryResponse> scheduleHistory(String projectId, String userId) {
+        access.requireProjectReadAccess(projectId);
+        requireWorker(projectId, userId);
+        return history.list(projectId, userId);
     }
 
     /** Deletes a version that has not started yet (ADR-013 decision 4); one that has started stays as the worker's history. */
@@ -317,9 +338,15 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         if (schedule.getEffectiveFrom() == null || !schedule.getEffectiveFrom().isAfter(calendars.today(projectId))) {
             throw new BusinessException(ErrorCode.CONFLICT, "This schedule has started; save a new one from a later date instead.");
         }
-        shiftRepository.deleteAll(shiftRepository.findAllByScheduleIdOrderByShiftStartAscWorkerShiftIdAsc(scheduleId));
+        List<WorkerShift> shifts = shiftRepository.findAllByScheduleIdOrderByShiftStartAscWorkerShiftIdAsc(scheduleId);
+        WorkerRota rota = rotaRepository.findByScheduleId(scheduleId).orElse(null);
+        // The removed version stays in the history with what it held (ADR-024).
+        history.record(schedule, "removed", shifts, rota, access.requireCurrentUserId(), OffsetDateTime.now());
+        shiftRepository.deleteAll(shifts);
         shiftRepository.flush();
-        rotaRepository.findByScheduleId(scheduleId).ifPresent(rotaRepository::delete);
+        if (rota != null) {
+            rotaRepository.delete(rota);
+        }
         rotaRepository.flush();
         scheduleRepository.delete(schedule);
         scheduleRepository.flush();
@@ -781,7 +808,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             .toList();
         List<WorkerCalendarResponse.Schedule> versions = schedules.stream()
             .map(schedule -> new WorkerCalendarResponse.Schedule(schedule.getScheduleId(), schedule.getEffectiveFrom(),
-                schedule == current))
+                schedule == current, schedule.getReason(), schedule.getUpdatedBy(), schedule.getUpdatedAt()))
             .toList();
         return new WorkerCalendarResponse(projectId, userId, userId.equals(owner), !lines.shifts().isEmpty(), lines.weeklyHours(),
             lines.shifts(), daysOff, days, lines.rota(), versions);
@@ -959,6 +986,19 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         } catch (DateTimeParseException exception) {
             throw bad(name + " must be a date and time with an offset, such as 2030-01-07T09:00:00+09:00.");
         }
+    }
+
+    /**
+     * Why a version was saved (ADR-017 decision 1): text PostgreSQL can store, trimmed, none when blank, at most
+     * {@link #MAX_REASON} characters.
+     */
+    private static String versionReason(String value) {
+        StorableText.require(value, "reason");
+        String reason = value == null || value.isBlank() ? null : value.trim();
+        if (reason != null && reason.length() > MAX_REASON) {
+            throw bad("reason must be at most " + MAX_REASON + " characters.");
+        }
+        return reason;
     }
 
     private static BusinessException bad(String message) {

@@ -28,6 +28,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDayCopyRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDayRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDowntimeRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentAvailabilityResponse;
+import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarHistoryResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarVersionResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentScheduleResponse;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentSlot;
@@ -48,6 +49,7 @@ import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
+import org.myweb.flowmat.global.util.StorableText;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,6 +83,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentCalendarRepository calendarRepository;
     private final EquipmentScheduleRepository scheduleRepository;
+    private final EquipmentScheduleHistoryService history;
     private final EquipmentDowntimeRepository downtimeRepository;
     private final EquipmentDayOverrideRepository dayOverrideRepository;
     private final ProjectHolidayRepository holidayRepository;
@@ -99,9 +102,16 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
 
     /**
      * The shifts in a window and the holidays that took a shift out of it; {@code calendarSet} when a date in the window has
-     * a calendar. Dates without one run around the clock.
+     * a calendar. {@code worked} are the shifts on dates with a calendar; dates without one run around the clock and are in
+     * {@code open} whole.
      */
-    private record Shifts(List<Span> spans, List<LocalDate> holidays, boolean calendarSet) {
+    private record Shifts(List<Span> worked, List<Span> open, List<LocalDate> holidays, boolean calendarSet) {
+        /** Every stretch, the shifts and the dates without a calendar, as they come. */
+        List<Span> spans() {
+            List<Span> all = new ArrayList<>(worked);
+            all.addAll(open);
+            return all;
+        }
     }
 
     /** One calendar version, from {@code from} (null: from the start) until the next; no rows runs around the clock. */
@@ -154,7 +164,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             plans.add(plan(requested.get(index), requested.size() == 1 ? "" : "Shift " + (index + 1) + ": "));
         }
         requireNoOverlap(plans);
-        writeVersion(equipment, effectiveFrom(equipment, request.effectiveFrom()), plans);
+        writeVersion(equipment, effectiveFrom(equipment, request.effectiveFrom()), plans, versionReason(request.reason()));
         return toResponse(equipment);
     }
 
@@ -163,15 +173,18 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
      * earlier dates keep the shifts they had (ADR-014 decision 2).
      */
     @Transactional
-    public EquipmentScheduleResponse clearCalendar(String equipmentId, String effectiveFrom) {
+    public EquipmentScheduleResponse clearCalendar(String equipmentId, String effectiveFrom, String reason) {
         Equipment equipment = findEquipment(equipmentId);
         projectAccessService.requireProjectWriteAccess(equipment.getProjectId());
-        writeVersion(equipment, effectiveFrom(equipment, effectiveFrom), List.of());
+        writeVersion(equipment, effectiveFrom(equipment, effectiveFrom), List.of(), versionReason(reason));
         return toResponse(equipment);
     }
 
-    /** Makes these the equipment's shifts from {@code from}, none for around the clock; one version a day (ADR-014). */
-    private void writeVersion(Equipment equipment, LocalDate from, List<ShiftPlan> plans) {
+    /**
+     * Makes these the equipment's shifts from {@code from}, none for around the clock; one version a day (ADR-014), with the
+     * reason last given for it (ADR-017 decision 3).
+     */
+    private void writeVersion(Equipment equipment, LocalDate from, List<ShiftPlan> plans, String reason) {
         calendarRepository.lockCalendar(equipment.getEquipmentId());
         String user = projectAccessService.requireCurrentUserId();
         OffsetDateTime now = OffsetDateTime.now();
@@ -188,9 +201,11 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             calendarRepository.deleteAll(calendarRepository.findAllByScheduleIdOrderByShiftStartAscShiftIdAsc(schedule.getScheduleId()));
             calendarRepository.flush();
         }
+        schedule.setReason(reason);
         schedule.setUpdatedBy(user);
         schedule.setUpdatedAt(now);
         scheduleRepository.saveAndFlush(schedule);
+        List<EquipmentCalendar> saved = new ArrayList<>();
         for (ShiftPlan plan : plans) {
             EquipmentCalendar shift = new EquipmentCalendar();
             shift.setShiftId(idGenerator.generate());
@@ -202,7 +217,10 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             shift.setUpdatedBy(user);
             shift.setUpdatedAt(now);
             calendarRepository.save(shift);
+            saved.add(shift);
         }
+        // Each save stays in the history, also when it changes a version saved before (ADR-024).
+        history.record(schedule, "saved", saved, user, now);
     }
 
     /** One version of the calendar (ADR-014); no shifts means the equipment runs around the clock from then. */
@@ -216,7 +234,15 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         List<EquipmentCalendar> rows = calendarRepository.findAllByScheduleIdOrderByShiftStartAscShiftIdAsc(scheduleId);
         return new EquipmentCalendarVersionResponse(scheduleId, schedule.getEffectiveFrom(),
             current != null && current.getScheduleId().equals(scheduleId), rows.isEmpty(),
-            rows.stream().map(EquipmentScheduleService::shiftLine).toList(), hours(weeklySeconds(rows)));
+            rows.stream().map(EquipmentScheduleService::shiftLine).toList(), hours(weeklySeconds(rows)), schedule.getReason(),
+            schedule.getUpdatedBy(), schedule.getUpdatedAt());
+    }
+
+    /** Every save and removal of the equipment's calendar versions, newest first, at most 100 (ADR-024). */
+    public List<EquipmentCalendarHistoryResponse> calendarHistory(String equipmentId) {
+        Equipment equipment = findEquipment(equipmentId);
+        projectAccessService.requireProjectReadAccess(equipment.getProjectId());
+        return history.list(equipment.getEquipmentId());
     }
 
     /** Deletes a calendar version that has not started (ADR-014, as ADR-013 decision 4); one that has started stays. */
@@ -230,11 +256,27 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         if (schedule.getEffectiveFrom() == null || !schedule.getEffectiveFrom().isAfter(projectCalendar.today(equipment.getProjectId()))) {
             throw new BusinessException(ErrorCode.CONFLICT, "This calendar version has started; save a new one from a later date instead.");
         }
-        calendarRepository.deleteAll(calendarRepository.findAllByScheduleIdOrderByShiftStartAscShiftIdAsc(scheduleId));
+        List<EquipmentCalendar> shifts = calendarRepository.findAllByScheduleIdOrderByShiftStartAscShiftIdAsc(scheduleId);
+        // The removed version stays in the history with what it held (ADR-024).
+        history.record(schedule, "removed", shifts, projectAccessService.requireCurrentUserId(), OffsetDateTime.now());
+        calendarRepository.deleteAll(shifts);
         calendarRepository.flush();
         scheduleRepository.delete(schedule);
         scheduleRepository.flush();
         return toResponse(equipment);
+    }
+
+    /**
+     * Why a calendar version was saved (ADR-017 decision 1): text PostgreSQL can store, trimmed, none when blank, at most 200
+     * characters as for a date.
+     */
+    private static String versionReason(String value) {
+        StorableText.require(value, "reason");
+        String reason = value == null || value.isBlank() ? null : value.trim();
+        if (reason != null && reason.length() > 200) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "reason can be at most 200 characters.");
+        }
+        return reason;
     }
 
     /** The date a saved version starts (ADR-014, as ADR-013 decisions 3 and 6): today when left out, never earlier. */
@@ -659,26 +701,29 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
     }
 
     /**
-     * The first moment at or after {@code at} the equipment is available (docs/architecture/adr/ADR-015-shift-aware-delay.md
-     * decisions 2 and 4): {@code at} itself inside a shift, else the start of the next stretch, skipping time off shift,
-     * holidays and downtime; {@code at} when its date has no calendar. Looks a week ahead first, then a month, then the
-     * {@link #LONGEST_WINDOW}.
+     * When a delayed step may start on the equipment in [from, to) (docs/architecture/adr/ADR-015-shift-aware-delay.md decisions
+     * 2 and 4): on dates with a calendar its available time, shifts less holidays and downtime; the whole of each date without
+     * one, downtime or not. Earliest first and none overlapping, worked out once for the window so callers can intersect it
+     * with people's time (ADR-016).
      */
     @Override
-    public Optional<OffsetDateTime> nextWorkingTime(String equipmentId, OffsetDateTime at) {
-        return equipmentRepository.findByEquipmentIdAndDeletedYn(equipmentId, NOT_DELETED).flatMap(equipment -> {
+    public Optional<List<EquipmentSlot>> workingStretches(String equipmentId, OffsetDateTime from, OffsetDateTime to) {
+        return equipmentRepository.findByEquipmentIdAndDeletedYn(equipmentId, NOT_DELETED).map(equipment -> {
             ZoneId zone = zone(equipment.getProjectId());
-            Version version = versionOn(versions(equipment.getEquipmentId()), at.atZoneSameInstant(zone).toLocalDate());
-            if (version == null || version.rows().isEmpty()) {
-                return Optional.of(at);
+            Instant start = from.toInstant();
+            Instant end = to.toInstant();
+            Shifts shifts = shifts(versions(equipment.getEquipmentId()), equipment, start, end);
+            List<Span> stretches;
+            if (!shifts.calendarSet()) {
+                stretches = List.of(new Span(start, end));
+            } else {
+                List<Span> all = new ArrayList<>(lessDowntime(merge(shifts.worked()), equipment, from, to));
+                all.addAll(shifts.open());
+                stretches = merge(all);
             }
-            for (Duration ahead : List.of(Duration.ofDays(7), Duration.ofDays(31), LONGEST_WINDOW)) {
-                List<Span> free = available(equipment, at, at.plus(ahead));
-                if (!free.isEmpty()) {
-                    return Optional.of(free.get(0).start().atZone(zone).toOffsetDateTime());
-                }
-            }
-            return Optional.empty();
+            return stretches.stream()
+                .map(span -> new EquipmentSlot(span.start().atZone(zone).toOffsetDateTime(), span.end().atZone(zone).toOffsetDateTime()))
+                .toList();
         });
     }
 
@@ -696,6 +741,13 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         Instant end = to.toInstant();
         Shifts shifts = shifts(versions(equipment.getEquipmentId()), equipment, start, end);
         List<Span> working = shifts.calendarSet() ? merge(shifts.spans()) : List.of(new Span(start, end));
+        return lessDowntime(working, equipment, from, to);
+    }
+
+    /** The working stretches less the equipment's downtime in [from, to): earliest first, none overlapping. */
+    private List<Span> lessDowntime(List<Span> working, Equipment equipment, OffsetDateTime from, OffsetDateTime to) {
+        Instant start = from.toInstant();
+        Instant end = to.toInstant();
         List<Span> down = merge(downtimeRepository.findOverlapping(equipment.getEquipmentId(), from, to).stream()
             .map(downtime -> clip(downtime.getStartsAt().toInstant(), downtime.getEndsAt().toInstant(), start, end))
             .filter(span -> span != null)
@@ -730,7 +782,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
      */
     private Shifts shifts(List<Version> versions, Equipment equipment, Instant start, Instant end) {
         if (versions.stream().allMatch(version -> version.rows().isEmpty())) {
-            return new Shifts(List.of(), List.of(), false);
+            return new Shifts(List.of(), List.of(), List.of(), false);
         }
         ZoneId zone = zone(equipment.getProjectId());
         LocalDate first = start.atZone(zone).toLocalDate().minusDays(1);
@@ -744,6 +796,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             .findAllByEquipmentIdAndOverrideDateBetween(equipment.getEquipmentId(), first, last).stream()
             .collect(Collectors.toMap(EquipmentDayOverride::getOverrideDate, override -> dayShifts(override.getShifts())));
         List<Span> shifts = new ArrayList<>();
+        List<Span> open = new ArrayList<>();
         TreeSet<LocalDate> skipped = new TreeSet<>();
         boolean set = false;
         for (LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
@@ -753,7 +806,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             if (version == null || version.rows().isEmpty()) {
                 Span whole = clip(dayStart, dayEnd, start, end);
                 if (whole != null) {
-                    shifts.add(whole);
+                    open.add(whole);
                 }
                 continue;
             }
@@ -783,7 +836,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
                 }
             }
         }
-        return new Shifts(shifts, List.copyOf(skipped), set);
+        return new Shifts(shifts, open, List.copyOf(skipped), set);
     }
 
     /** A shift that starts on the day, clipped to [start, end); null when it falls outside. */
@@ -816,7 +869,8 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             .map(EquipmentCalendar::getScheduleId).collect(Collectors.toSet());
         List<EquipmentScheduleResponse.CalendarVersion> versions = schedules.stream()
             .map(schedule -> new EquipmentScheduleResponse.CalendarVersion(schedule.getScheduleId(), schedule.getEffectiveFrom(),
-                schedule == current, !withShifts.contains(schedule.getScheduleId())))
+                schedule == current, !withShifts.contains(schedule.getScheduleId()), schedule.getReason(), schedule.getUpdatedBy(),
+                schedule.getUpdatedAt()))
             .toList();
         EquipmentScheduleResponse.Calendar calendar = null;
         if (!rows.isEmpty()) {

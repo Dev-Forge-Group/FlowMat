@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useEquipmentQuery } from '../../../entities/catalog/api/useEquipment'
 import {
   useCancelRunSetupMutation, useRecordRunSetupMutation, useRunSetupsQuery, type RunSetupCost,
@@ -21,6 +21,8 @@ export function RunSetupPanel({ projectId, runId, open }: { projectId: string; r
   const [equipmentId, setEquipmentId] = useState('')
   const [minutes, setMinutes] = useState('')
   const [note, setNote] = useState('')
+  const inputVersion = useRef(0)
+  const edited = () => { inputVersion.current += 1 }
   // The key of an unconfirmed attempt: the same input after a lost reply is sent again under it (AS3).
   const [attempt, setAttempt] = useState<{ requestId: string; input: string } | null>(null)
   // Anything but the expected shape counts as no setups rather than breaking the run page.
@@ -29,6 +31,7 @@ export function RunSetupPanel({ projectId, runId, open }: { projectId: string; r
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    const submittedVersion = inputVersion.current
     const input = JSON.stringify([chosen, minutes, note.trim()])
     const requestId = attempt?.input === input ? attempt.requestId : newRequestId()
     setAttempt({ requestId, input })
@@ -37,8 +40,10 @@ export function RunSetupPanel({ projectId, runId, open }: { projectId: string; r
       {
         onSuccess: () => {
           setAttempt(null)
-          setMinutes('')
-          setNote('')
+          if (inputVersion.current === submittedVersion) {
+            setMinutes('')
+            setNote('')
+          }
         },
         onError: (error) => {
           const status = errorStatus(error)
@@ -104,7 +109,7 @@ export function RunSetupPanel({ projectId, runId, open }: { projectId: string; r
         <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Setup equipment</span>
-            <select aria-label="Setup equipment" value={chosen} onChange={(e) => setEquipmentId(e.target.value)}>
+            <select aria-label="Setup equipment" value={chosen} onChange={(e) => { edited(); setEquipmentId(e.target.value) }}>
               <option value="">Choose equipment</option>
               {(equipmentQuery.data ?? []).map((one) => (
                 <option key={one.equipmentId} value={one.equipmentId}>{one.equipmentCode ?? one.equipmentName}</option>
@@ -113,11 +118,11 @@ export function RunSetupPanel({ projectId, runId, open }: { projectId: string; r
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Setup minutes</span>
-            <input type="number" min={1} max={1440} step={1} required value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            <input type="number" min={1} max={1440} step={1} required value={minutes} onChange={(e) => { edited(); setMinutes(e.target.value) }} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Setup note</span>
-            <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+            <input maxLength={500} value={note} onChange={(e) => { edited(); setNote(e.target.value) }} />
           </label>
           <button type="submit" disabled={record.isPending || !chosen}>
             {record.isPending ? 'Recording...' : attempt ? 'Retry setup' : 'Record setup'}
@@ -137,6 +142,8 @@ function SetupCorrectionRequest({ runId, data, equipment }: { runId: string; dat
   const [equipmentId, setEquipmentId] = useState('')
   const [minutes, setMinutes] = useState('')
   const [reason, setReason] = useState('')
+  const inputVersion = useRef(0)
+  const edited = () => { inputVersion.current += 1 }
   const lines: RunCorrectionLineRequest[] = [
     ...cancelIds.map((id) => ({ kind: 'cancel_setup' as const, targetRunSetupId: id })),
     ...(equipmentId && Number(minutes) > 0 ? [{ kind: 'add_setup' as const, equipmentId, setupMinutes: Number(minutes) }] : []),
@@ -150,7 +157,7 @@ function SetupCorrectionRequest({ runId, data, equipment }: { runId: string; dat
           <input
             type="checkbox"
             checked={cancelIds.includes(line.runSetupId)}
-            onChange={(e) => setCancelIds((ids) => (e.target.checked ? [...ids, line.runSetupId] : ids.filter((id) => id !== line.runSetupId)))}
+            onChange={(e) => { edited(); setCancelIds((ids) => (e.target.checked ? [...ids, line.runSetupId] : ids.filter((id) => id !== line.runSetupId))) }}
           />{' '}
           Cancel {line.equipmentLabel} {line.setupMinutes} min
         </label>
@@ -158,7 +165,7 @@ function SetupCorrectionRequest({ runId, data, equipment }: { runId: string; dat
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 6 }}>
         <label style={{ display: 'grid', gap: 4 }}>
           <span>Add a setup on</span>
-          <select aria-label="Correction setup equipment" value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)}>
+          <select aria-label="Correction setup equipment" value={equipmentId} onChange={(e) => { edited(); setEquipmentId(e.target.value) }}>
             <option value="">No setup to add</option>
             {equipment.map((one) => <option key={one.equipmentId} value={one.equipmentId}>{one.equipmentCode ?? one.equipmentName}</option>)}
           </select>
@@ -166,23 +173,27 @@ function SetupCorrectionRequest({ runId, data, equipment }: { runId: string; dat
         <label style={{ display: 'grid', gap: 4 }}>
           <span>Minutes</span>
           <input aria-label="Correction setup minutes" type="number" min={1} max={1440} step={1} value={minutes}
-            onChange={(e) => setMinutes(e.target.value)} />
+            onChange={(e) => { edited(); setMinutes(e.target.value) }} />
         </label>
         <label style={{ display: 'grid', gap: 4, flex: 1 }}>
           <span>Reason</span>
-          <input aria-label="Setup correction reason" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input aria-label="Setup correction reason" maxLength={500} value={reason} onChange={(e) => { edited(); setReason(e.target.value) }} />
         </label>
         <button
           type="button"
           disabled={request.isPending || lines.length === 0 || !reason.trim()}
-          onClick={() => request.mutate({ reason: reason.trim(), lines }, {
-            onSuccess: () => {
-              setCancelIds([])
-              setEquipmentId('')
-              setMinutes('')
-              setReason('')
-            },
-          })}
+          onClick={() => {
+            const submittedVersion = inputVersion.current
+            request.mutate({ reason: reason.trim(), lines }, {
+              onSuccess: () => {
+                if (inputVersion.current !== submittedVersion) return
+                setCancelIds([])
+                setEquipmentId('')
+                setMinutes('')
+                setReason('')
+              },
+            })
+          }}
         >
           Request correction
         </button>

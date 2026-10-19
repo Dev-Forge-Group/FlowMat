@@ -58,6 +58,7 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
     private final IdGenerator idGenerator;
     private final RunSetupService runSetupService;
     private final RunEquipmentTimeService runEquipmentTimeService;
+    private final RunLaborService runLaborService;
     private final ProjectMemberQuery projectMembers;
     private final NotificationCommand notifications;
 
@@ -168,7 +169,8 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
             }
         }
         productionRunService.rebuildLotGenealogy(run, formerOutputLots);
-        // Setups and running time last: they move no stock (docs/domain/equipment-setup-cost.md AS7-AS8, ER10-ER11).
+        // Setups, running time and worked time last: they move no stock (docs/domain/equipment-setup-cost.md AS7-AS8,
+        // ER10-ER11; docs/domain/worker-calendar.md LB10).
         String costNote = "Correction #" + no + ": " + reason;
         for (ProductionRunCorrectionLine line : lines) {
             if (ProductionRunCorrectionLine.CANCEL_SETUP.equals(line.getLineKind())) {
@@ -182,6 +184,11 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
                 line.setCreatedRunEquipmentTimeId(runEquipmentTimeService.addForCorrection(run,
                     line.getProductionRunCorrectionLineId(), line.getEquipmentId(), line.getRunningMinutes(), costNote, actor)
                     .getRunEquipmentTimeId());
+            } else if (ProductionRunCorrectionLine.CANCEL_LABOR.equals(line.getLineKind())) {
+                runLaborService.cancelForCorrection(run, line.getTargetRunLaborId(), costNote, actor);
+            } else if (ProductionRunCorrectionLine.ADD_LABOR.equals(line.getLineKind())) {
+                line.setCreatedRunLaborId(runLaborService.addForCorrection(run, line.getProductionRunCorrectionLineId(),
+                    line.getLaborUserId(), line.getWorkedMinutes(), line.getLaborStepId(), costNote, actor).getRunLaborId());
             }
         }
 
@@ -232,6 +239,7 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
         Set<String> voided = new HashSet<>();
         Set<String> cancelledSetups = new HashSet<>();
         Set<String> cancelledTimes = new HashSet<>();
+        Set<String> cancelledLabor = new HashSet<>();
         boolean outputSet = false;
         int lineNo = 1;
         for (RunCorrectionLineRequest request : requested) {
@@ -302,9 +310,21 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
                         request.runningMinutes()));
                     line.setRunningMinutes(request.runningMinutes());
                 }
+                case ProductionRunCorrectionLine.CANCEL_LABOR -> {
+                    String laborId = runLaborService.findCancellable(run, request.targetRunLaborId()).getRunLaborId();
+                    if (!cancelledLabor.add(laborId)) {
+                        throw new BusinessException(ErrorCode.BAD_REQUEST, "The same worked time is cancelled twice.");
+                    }
+                    line.setTargetRunLaborId(laborId);
+                }
+                case ProductionRunCorrectionLine.ADD_LABOR -> {
+                    line.setLaborUserId(runLaborService.requireCorrectionLabor(run, request.userId(), request.workedMinutes()));
+                    line.setWorkedMinutes(request.workedMinutes());
+                    line.setLaborStepId(runLaborService.requireCorrectionStep(run, request.stepId()));
+                }
                 default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unknown correction kind '" + request.kind()
-                    + "'. Use void_item, add_item, set_output_qty, cancel_setup, add_setup, cancel_running_time or"
-                    + " add_running_time.");
+                    + "'. Use void_item, add_item, set_output_qty, cancel_setup, add_setup, cancel_running_time,"
+                    + " add_running_time, cancel_labor or add_labor.");
             }
             lines.add(line);
         }
@@ -435,7 +455,12 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
                     line.getCreatedRunSetupId(),
                     line.getTargetRunEquipmentTimeId(),
                     line.getRunningMinutes(),
-                    line.getCreatedRunEquipmentTimeId()))
+                    line.getCreatedRunEquipmentTimeId(),
+                    line.getTargetRunLaborId(),
+                    line.getLaborUserId(),
+                    line.getWorkedMinutes(),
+                    line.getCreatedRunLaborId(),
+                    line.getLaborStepId()))
                 .toList()
         );
     }

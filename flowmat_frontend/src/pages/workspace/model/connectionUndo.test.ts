@@ -46,6 +46,13 @@ describe('connectionUndoInput', () => {
       .toEqual({ connectionId: 'connection-1', defaultRoute: false })
   })
 
+  it('puts back what the delay counted (ADR-022)', () => {
+    expect(connectionUndoInput({ ...edge, delayBasis: 'working' }, { connectionId: 'connection-1', delayBasis: 'elapsed' }))
+      .toEqual({ connectionId: 'connection-1', delayBasis: 'working' })
+    expect(connectionUndoInput(edge, { connectionId: 'connection-1', delayBasis: 'working' }))
+      .toEqual({ connectionId: 'connection-1', delayBasis: 'elapsed' })
+  })
+
   it('restores cleared fields and the default values represented by null', () => {
     expect(connectionUndoInput(edge, {
       connectionId: edge.id,

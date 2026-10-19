@@ -4,6 +4,7 @@ import { splitInput, type SplitKind } from '../model/splitShare'
 import { lossPercentText, lossRateInput } from '../model/lossPercent'
 import type {
   CanvasEdgeViewModel,
+  DelayBasis,
   FlowRuleViewModel,
   UpdateProcessConnectionInput,
   RuleTargetInput,
@@ -41,6 +42,7 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
   const [flowRate, setFlowRate] = useState('')
   const [unit, setUnit] = useState('')
   const [delayTimeSec, setDelayTimeSec] = useState('')
+  const [delayBasis, setDelayBasis] = useState<DelayBasis>('elapsed')
   const [lossRate, setLossRate] = useState('')
   const [priority, setPriority] = useState('')
   const [conditionExpr, setConditionExpr] = useState('')
@@ -63,6 +65,7 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
     setFlowRate(edge.flowRate ?? '')
     setUnit(edge.unit ?? '')
     setDelayTimeSec(edge.delayTimeSec !== null ? String(edge.delayTimeSec) : '')
+    setDelayBasis(edge.delayBasis ?? 'elapsed')
     setLossRate(lossPercentText(edge.lossRate))
     setPriority(edge.priority !== null ? String(edge.priority) : '')
     setConditionExpr(edge.conditionExpr ?? '')
@@ -102,6 +105,7 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
       flowRate: flowRate !== '' ? Number(flowRate) : null,
       unit: unit.trim() || null,
       delayTimeSec: delayTimeSec !== '' ? Number(delayTimeSec) : null,
+      delayBasis,
       lossRate: loss.lossRate,
       priority: priority !== '' ? Number(priority) : null,
       conditionExpr: conditionExpr.trim(),
@@ -202,6 +206,17 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
             />
           </label>
         </div>
+
+        <label style={{ display: 'grid', gap: '4px' }}>
+          <span>Delay counts</span>
+          <select aria-label="Delay counts" value={delayBasis} onChange={(e) => setDelayBasis(e.target.value as DelayBasis)}>
+            <option value="elapsed">All time</option>
+            <option value="working">Working time</option>
+          </select>
+          {delayBasis === 'working' && (
+            <span className="inspector-hint">In a production run, only the time its work order's equipment and crew work counts.</span>
+          )}
+        </label>
 
         <label style={{ display: 'grid', gap: '4px' }}>
           <span>Condition expression</span>

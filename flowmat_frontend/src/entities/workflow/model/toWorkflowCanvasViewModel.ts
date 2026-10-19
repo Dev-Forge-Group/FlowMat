@@ -82,6 +82,7 @@ export function toEdgeViewModel(dto: ProcessConnectionDto): CanvasEdgeViewModel 
     flowRate: dto.flowRate !== null ? String(dto.flowRate) : null,
     unit: dto.unit,
     delayTimeSec: dto.delayTimeSec,
+    delayBasis: dto.delayBasis ?? 'elapsed',
     lossRate: dto.lossRate,
     priority: dto.priority,
     conditionExpr: dto.conditionExpr ?? null,

@@ -65,6 +65,14 @@ ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 �
 | 남은 모듈 경계 7줄 | 2026-10-18에 0줄이 됐다(2eq). 워크플로 단위 접근 검사는 workflow의 `WorkflowAccessService`에 있다 | [ADR-012](adr/ADR-012-workflow-access-boundary.md) **Accepted**(2026-10-18 사용자 결정 "Accept as recommended"): 접근 검사를 workflow로 옮긴다. 2eq 로컬 구현, 동결 목록 0줄 |
 | 근무표 이력 | 작업자의 주간 교대와 순환 근무표가 시작일이 있는 판에 묶여, 바꿔도 지난 날짜 계산이 그대로다(2er) | [ADR-013](adr/ADR-013-rota-history.md) **Accepted**(2026-10-18 사용자 결정 "Accept as recommended"): 작업자 근무표를 시작일이 있는 판으로 나눈다. 2er 로컬 구현(V93) |
 | 근무 시간에 맞춘 연결 지연 | 연결 지연은 근무와 상관없이 그대로 더한다(ADR-010) | 2026-10-18 사용자 결정(사전): 생산 실행의 단계는 작업지시 설비 달력에 맞춰 미룬다. 설비·달력이 없거나 생산에 연결되지 않은 실행은 그대로. [ADR-015](adr/ADR-015-shift-aware-delay.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2et |
+| 인력 근무에 맞춘 연결 지연 | 생산 단계의 지연은 작업지시 설비 근무에만 맞춘다(ADR-015) | 2026-10-18 사용자 지시("지금 구현된 기능과 연관된것 부터")로 골랐다. [ADR-016](adr/ADR-016-crew-aware-delay.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2eu |
+| 판을 바꾼 사유 | 근무표 판과 설비 달력 판에는 시작일만 있다(ADR-013·014) | 2026-10-18 사용자 지시("지금 구현된 기능과 연관된것 부터")로 골랐다. [ADR-017](adr/ADR-017-version-reasons.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2ev(V95) |
+| 실행 작업자 시간 | 실행에는 설비 시간만 기록했다(작업자 달력 WC10·WC16 범위 밖) | 2026-10-18 사용자 지시("지금 구현된 기능과 연관된것 부터")로 골랐다. [ADR-019](adr/ADR-019-run-labor.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2ex(V96) |
+| 끝난 실행의 작업자 시간 보정 | 끝난 실행의 작업자 시간은 바꿀 수 없었다(ADR-019 결정하지 않은 것) | [ADR-020](adr/ADR-020-labor-correction.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2ey(V97) |
+| 생산 단계의 작업자 시간 | 작업자 시간은 실행 전체에만 기록했다(ADR-019 결정하지 않은 것) | [ADR-021](adr/ADR-021-labor-step.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2ez(V98) |
+| 근무 시간으로 세는 연결 지연 | 지연은 모든 시간으로 셌다(ADR-015 결정하지 않은 것) | [ADR-022](adr/ADR-022-working-time-delay.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2fa(V99) |
+| 단계 작업자 시간의 보정과 공정별 합계 | 보정 줄은 단계를 받지 않았고, 작업지시 대비는 사람별뿐이었다(ADR-021 결정하지 않은 것) | [ADR-023](adr/ADR-023-labor-step-followups.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2fb(V100) |
+| 판의 저장 이력 | 판은 마지막 저장만 남았다(ADR-017 결정하지 않은 것) | [ADR-024](adr/ADR-024-version-save-history.md) **Accepted**(세부는 사용자 사전 위임), 로컬 구현 2fc(V101) |
 | 외부 웹훅 | 없음 | 2026-10-18 사용자 결정(사전): HMAC-SHA256 서명, 5번까지 재시도, 프로젝트 소유자만 등록, Outbox. 고를 때 ADR로 정리 |
 | 설비 달력 이력 | 설비의 주간 교대는 한 벌이라, 바꾸거나 지우면 지난 날짜 계산도 바뀐다 | [ADR-014](adr/ADR-014-equipment-calendar-history.md) **Accepted**(2026-10-18 사용자 결정 "Accept as recommended"): 설비 교대도 시작일이 있는 판으로 나눈다. 로컬 구현 2es(V94, 커밋 전) |
 | 실행 정책 편집 화면 | 2026-10-11 사용자 결정: 노드 인스펙터(구현 2di, [EP13](../domain/flow-run-execution-policy.md)) | 정해짐 — ADR-004 "결정하지 않은 것"의 이 항목은 이 결정으로 닫는다(ADR 본문은 고치지 않음) |
@@ -72,7 +80,7 @@ ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 �
 | 작업지시 순서 제안·실사 계획의 위치 잠금 | 2026-10-12 사용자 결정: 순서는 설비별 전환 최소로 제안(구현 2dq, [P13–P16](../domain/equipment-schedule.md)). 실사 계획의 위치 잠금(실사 결정 메모의 C)은 넣지 않는다 | 정해짐. 납기·부하를 함께 보는 최적화는 따로 정할 일 |
 | 승인 요청·결정 알림 | 2026-10-13 사용자 결정: BOM 제출·완료 실행 보정 요청은 소유자에게, 승인·반려는 제출·요청한 사람에게 앱 안 알림(구현 2dr, [NT8](../domain/notification.md)) | 정해짐. 구독 설정이 필요한 퍼지는 알림은 여전히 정하지 않았다 |
 | 퍼지는 알림의 구독 | 2026-10-13 사용자 결정: 각자 프로젝트마다 고른다(재고 경보, 지난 NCR 효과 확인, N일 안에 마감되는 작업지시). 구현 2dt, [NS1–NS9](../domain/notification.md) | 정해짐. 메일·Slack·남의 선택 바꾸기는 정하지 않았다 |
-| 다른 도메인 Entity import 금지(ArchUnit Stage C) | 미적용 | Stage A·B 정리 후 |
+| 다른 도메인 Entity import 금지(ArchUnit Stage C) | 미적용. 2026-10-18 조사: 37곳, 20파일 | [ADR-018](adr/ADR-018-entity-boundary.md) **Proposed**(조사·설계만, 이번 주 사전 결정). 방식·순서·시점은 사용자 결정 |
 | Domain Event 발행 방식과 Outbox | 없음 | 첫 비동기 외부 연동 때(원문 Phase 7) |
 | 편집 협업 충돌 모델(문서 단위 409 / 요소 patch / CRDT) | 문서 단위 409 | 사용자 결정(2026-09-24 D1, [C5 비교](../archive/2026-09-handoff/reports/C-collab-model-comparison.md)) |
 | 권한 매트릭스 확정 | 초안 | 사용자 결정(2026-09-24 D3, [C4 초안](../archive/2026-09-handoff/reports/C-permission-matrix.md)). 조직 ADR과 함께 보는 것이 좋다 |

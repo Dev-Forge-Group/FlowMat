@@ -3,9 +3,12 @@ package org.myweb.flowmat.domain.flowrun.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStepCompleteRequest;
 import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStepFailRequest;
@@ -13,7 +16,9 @@ import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunStepResponse;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunStep;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
+import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunEvent;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepAttempt;
+import org.myweb.flowmat.domain.flowrun.repository.FlowRunEventRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
@@ -35,6 +40,7 @@ public class LinkedRunStepService implements LinkedRunSteps {
 
     private final FlowRunRepository runRepository;
     private final FlowRunStepAttemptRepository attemptRepository;
+    private final FlowRunEventRepository eventRepository;
     private final FlowRunStepService stepService;
     private final WorkflowProductionQuery workflowQuery;
     private final ProjectAccessService accessService;
@@ -48,28 +54,30 @@ public class LinkedRunStepService implements LinkedRunSteps {
             return List.of();
         }
         Nodes nodes = nodes(run);
-        return stepService.list(run.getFlowRunId()).stream().map(step -> view(step, nodes)).toList();
+        Map<String, LinkedRunStep.Held> held = held(run.getFlowRunId());
+        return stepService.list(run.getFlowRunId()).stream().map(step -> view(step, nodes, held.get(step.stepId()))).toList();
     }
 
     @Override
     @Transactional
     public LinkedRunStep start(String productionRunId, String stepId) {
         FlowRun run = writable(productionRunId);
-        return view(stepService.start(run, stepId), nodes(run));
+        return view(stepService.start(run, stepId), nodes(run), heldOf(stepId));
     }
 
     @Override
     @Transactional
     public LinkedRunStep complete(String productionRunId, String stepId, JsonNode output) {
         FlowRun run = writable(productionRunId);
-        return view(stepService.complete(run, stepId, new FlowRunStepCompleteRequest(output, null)), nodes(run));
+        return view(stepService.complete(run, stepId, new FlowRunStepCompleteRequest(output, null)), nodes(run), heldOf(stepId));
     }
 
     @Override
     @Transactional
     public LinkedRunStep fail(String productionRunId, String stepId, String errorCode, String errorMessage) {
         FlowRun run = writable(productionRunId);
-        return view(stepService.fail(run, stepId, new FlowRunStepFailRequest(errorCode, errorMessage, null)), nodes(run));
+        return view(stepService.fail(run, stepId, new FlowRunStepFailRequest(errorCode, errorMessage, null)), nodes(run),
+            heldOf(stepId));
     }
 
     private FlowRun writable(String productionRunId) {
@@ -85,6 +93,24 @@ public class LinkedRunStepService implements LinkedRunSteps {
     }
 
     /** The process names of the run's revision and its graph. */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> stepsUnavailable(String workflowId, String workflowRevisionId) {
+        JsonNode snapshot = workflowQuery.findRevision(workflowRevisionId, workflowId)
+            .map(revision -> readJson(revision.snapshotJson()))
+            .orElse(null);
+        if (snapshot == null) {
+            return Optional.empty();
+        }
+        try {
+            FlowRunGraph.from(snapshot);
+            return Optional.empty();
+        } catch (BusinessException unrunnable) {
+            // The same check a starting run makes before it keeps no steps (steps_unavailable).
+            return Optional.of(unrunnable.getMessage());
+        }
+    }
+
     private record Nodes(Map<String, String> names, FlowRunGraph graph) {
     }
 
@@ -98,13 +124,55 @@ public class LinkedRunStepService implements LinkedRunSteps {
         return new Nodes(names, FlowRunGraph.from(snapshot));
     }
 
-    private LinkedRunStep view(FlowRunStepResponse step, Nodes nodes) {
+    private LinkedRunStep view(FlowRunStepResponse step, Nodes nodes, LinkedRunStep.Held held) {
         // The latest attempt's time limit and late mark (docs/domain/flow-run.md F12).
         FlowRunStepAttempt attempt = attemptRepository.findTopByStepIdOrderByAttemptNoDesc(step.stepId()).orElse(null);
         return new LinkedRunStep(step.stepId(), step.nodeId(), nodes.names().get(step.nodeId()), step.sequenceNo(), step.status(),
             nodes.graph().gateway(step.nodeId()), step.sourceStepId(), step.sourceConnectionId(), step.scheduledAt(),
             step.startedAt(), step.endedAt(), step.errorCode(), step.errorMessage(), step.inputSnapshot(), step.outputSnapshot(),
-            step.joinWaiting(), attempt == null ? null : attempt.getTimeoutAt(), attempt == null ? null : attempt.getOverdueAt());
+            step.joinWaiting(), attempt == null ? null : attempt.getTimeoutAt(), attempt == null ? null : attempt.getOverdueAt(), held);
+    }
+
+    /**
+     * For each of the run's steps, what its latest {@code step_scheduled} says it waits for past its delay (ADR-015 decision 5,
+     * ADR-016 decision 5); none when that event has no {@code readyAt}.
+     */
+    private Map<String, LinkedRunStep.Held> held(String flowRunId) {
+        Map<String, LinkedRunStep.Held> held = new HashMap<>();
+        for (FlowRunEvent event : eventRepository.findAllByFlowRunIdOrderByOccurredAtAscEventIdAsc(flowRunId)) {
+            if (!"step_scheduled".equals(event.getEventType()) || event.getStepId() == null) {
+                continue;
+            }
+            LinkedRunStep.Held one = held(event);
+            if (one == null) {
+                held.remove(event.getStepId());
+            } else {
+                held.put(event.getStepId(), one);
+            }
+        }
+        return held;
+    }
+
+    private LinkedRunStep.Held heldOf(String stepId) {
+        return eventRepository.findFirstByStepIdAndEventTypeOrderByOccurredAtDescEventIdDesc(stepId, "step_scheduled")
+            .map(this::held)
+            .orElse(null);
+    }
+
+    private LinkedRunStep.Held held(FlowRunEvent event) {
+        JsonNode payload;
+        try {
+            payload = event.getPayloadJson() == null ? objectMapper.createObjectNode() : objectMapper.readTree(event.getPayloadJson());
+        } catch (JsonProcessingException unreadable) {
+            return null;
+        }
+        String readyAt = payload.path("readyAt").asText(null);
+        if (readyAt == null) {
+            return null;
+        }
+        List<String> crew = new ArrayList<>();
+        payload.path("crew").forEach(one -> crew.add(one.asText()));
+        return new LinkedRunStep.Held(OffsetDateTime.parse(readyAt), payload.path("equipmentId").asText(null), List.copyOf(crew));
     }
 
     private JsonNode readJson(String json) {

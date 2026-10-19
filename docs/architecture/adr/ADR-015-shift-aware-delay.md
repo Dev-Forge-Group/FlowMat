@@ -47,8 +47,8 @@
 
 ## 결정하지 않은 것
 
-- 작업자 달력(필요한 사람, crew)까지 함께 맞출지
-- 지연 시간 자체를 근무 시간으로만 셀지(지금은 달력 시간)
+- 작업자 달력(필요한 사람, crew)까지 함께 맞출지. [ADR-016](ADR-016-crew-aware-delay.md)에서 정했다(2026-10-18)
+- 지연 시간 자체를 근무 시간으로만 셀지(지금은 달력 시간). [ADR-022](ADR-022-working-time-delay.md)에서 연결마다 고르게 했다(2026-10-19)
 - 이미 정한 `scheduledAt`을 달력이 바뀔 때 다시 계산할지
 
 ## 결과
@@ -62,7 +62,7 @@
 
 ## 구현 메모 (2026-10-18, 2et)
 
-- catalog 공개 API `EquipmentWorkingTimeQuery.nextWorkingTime`(`EquipmentScheduleService`가 구현): 그 날짜에 달력이 없으면 그 시각 그대로, 있으면 계획 기간 제안과 같은 가용 시간(교대 − 휴일 − 정지)에서 그 시각 이후 첫 시각. 앞 7일, 31일, 366일 순으로 찾는다.
+- catalog 공개 API `EquipmentWorkingTimeQuery.workingStretches`(`EquipmentScheduleService`가 구현): 기간 안에서 단계를 시작할 수 있는 구간. 달력이 있는 날짜는 계획 기간 제안과 같은 가용 시간(교대 − 휴일 − 정지), 달력이 없는 날짜는 정지가 있어도 하루 전체다. 처음에는 한 시각의 다음 가용 시각(`nextWorkingTime`)을 주었으나, ADR-016의 인력 교차에 맞게 2026-10-18에 구간으로 바꿨다.
 - flowrun 공개 API `LinkedRunWorkingTime`을 production의 `ProductionRunWorkingTime`이 구현한다(생산 실행 → 작업지시 → 설비). `FlowRunRouter`가 일 단계를 만들 때 묻고, 미뤘으면 `step_scheduled`에 `readyAt`·`equipmentId`를 더한다.
 - 시작 확인(결정 6): `FlowRunStepService.start`가 예정 시각 전이면 `FlowRunRouter.mayStartEarly`에 묻는다. 그 단계의 마지막 `step_scheduled`에 `readyAt`이 있고, 그 시각이 지났고, 지금 설비가 가용 시간이면 시작한다.
 - 화면: Flow Run 단계 줄은 `· after a 2 h delay, then the equipment's next working time`, 생산 실행의 Process steps는 아직 시작할 수 없는 계획 단계에 `· from <날짜 시각>`을 보인다.

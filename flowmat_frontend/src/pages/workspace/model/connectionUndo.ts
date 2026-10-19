@@ -16,6 +16,7 @@ export function connectionUndoInput(
   }
   if (input.unit !== undefined) previous.unit = edge.unit
   if (input.delayTimeSec !== undefined) previous.delayTimeSec = edge.delayTimeSec
+  if (input.delayBasis !== undefined) previous.delayBasis = edge.delayBasis ?? 'elapsed'
   if (input.lossRate !== undefined) previous.lossRate = edge.lossRate
   if (input.priority !== undefined) previous.priority = edge.priority
   if (input.conditionExpr !== undefined) previous.conditionExpr = edge.conditionExpr ?? ''

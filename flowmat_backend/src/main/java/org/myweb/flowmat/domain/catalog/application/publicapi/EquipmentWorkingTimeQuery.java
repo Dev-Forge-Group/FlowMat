@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.catalog.application.publicapi;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -11,9 +12,10 @@ import java.util.Optional;
 public interface EquipmentWorkingTimeQuery {
 
     /**
-     * The first moment at or after {@code at} in the equipment's available time: its shifts less holidays and downtime, each
-     * date with its own calendar version. {@code at} itself when that date has no calendar, so the equipment runs around
-     * the clock. Empty when the equipment is gone or the 366 days from {@code at} hold no available time.
+     * When a delayed step may start on the equipment in [from, to), earliest first and none overlapping: on dates with a
+     * calendar its available time (shifts less holidays and downtime, each date with its own calendar version), and the whole
+     * of each date without one, which runs around the clock, downtime or not (docs/architecture/adr/ADR-015-shift-aware-delay.md
+     * decisions 2 and 4). Empty when the equipment is gone. The caller keeps the window at most 366 days long.
      */
-    Optional<OffsetDateTime> nextWorkingTime(String equipmentId, OffsetDateTime at);
+    Optional<List<EquipmentSlot>> workingStretches(String equipmentId, OffsetDateTime from, OffsetDateTime to);
 }

@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
@@ -23,7 +24,6 @@ import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccessView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -261,7 +261,8 @@ public class FlowRunService {
             return null;
         }
         try {
-            return objectMapper.readTree(value);
+            // Decimals stay exact, as conditions and totals compare them.
+            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored flow run payload is invalid.", exception);
         }

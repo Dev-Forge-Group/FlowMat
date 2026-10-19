@@ -259,6 +259,27 @@ class JoinGatewayAcceptanceIntegrationTest extends IntegrationTestSupport {
         assertEquals(0, events(run, "join_arrived").size());
     }
 
+    @Test
+    void largeFractionRetainsItsValueInConditionAndReceivedSnapshot() throws Exception {
+        Graph g = new Graph(); g.node("A", "process"); g.node("B", "process");
+        g.link("A", "B", Map.of("conditionExpr", "quantity = 999999999999999.9999"));
+        String run = g.start();
+        complete(run, g, "A", Map.of("quantity", new java.math.BigDecimal("999999999999999.9999"), "unit", "kg"));
+        assertEquals(1, forNode(steps(run), g.id("B")).size(), "The exact quantity must match the condition");
+        assertEquals(0, new java.math.BigDecimal("999999999999999.9999").compareTo(
+            one(run, g, "B").path("inputSnapshot").path("quantity").decimalValue()));
+    }
+
+    @Test
+    void largeFractionAndSmallArrivalRetainTheExactJoinedTotal() throws Exception {
+        Graph g = diamond(null, null); String run = g.start();
+        complete(run, g, "A", Map.of());
+        complete(run, g, "B", Map.of("quantity", new java.math.BigDecimal("999999999999999.9998"), "unit", "kg"));
+        complete(run, g, "C", Map.of("quantity", new java.math.BigDecimal("0.0001"), "unit", "kg"));
+        assertEquals(0, new java.math.BigDecimal("999999999999999.9999").compareTo(
+            one(run, g, "J").path("outputSnapshot").path("quantity").decimalValue()));
+    }
+
     private Graph diamond(String cPolicy, Integer capacity) throws Exception {
         Graph g = new Graph(); for (String name : List.of("A", "B", "C", "End")) g.node(name, "process"); g.node("J", "join");
         g.link("A", "B"); g.link("A", "C", cPolicy == null ? Map.of() : Map.of("failurePolicy", cPolicy));
@@ -329,7 +350,7 @@ class JoinGatewayAcceptanceIntegrationTest extends IntegrationTestSupport {
     private JsonNode data(MockHttpServletRequestBuilder request) throws Exception { return accepted(call(request)); }
     private JsonNode accepted(ResultActions response) throws Exception {
         var http = response.andReturn().getResponse();
-        JsonNode envelope = mapper.readTree(http.getContentAsString());
+        JsonNode envelope = mapper.reader().with(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(http.getContentAsString());
         assertEquals(200, http.getStatus(), envelope.path("message").asText());
         return envelope.path("data");
     }

@@ -35,7 +35,9 @@ public record ProcessConnectionCreateRequest(
     @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean defaultRoute,
     /** A Split gateway's share on this connection (ADR-008): share (a percent), fixed or rest; none when left out. */
     String splitKind,
-    BigDecimal splitValue
+    BigDecimal splitValue,
+    /** elapsed (when left out) or working: what the delay counts in production runs (ADR-022). */
+    String delayBasis
 ) {
     public static final class PriorityDeserializer extends JsonDeserializer<Integer> {
         @Override

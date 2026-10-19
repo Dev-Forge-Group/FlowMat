@@ -47,9 +47,15 @@ test('a connection takes its loss as a percent and sends a fraction', async ({ p
   await page.goto('/projects/prj-e2e/workflows/wf-loss')
   await expect(page.locator('.react-flow__edge')).toHaveCount(1, { timeout: 15_000 })
   // A quarter of the way along: the edge's Delete and Insert buttons sit at its middle.
-  const box = await page.locator('.react-flow__edge[data-id="conn-pipe"] .react-flow__edge-interaction').boundingBox()
-  expect(box).not.toBeNull()
-  await page.mouse.click(box!.x + box!.width / 4, box!.y + box!.height / 2)
+  await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
+  const edgePath = page.locator('.react-flow__edge[data-id="conn-pipe"] .react-flow__edge-interaction')
+  await expect(edgePath).toBeAttached()
+  const point = await edgePath.evaluate((element) => {
+    const path = element as SVGPathElement
+    const point = path.getPointAtLength(path.getTotalLength() / 4).matrixTransform(path.getScreenCTM()!)
+    return { x: point.x, y: point.y }
+  })
+  await page.mouse.click(point.x, point.y)
 
   const loss = page.getByRole('spinbutton', { name: 'Loss %' })
   await expect(loss).toHaveValue('2')

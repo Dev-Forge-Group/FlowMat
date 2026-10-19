@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.flowrun.application.publicapi;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The process steps of production runs, for the production run API (docs/architecture/adr/ADR-011-production-steps.md
@@ -19,4 +20,11 @@ public interface LinkedRunSteps {
     LinkedRunStep complete(String productionRunId, String stepId, JsonNode output);
 
     LinkedRunStep fail(String productionRunId, String stepId, String errorCode, String errorMessage);
+
+    /**
+     * Why runs on this revision would start without process steps, as a revision that cannot run as a graph does (no
+     * processes, a cycle); empty when they would have them or there is no such revision. For readiness before a run starts
+     * (docs/domain/work-order-readiness.md).
+     */
+    Optional<String> stepsUnavailable(String workflowId, String workflowRevisionId);
 }

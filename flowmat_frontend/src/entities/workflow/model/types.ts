@@ -71,6 +71,8 @@ export interface CanvasEdgeViewModel {
   flowRate: string | null
   unit: string | null
   delayTimeSec: number | null
+  /** What the delay counts in production runs (ADR-022). */
+  delayBasis?: DelayBasis
   lossRate: number | null
   priority: number | null
   conditionExpr: string | null
@@ -84,6 +86,9 @@ export interface CanvasEdgeViewModel {
   version: number
   versionNonce: number
 }
+
+/** All time, or only the work order's working time in production runs (docs/architecture/adr/ADR-022-working-time-delay.md). */
+export type DelayBasis = 'elapsed' | 'working'
 
 export type CanvasAnnotationType = 'shape' | 'freehand' | 'text'
 export type CanvasAnnotationShapeKind = 'rectangle' | 'ellipse' | 'diamond'
@@ -175,6 +180,7 @@ export interface UpdateProcessConnectionInput {
   flowRate?: number | null
   unit?: string | null
   delayTimeSec?: number | null
+  delayBasis?: DelayBasis
   lossRate?: number | null
   priority?: number | null
   conditionExpr?: string | null

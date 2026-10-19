@@ -21,6 +21,7 @@ import { WorkOrderReadiness } from './WorkOrderReadiness'
 import { WorkOrderWasteEstimate } from './WorkOrderWasteEstimate'
 import { WorkOrderSetupComparison } from './WorkOrderSetupComparison'
 import { WorkOrderRunningComparison } from './WorkOrderRunningComparison'
+import { WorkOrderLaborComparison } from './WorkOrderLaborComparison'
 import { plannedSupply } from '../model/readinessModel'
 import { WorkOrderEquipmentPicker } from './WorkOrderEquipmentPicker'
 import { WorkOrderCrewPicker } from './WorkOrderCrewPicker'
@@ -412,6 +413,7 @@ export function WorkOrdersPanel({
                         <WorkOrderWasteEstimate workOrderId={order.workOrderId} />
                         <WorkOrderSetupComparison workOrderId={order.workOrderId} />
                         <WorkOrderRunningComparison workOrderId={order.workOrderId} />
+                        <WorkOrderLaborComparison workOrderId={order.workOrderId} />
                       </td>
                     </tr>
                   )}

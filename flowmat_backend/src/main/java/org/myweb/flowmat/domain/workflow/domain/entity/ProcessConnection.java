@@ -37,6 +37,8 @@ public class ProcessConnection extends CreatedUpdatedAuditEntity {
     private String failurePolicy;
     private String unit;
     private BigDecimal delayTimeSec;
+    /** elapsed counts all time, working only the work order's working time in production runs (ADR-022, V99). */
+    private String delayBasis = "elapsed";
     private BigDecimal lossRate;
     private Integer priority;
     /** Y on an Exclusive gateway's default connection (ADR-006 decision 3, V85). */

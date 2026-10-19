@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useEquipmentQuery } from '../../../entities/catalog/api/useEquipment'
 import {
   useCancelRunEquipmentTimeMutation, useRecordRunEquipmentTimeMutation, useRunEquipmentTimeQuery, type RunEquipmentTime,
@@ -23,6 +23,8 @@ export function RunEquipmentTimePanel({ projectId, runId, open }: { projectId: s
   // Null until typed: the field shows the suggestion, which follows the run as it goes on.
   const [minutes, setMinutes] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  const inputVersion = useRef(0)
+  const edited = () => { inputVersion.current += 1 }
   // The key of an unconfirmed attempt: the same input after a lost reply is sent again under it (ER2).
   const [attempt, setAttempt] = useState<{ requestId: string; input: string } | null>(null)
   // Anything but the expected shape counts as no running time rather than breaking the run page.
@@ -32,6 +34,7 @@ export function RunEquipmentTimePanel({ projectId, runId, open }: { projectId: s
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    const submittedVersion = inputVersion.current
     const input = JSON.stringify([chosen, shownMinutes, note.trim()])
     const requestId = attempt?.input === input ? attempt.requestId : newRequestId()
     setAttempt({ requestId, input })
@@ -40,8 +43,10 @@ export function RunEquipmentTimePanel({ projectId, runId, open }: { projectId: s
       {
         onSuccess: () => {
           setAttempt(null)
-          setMinutes(null)
-          setNote('')
+          if (inputVersion.current === submittedVersion) {
+            setMinutes(null)
+            setNote('')
+          }
         },
         onError: (error) => {
           const status = errorStatus(error)
@@ -108,7 +113,7 @@ export function RunEquipmentTimePanel({ projectId, runId, open }: { projectId: s
         <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Running equipment</span>
-            <select aria-label="Running equipment" value={chosen} onChange={(e) => setEquipmentId(e.target.value)}>
+            <select aria-label="Running equipment" value={chosen} onChange={(e) => { edited(); setEquipmentId(e.target.value) }}>
               <option value="">Choose equipment</option>
               {(equipmentQuery.data ?? []).map((one) => (
                 <option key={one.equipmentId} value={one.equipmentId}>{one.equipmentCode ?? one.equipmentName}</option>
@@ -117,11 +122,11 @@ export function RunEquipmentTimePanel({ projectId, runId, open }: { projectId: s
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Running minutes</span>
-            <input type="number" min={1} max={10080} step={1} required value={shownMinutes} onChange={(e) => setMinutes(e.target.value)} />
+            <input type="number" min={1} max={10080} step={1} required value={shownMinutes} onChange={(e) => { edited(); setMinutes(e.target.value) }} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Running note</span>
-            <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+            <input maxLength={500} value={note} onChange={(e) => { edited(); setNote(e.target.value) }} />
           </label>
           <button type="submit" disabled={record.isPending || !chosen || !shownMinutes}>
             {record.isPending ? 'Recording...' : attempt ? 'Retry running time' : 'Record running time'}
@@ -154,6 +159,8 @@ function RunningTimeCorrectionRequest({ runId, data, equipment }: {
   const [equipmentId, setEquipmentId] = useState<string | null>(null)
   const [minutes, setMinutes] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+  const inputVersion = useRef(0)
+  const edited = () => { inputVersion.current += 1 }
   const chosen = equipmentId ?? data.defaultEquipmentId ?? ''
   const shownMinutes = minutes ?? (data.suggestedMinutes != null ? String(data.suggestedMinutes) : '')
   const lines: RunCorrectionLineRequest[] = [
@@ -171,9 +178,9 @@ function RunningTimeCorrectionRequest({ runId, data, equipment }: {
           <input
             type="checkbox"
             checked={cancelIds.includes(line.runEquipmentTimeId)}
-            onChange={(e) => setCancelIds((ids) => (e.target.checked
+            onChange={(e) => { edited(); setCancelIds((ids) => (e.target.checked
               ? [...ids, line.runEquipmentTimeId]
-              : ids.filter((id) => id !== line.runEquipmentTimeId)))}
+              : ids.filter((id) => id !== line.runEquipmentTimeId))) }}
           />{' '}
           Cancel {line.equipmentLabel} {line.runningMinutes} min
         </label>
@@ -181,7 +188,7 @@ function RunningTimeCorrectionRequest({ runId, data, equipment }: {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 6 }}>
         <label style={{ display: 'grid', gap: 4 }}>
           <span>Add running time on</span>
-          <select aria-label="Correction running equipment" value={chosen} onChange={(e) => setEquipmentId(e.target.value)}>
+          <select aria-label="Correction running equipment" value={chosen} onChange={(e) => { edited(); setEquipmentId(e.target.value) }}>
             <option value="">No running time to add</option>
             {equipment.map((one) => <option key={one.equipmentId} value={one.equipmentId}>{one.equipmentCode ?? one.equipmentName}</option>)}
           </select>
@@ -189,23 +196,27 @@ function RunningTimeCorrectionRequest({ runId, data, equipment }: {
         <label style={{ display: 'grid', gap: 4 }}>
           <span>Minutes</span>
           <input aria-label="Correction running minutes" type="number" min={1} max={10080} step={1} value={shownMinutes}
-            onChange={(e) => setMinutes(e.target.value)} />
+            onChange={(e) => { edited(); setMinutes(e.target.value) }} />
         </label>
         <label style={{ display: 'grid', gap: 4, flex: 1 }}>
           <span>Reason</span>
-          <input aria-label="Running time correction reason" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input aria-label="Running time correction reason" maxLength={500} value={reason} onChange={(e) => { edited(); setReason(e.target.value) }} />
         </label>
         <button
           type="button"
           disabled={request.isPending || lines.length === 0 || !reason.trim()}
-          onClick={() => request.mutate({ reason: reason.trim(), lines }, {
-            onSuccess: () => {
-              setCancelIds([])
-              setEquipmentId(null)
-              setMinutes(null)
-              setReason('')
-            },
-          })}
+          onClick={() => {
+            const submittedVersion = inputVersion.current
+            request.mutate({ reason: reason.trim(), lines }, {
+              onSuccess: () => {
+                if (inputVersion.current !== submittedVersion) return
+                setCancelIds([])
+                setEquipmentId(null)
+                setMinutes(null)
+                setReason('')
+              },
+            })
+          }}
         >
           Request correction
         </button>

@@ -22,6 +22,8 @@ public class EquipmentSchedule {
     private String scheduleId;
     private String equipmentId;
     private LocalDate effectiveFrom;
+    /** Why this version was saved, at most 200 characters; none for versions before V95 (ADR-017). */
+    private String reason;
     private String updatedBy;
     private OffsetDateTime updatedAt;
 }

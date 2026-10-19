@@ -442,6 +442,33 @@ class EquipmentScheduleIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.message").value("None of the dates fall on the chosen days of the week."));
     }
 
+    @Test
+    void daysOfTheWeekAreWholeNumbers() throws Exception {
+        String press = equipment("WHOLE-" + tag(), 10);
+        // 1.5 used to be read as 1 and saved as Monday (error agent report, 2026-10-18).
+        call(put("/equipments/" + press + "/calendar"), "{\"shiftStart\":\"09:00\",\"shiftEnd\":\"17:00\",\"workDays\":[1.5]}")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("workDays are ISO days of the week, 1 (Monday) to 7 (Sunday)."));
+        call(put("/equipments/" + press + "/calendar"),
+                "{\"shifts\":[{\"shiftStart\":\"09:00\",\"shiftEnd\":\"17:00\",\"workDays\":[6.5]}]}")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("workDays are ISO days of the week, 1 (Monday) to 7 (Sunday)."));
+        call(put("/equipments/" + press + "/days/2031-05-05"), "{\"shifts\":[],\"throughDate\":\"2031-05-18\",\"weekDays\":[7.5]}")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("weekDays are 1 (Monday) to 7 (Sunday)."));
+        call(put("/equipments/" + press + "/calendar"), "{\"shiftStart\":\"09:00\"")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value(containsString("as JSON")));
+        // Exact numbers and the integer strings the API took before still choose their day; nothing above was saved.
+        call(put("/equipments/" + press + "/calendar"), "{\"shiftStart\":\"09:00\",\"shiftEnd\":\"17:00\",\"workDays\":[1.0,\"7\"]}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.calendar.shifts.length()").value(1))
+            .andExpect(jsonPath("$.data.calendar.shifts[0].workDays.length()").value(2))
+            .andExpect(jsonPath("$.data.calendar.shifts[0].workDays[0]").value(1))
+            .andExpect(jsonPath("$.data.calendar.shifts[0].workDays[1]").value(7))
+            .andExpect(jsonPath("$.data.days.length()").value(0));
+    }
+
     private static Map<String, Object> dayShift(String start, String end) {
         return Map.of("shiftStart", start, "shiftEnd", end);
     }

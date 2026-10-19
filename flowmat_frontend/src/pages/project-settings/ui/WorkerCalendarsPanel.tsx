@@ -4,7 +4,7 @@ import { useProjectTimeZone } from '../../../entities/project/api/useProjectTime
 import {
   fetchWorkerSchedule, useAddWorkerDayOffMutation, useCopyWorkerDaysMutation, useCopyWorkerShiftsMutation, useRemoveWorkerDayMutation,
   useRemoveWorkerDayOffMutation, useRemoveWorkerScheduleMutation, useSetWorkerDayMutation,
-  useSetWorkerShiftsMutation, useWorkerCalendarsQuery,
+  useSetWorkerShiftsMutation, useWorkerCalendarsQuery, useWorkerScheduleHistoryQuery,
   type WorkerCalendarDto, type WorkerScheduleLineDto, type WorkerShiftInput,
 } from '../../../entities/workforce/api/useWorkerCalendars'
 import { errorMessage } from '../../../shared/lib/errorMessage'
@@ -14,6 +14,7 @@ import {
 } from '../model/workerCalendarModel'
 import { dateInputValue, weekStart } from '../../inventory/model/equipmentLoadModel'
 import { EMPTY_DAY_FORM, copyableDays, dayPayload, nextDayShift, type DayForm } from '../../inventory/model/equipmentScheduleModel'
+import { workerHistoryText } from '../../inventory/model/versionHistoryModel'
 import { WorkerLoadBoard } from './WorkerLoadBoard'
 
 /**
@@ -79,6 +80,8 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
   const { firstDay, lastDay, reason } = dayOff
   // Empty is today; a later date saves the shifts as the version from then (ADR-013).
   const [startsOn, setStartsOn] = useState('')
+  // Why the version is saved, sent as its reason (ADR-017).
+  const [note, setNote] = useState('')
   const savedFrom = setShifts.variables?.effectiveFrom
 
   function update(index: number, patch: Partial<ShiftRow>) {
@@ -99,7 +102,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
     const shifts: WorkerShiftInput[] = rows.map((row) => ({ shiftStart: row.shiftStart, shiftEnd: row.shiftEnd, workDays: row.workDays,
       ...(inRota ? { rotaWeek: row.rotaWeek } : {}) }))
     setShifts.mutate({ userId: worker.userId, shifts, rota: inRota ? { weeks: rotaWeeks, startsOn: rotaStart } : null,
-      ...(startsOn ? { effectiveFrom: startsOn } : {}) })
+      ...(startsOn ? { effectiveFrom: startsOn } : {}), ...(note.trim() ? { reason: note.trim() } : {}) })
   }
 
   /** Loads a version that has not started into the form, to change it (ADR-013). */
@@ -110,6 +113,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
       setRotaWeeks(version.rota?.weeks ?? 1)
       setRotaStart(version.rota?.startsOn ?? '')
       setStartsOn(line.effectiveFrom ?? '')
+      setNote(version.reason ?? '')
     }, (error: unknown) => setRotaIssue(errorMessage(error, 'Failed to load the version.')))
   }
 
@@ -134,6 +138,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
           : <ul>{worker.shifts.map((shift) => <li key={shift.shiftId}>{rotaShiftText(shift, worker.rota)}</li>)}</ul>}
         {worker.rota && <p>{rotaText(worker.rota)}</p>}
         <ScheduleVersions projectId={projectId} worker={worker} today={today} />
+        <ScheduleHistory projectId={projectId} userId={worker.userId} />
         {worker.daysOff.length > 0 && <ul>{worker.daysOff.map((off) => <li key={off.dayOffId}>Off {dayOffText(off)}</li>)}</ul>}
         {(worker.days ?? []).length > 0 && <ul>{(worker.days ?? []).map((day) => <li key={day.date}>{workerDayText(day)}</li>)}</ul>}
         <p className="inspector-hint">Only the project owner or {worker.userId} can change this calendar.</p>
@@ -178,6 +183,8 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
         </button>
         <label>Starts on <input aria-label="Shifts start on" type="date" min={today} value={startsOn}
           onChange={(event) => setStartsOn(event.target.value)} /></label>
+        <label>Note <input aria-label="Shift version note" maxLength={200} value={note}
+          onChange={(event) => setNote(event.target.value)} /></label>
         <button type="button" onClick={save} disabled={setShifts.isPending}>{setShifts.isPending ? 'Saving...' : 'Save shifts'}</button>
       </div>
       <span className="inspector-hint">Leave Starts on empty for today. Earlier dates keep the shifts they had.</span>
@@ -187,6 +194,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
         ? `Shifts saved from ${savedFrom}; until then the current shifts stay.`
         : `Shifts saved: ${weeklyText(setShifts.data)}.`}</p>}
       <ScheduleVersions projectId={projectId} worker={worker} today={today} onEdit={edit} />
+      <ScheduleHistory projectId={projectId} userId={worker.userId} />
 
       <div>
         <strong>Days off</strong>
@@ -300,7 +308,7 @@ function ScheduleVersions({ projectId, worker, today, onEdit }: {
       <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
         {lines.map((line) => (
           <li key={line.scheduleId}>
-            {scheduleText(line, today)}
+            {scheduleText(line, today)}{line.reason ? ` · ${line.reason}` : ''}
             {onEdit && scheduleUpcoming(line, today) && <>
               {' '}<button type="button" aria-label={`Edit version from ${line.effectiveFrom}`} onClick={() => onEdit(line)}>Edit</button>
               {' '}<button type="button" aria-label={`Delete version from ${line.effectiveFrom}`} disabled={remove.isPending}
@@ -311,6 +319,28 @@ function ScheduleVersions({ projectId, worker, today, onEdit }: {
       </ul>
       {remove.isError && <p role="alert">{errorMessage(remove.error, 'Failed to delete the version.')}</p>}
     </div>
+  )
+}
+
+/**
+ * Every save and removal of the worker's versions with what they held (docs/domain/worker-calendar.md WC64), loaded when
+ * opened.
+ */
+function ScheduleHistory({ projectId, userId }: { projectId: string; userId: string }) {
+  const [open, setOpen] = useState(false)
+  const history = useWorkerScheduleHistoryQuery(projectId, userId, open)
+  const entries = Array.isArray(history.data) ? history.data : []
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>Version history</summary>
+      {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load the version history.')}</p>}
+      {open && history.isSuccess && entries.length === 0 && <p className="inspector-hint">No saves recorded yet.</p>}
+      {entries.length > 0 && (
+        <ul aria-label="Version history" style={{ margin: '4px 0', paddingLeft: 18 }}>
+          {entries.map((entry) => <li key={entry.historyId}>{workerHistoryText(entry)}</li>)}
+        </ul>
+      )}
+    </details>
   )
 }
 

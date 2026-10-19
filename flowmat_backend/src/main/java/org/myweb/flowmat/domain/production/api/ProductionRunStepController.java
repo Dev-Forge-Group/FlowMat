@@ -8,6 +8,9 @@ import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunStepFail
 import org.myweb.flowmat.domain.production.api.dto.response.ProductionRunStepResponse;
 import org.myweb.flowmat.domain.production.application.ProductionRunStepService;
 import org.myweb.flowmat.global.response.ApiResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,5 +49,12 @@ public class ProductionRunStepController {
                                                        @PathVariable("stepId") String stepId,
                                                        @Valid @RequestBody ProductionRunStepFailRequest request) {
         return ApiResponse.ok(steps.fail(productionRunId, stepId, request));
+    }
+
+    /** A body that is not JSON, or a snapshot number past the safe limits, is the caller's mistake (500 before). */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> unreadable(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+            "outputSnapshot must be valid JSON with numbers within the safe conversion limits."));
     }
 }

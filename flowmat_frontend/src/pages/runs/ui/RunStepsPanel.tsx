@@ -1,6 +1,6 @@
 import { useRunStepActions, useRunStepsQuery } from '../../../entities/production/api/useRunSteps'
 import { errorMessage } from '../../../shared/lib/errorMessage'
-import { stepDeadline, stepQuantityText, stepStartsFrom } from '../model/runStepsModel'
+import { stepDeadline, stepQuantityText, stepStartsFrom, stepWaitsFor } from '../model/runStepsModel'
 
 /**
  * The run's process steps (docs/architecture/adr/ADR-011-production-steps.md decision 9): one line for each, with Start or
@@ -23,12 +23,14 @@ export function RunStepsPanel({ runId, open }: { runId: string; open: boolean })
           const quantity = stepQuantityText(step)
           const deadline = stepDeadline(step)
           const startsFrom = stepStartsFrom(step)
+          const waitsFor = stepWaitsFor(step)
           return (
             <li key={step.stepId}>
               <strong>{name}</strong> {step.status}
               {quantity && <span className="inspector-hint"> · {quantity}</span>}
               {startsFrom && <span className="inspector-hint">
-                {' '}· from {new Date(startsFrom).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                {' '}· from {new Date(startsFrom).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                {waitsFor && ` (${waitsFor})`}</span>}
               {deadline && <span className="inspector-hint" style={deadline.late ? { color: '#b45309' } : undefined}>
                 {' '}· {deadline.late ? 'late since' : 'due by'} {new Date(deadline.at).toLocaleTimeString()}</span>}
               {step.instructionRequired > 0 && <span className="inspector-hint">

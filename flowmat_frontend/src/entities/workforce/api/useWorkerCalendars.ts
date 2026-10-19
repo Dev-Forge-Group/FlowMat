@@ -48,6 +48,10 @@ export interface WorkerScheduleLineDto {
   effectiveFrom: string | null
   /** The version that applies today. */
   current: boolean
+  /** Why it was saved, and by whom when (docs/architecture/adr/ADR-017-version-reasons.md). */
+  reason?: string | null
+  updatedBy?: string | null
+  updatedAt?: string | null
 }
 
 /** One version in full (docs/architecture/adr/ADR-013-rota-history.md). */
@@ -97,6 +101,31 @@ export function useWorkerCalendarsQuery(projectId: string) {
   })
 }
 
+/** One save or removal of a worker's schedule version, with what it held then (docs/domain/worker-calendar.md WC63). */
+export interface WorkerScheduleHistoryDto {
+  historyId: string
+  scheduleId: string
+  /** YYYY-MM-DD; null for the version from the start. */
+  effectiveFrom: string | null
+  action: 'saved' | 'removed'
+  reason: string | null
+  shifts: { shiftStart: string; shiftEnd: string; workDays: number[]; rotaWeek: number }[]
+  rota: { weeks: number; startsOn: string } | null
+  savedBy: string
+  savedAt: string
+}
+
+/** Loaded once asked for ({@code enabled}); every calendar change refreshes it with the calendars (same key prefix). */
+export function useWorkerScheduleHistoryQuery(projectId: string, userId: string, enabled: boolean) {
+  return useQuery<WorkerScheduleHistoryDto[]>({
+    queryKey: [...key(projectId), 'history', userId],
+    enabled: enabled && Boolean(projectId) && Boolean(userId),
+    retry: false,
+    queryFn: async () => unwrapApiResponse(await httpClient.get<ApiEnvelope<WorkerScheduleHistoryDto[]>>(
+      `${base(projectId)}/${encodeURIComponent(userId)}/schedule-history`)),
+  })
+}
+
 function useRefresh(projectId: string) {
   const client = useQueryClient()
   return () => {
@@ -109,13 +138,14 @@ function useRefresh(projectId: string) {
 export function useSetWorkerShiftsMutation(projectId: string) {
   const onSuccess = useRefresh(projectId)
   return useMutation({
-    /** effectiveFrom: the date they apply from; left out, today (ADR-013). */
-    mutationFn: async ({ userId, shifts, rota, effectiveFrom }: {
+    /** effectiveFrom: the date they apply from; left out, today (ADR-013). reason: why, at most 200 characters (ADR-017). */
+    mutationFn: async ({ userId, shifts, rota, effectiveFrom, reason }: {
       userId: string; shifts: WorkerShiftInput[]; rota?: { weeks: number; startsOn: string } | null; effectiveFrom?: string
+      reason?: string
     }) =>
       unwrapApiResponse(await httpClient.put<ApiEnvelope<WorkerCalendarDto>>(
         `${base(projectId)}/${encodeURIComponent(userId)}/shifts`,
-        { shifts, ...(rota ? { rota } : {}), ...(effectiveFrom ? { effectiveFrom } : {}) })),
+        { shifts, ...(rota ? { rota } : {}), ...(effectiveFrom ? { effectiveFrom } : {}), ...(reason ? { reason } : {}) })),
     onSuccess,
   })
 }

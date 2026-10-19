@@ -73,6 +73,7 @@ public class WorkOrderReadinessService {
     private final ProjectAccessService projectAccessService;
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
+    private final org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps linkedSteps;
 
     public WorkOrderReadinessResponse check(String workOrderId) {
         WorkOrder order = workOrderRepository.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)
@@ -96,6 +97,10 @@ public class WorkOrderReadinessService {
                 .map(revision -> new Check("workflow", OK, "Runs start on workflow revision v" + revision.revisionNo() + "."))
                 .orElseGet(() -> new Check("workflow", WARN,
                     "The workflow has no published revision; publish one so runs are fixed to a version.")));
+            // A revision that cannot run as a graph starts runs without process steps (ADR-011 decision 1).
+            workflows.latestPublishedRevision(order.getWorkflowId())
+                .flatMap(revision -> linkedSteps.stepsUnavailable(order.getWorkflowId(), revision.workflowRevisionId()))
+                .ifPresent(reason -> checks.add(new Check("steps", WARN, "Runs will start without process steps: " + reason)));
         }
 
         BigDecimal remaining = remainingQuantity(order);

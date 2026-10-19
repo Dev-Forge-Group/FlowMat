@@ -216,6 +216,7 @@ export interface WorkOrderReadinessDto {
 export type RunCorrectionStatus = 'pending_approval' | 'applied' | 'rejected'
 export type RunCorrectionKind =
   | 'void_item' | 'add_item' | 'set_output_qty' | 'cancel_setup' | 'add_setup' | 'cancel_running_time' | 'add_running_time'
+  | 'cancel_labor' | 'add_labor'
 
 export interface RunCorrectionLineDto {
   lineNo: number
@@ -238,6 +239,13 @@ export interface RunCorrectionLineDto {
   targetRunEquipmentTimeId?: string | null
   runningMinutes?: number | null
   createdRunEquipmentTimeId?: string | null
+  /** Worked-time corrections (docs/domain/worker-calendar.md LB9). */
+  targetRunLaborId?: string | null
+  userId?: string | null
+  workedMinutes?: number | null
+  createdRunLaborId?: string | null
+  /** add_labor: the process step it names (LB17). */
+  stepId?: string | null
 }
 
 /** A correction of a finished run (docs/domain/production-run-correction.md). */
@@ -265,6 +273,8 @@ export type RunCorrectionLineRequest =
   | { kind: 'add_setup'; equipmentId: string; setupMinutes: number }
   | { kind: 'cancel_running_time'; targetRunEquipmentTimeId: string }
   | { kind: 'add_running_time'; equipmentId: string; runningMinutes: number }
+  | { kind: 'cancel_labor'; targetRunLaborId: string }
+  | { kind: 'add_labor'; userId: string; workedMinutes: number; stepId?: string }
 
 export type InspectionResult = 'pass' | 'fail'
 export type DefectSeverity = 'minor' | 'major' | 'critical'
@@ -1126,6 +1136,8 @@ export interface ProcessConnectionDto {
   flowRate: number | null
   unit: string | null
   delayTimeSec: number | null
+  /** What the delay counts in production runs: all time or the work order's working time (ADR-022); older answers leave it out. */
+  delayBasis?: 'elapsed' | 'working'
   lossRate: number | null
   priority: number | null
   conditionExpr: string | null

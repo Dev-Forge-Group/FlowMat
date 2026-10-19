@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -39,7 +40,8 @@ import org.springframework.stereotype.Component;
  * divides what arrives between its connections and is passed at once. A connection's loss rate
  * (docs/architecture/adr/ADR-009-connection-loss-rate.md) takes its part on the way, and its delay
  * (docs/architecture/adr/ADR-010-connection-delay.md) schedules the next step; in a production-linked run, no earlier than the
- * work order equipment's next working time (docs/architecture/adr/ADR-015-shift-aware-delay.md). A transfer rule that refuses a gateway's output rejects
+ * next time the work order's equipment and crew work (docs/architecture/adr/ADR-015-shift-aware-delay.md,
+ * docs/architecture/adr/ADR-016-crew-aware-delay.md). A transfer rule that refuses a gateway's output rejects
  * the report that led there, as for any step (GR-04); when no report did, such as a skip, the gateway fails and the caller
  * fails the run (ADR-007 decision 9).
  */
@@ -372,8 +374,10 @@ class FlowRunRouter {
 
     /**
      * When what came along the connection is ready (docs/architecture/adr/ADR-010-connection-delay.md decisions 2-4): the
-     * source step's end, or for a gateway the time it received what it passed on, plus the connection's delay. Null when
-     * no delay applies on the way, so the step can start at once as before.
+     * source step's end, or for a gateway the time it received what it passed on, plus the connection's delay. A delay that
+     * counts working time ends once the work order's equipment and crew have worked that long
+     * (docs/architecture/adr/ADR-022-working-time-delay.md decision 2), or as an all-time delay without them. Null when no
+     * delay applies on the way, so the step can start at once as before.
      */
     OffsetDateTime readyAt(FlowRunGraph graph, FlowRunStep source, String connectionId) {
         Duration delay = graph.delay(connectionId);
@@ -382,7 +386,19 @@ class FlowRunRouter {
         if (base == null || delay == null && carried == null) {
             return null;
         }
-        return (delay == null ? base : base.plus(delay)).truncatedTo(ChronoUnit.MICROS);
+        if (delay == null) {
+            return base.truncatedTo(ChronoUnit.MICROS);
+        }
+        OffsetDateTime worked = graph.workingDelay(connectionId) ? afterWorking(source.getFlowRunId(), base, delay) : null;
+        return (worked != null ? worked : base.plus(delay)).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /** For a production-linked run, when the work order's equipment and crew have worked {@code delay} since {@code from}. */
+    private OffsetDateTime afterWorking(String runId, OffsetDateTime from, Duration delay) {
+        String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
+        return productionRunId == null ? null : workingTime.afterWorking(productionRunId, from, delay)
+            .map(end -> end.at().withOffsetSameInstant(from.getOffset()))
+            .orElse(null);
     }
 
     /** A Join's arrivals' latest ready time once a delay applies to any of them (ADR-010 decision 4); else null. */
@@ -422,16 +438,25 @@ class FlowRunRouter {
                 .put("reason", "connection_delay")
                 .put("connectionId", decision.connectionId())
                 .put("delaySeconds", graph.delaySeconds(decision.connectionId()));
+            if (graph.workingDelay(decision.connectionId())) {
+                payload.put("delayBasis", "working");
+            }
             if (held != null) {
-                // The delay ended outside the work order equipment's available time (ADR-015 decisions 2, 5).
-                payload.put("readyAt", readyAt.toString()).put("equipmentId", held.equipmentId());
+                // The delay ended outside the time the work order's equipment and crew work (ADR-015 decision 5, ADR-016 decision 5).
+                payload.put("readyAt", readyAt.toString());
+                if (held.equipmentId() != null) {
+                    payload.put("equipmentId", held.equipmentId());
+                }
+                if (!held.crew().isEmpty()) {
+                    payload.set("crew", objectMapper.valueToTree(held.crew()));
+                }
             }
             eventRecorder.record(runId, step.getStepId(), "step_scheduled", payload, actorId);
         }
         return step;
     }
 
-    /** For a production-linked run, the work order equipment's next working time when the delay ends outside it (ADR-015). */
+    /** For a production-linked run, the next time its work order's equipment and crew work, when the delay ends outside it. */
     private LinkedRunWorkingTime.WorkingStart workingStart(String runId, OffsetDateTime readyAt) {
         String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
         return productionRunId == null ? null : workingTime.workingStart(productionRunId, readyAt).orElse(null);
@@ -439,8 +464,8 @@ class FlowRunRouter {
 
     /**
      * Whether a production-linked step held for the work order equipment's next working time may start now, before its
-     * {@code scheduledAt} (docs/architecture/adr/ADR-015-shift-aware-delay.md decision 6): its delay is over and the
-     * equipment works now, as when overtime is given as that date's own shifts.
+     * {@code scheduledAt} (docs/architecture/adr/ADR-015-shift-aware-delay.md decision 6, ADR-016 decision 6): its delay is
+     * over and the equipment and crew work now, as when overtime is given as that date's own shifts.
      */
     boolean mayStartEarly(FlowRun run, FlowRunStep step, OffsetDateTime now) {
         if (run.getProductionRunId() == null) {
@@ -482,7 +507,9 @@ class FlowRunRouter {
 
     private JsonNode readJson(String value) {
         try {
-            return value == null ? objectMapper.createObjectNode() : objectMapper.readTree(value);
+            // Decimals stay exact on the way through, as conditions and Join totals compare them.
+            return value == null ? objectMapper.createObjectNode()
+                : objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Flow run step snapshot could not be read.", exception);
         }

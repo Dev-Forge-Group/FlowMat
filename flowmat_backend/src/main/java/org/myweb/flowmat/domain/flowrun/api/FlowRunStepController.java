@@ -14,6 +14,9 @@ import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunStepLineageRespo
 import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunStepResponse;
 import org.myweb.flowmat.domain.flowrun.application.FlowRunStepService;
 import org.myweb.flowmat.global.response.ApiResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -88,5 +91,12 @@ public class FlowRunStepController {
     @GetMapping("/events")
     public ApiResponse<List<FlowRunEventResponse>> events(@PathVariable String flowRunId) {
         return ApiResponse.ok(service.events(flowRunId));
+    }
+
+    /** A body that is not JSON, or a snapshot number past the safe limits, is the caller's mistake (500 before). */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> unreadable(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+            "inputSnapshot and outputSnapshot must be valid JSON with numbers within the safe conversion limits."));
     }
 }

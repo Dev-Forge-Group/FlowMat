@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import { errorMessage } from '../../../shared/lib/errorMessage'
-import { delayText } from '../model/delayText'
+import { delayText, heldText } from '../model/delayText'
 import type { ApiEnvelope, WorkflowDto, WorkflowRevisionDetailDto, WorkflowRevisionDto } from '../../../shared/types/api'
 
 type FlowRun = {
@@ -99,10 +99,10 @@ type NodeOption = { processId: string; processName: string }
 function delayLine(step: FlowRunStep, events: FlowRunEvent[]): string {
   const scheduled = events.filter((event) => event.eventType === 'step_scheduled' && event.stepId === step.stepId)
   const latest = scheduled[scheduled.length - 1]
-  const payload = latest?.payload as { reason?: unknown; delaySeconds?: unknown; readyAt?: unknown } | null | undefined
+  const payload = latest?.payload as
+    { reason?: unknown; delaySeconds?: unknown; readyAt?: unknown; equipmentId?: unknown; crew?: unknown } | null | undefined
   if (payload?.reason !== 'connection_delay' || typeof payload.delaySeconds !== 'number' || payload.delaySeconds <= 0) return ''
-  const held = typeof payload.readyAt === 'string' ? ", then the equipment's next working time" : ''
-  return ` · after a ${delayText(payload.delaySeconds)} delay${held}`
+  return ` · after a ${delayText(payload.delaySeconds)} delay${heldText(payload)}`
 }
 
 type ConnectionOption = { connectionId: string; label: string; failurePolicy: string; splitKind: string | null }

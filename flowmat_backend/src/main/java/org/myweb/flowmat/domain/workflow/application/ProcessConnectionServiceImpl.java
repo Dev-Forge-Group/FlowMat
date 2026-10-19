@@ -107,6 +107,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         connection.setUnit(trimToNull(request.unit()));
         connection.setDelayTimeSec(defaultIfNull(request.delayTimeSec(), BigDecimal.ZERO));
         requireDelay(connection.getDelayTimeSec());
+        connection.setDelayBasis(request.delayBasis() == null ? ELAPSED : delayBasis(request.delayBasis()));
         connection.setLossRate(defaultIfNull(request.lossRate(), BigDecimal.ZERO));
         requireLossRate(connection.getLossRate());
         connection.setPriority(request.priority() != null ? request.priority() : 0);
@@ -123,6 +124,18 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
         ProcessConnectionResponse response = toResponse(processConnectionRepository.save(connection));
         graphSyncService.broadcast(Type.CONNECTION_CREATED, response.workflowId(), response.connectionId());
         return response;
+    }
+
+    private static final String ELAPSED = "elapsed";
+    private static final Set<String> DELAY_BASES = Set.of(ELAPSED, "working");
+
+    /** What a connection's delay counts: all time, or the work order's working time (ADR-022 decision 1). */
+    private static String delayBasis(String value) {
+        String basis = value.trim().toLowerCase(Locale.ROOT);
+        if (!DELAY_BASES.contains(basis)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "delayBasis is elapsed or working.");
+        }
+        return basis;
     }
 
     /** A connection's delay is 0 or more seconds (docs/architecture/adr/ADR-010-connection-delay.md decision 8). */
@@ -248,6 +261,9 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
             connection.setDelayTimeSec(defaultIfNull(decimalOrNull(request.delayTimeSec(), "delayTimeSec",
                 MAX_DELAY_TIME_SEC, 2, "numeric(10,2)"), BigDecimal.ZERO));
             requireDelay(connection.getDelayTimeSec());
+        }
+        if (request.delayBasis() != null) {
+            connection.setDelayBasis(delayBasis(request.delayBasis()));
         }
         if (request.lossRate() != null) {
             connection.setLossRate(defaultIfNull(decimalOrNull(request.lossRate(), "lossRate",
@@ -474,6 +490,7 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
             connection.getFlowRate(),
             connection.getUnit(),
             connection.getDelayTimeSec(),
+            connection.getDelayBasis(),
             connection.getLossRate(),
             connection.getPriority(),
             connection.getConditionExpr(),

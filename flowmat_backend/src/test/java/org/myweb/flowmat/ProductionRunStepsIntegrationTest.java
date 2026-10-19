@@ -172,6 +172,33 @@ class ProductionRunStepsIntegrationTest extends IntegrationTestSupport {
         data(post("/production-runs/" + run + "/finish"), Map.of());
     }
 
+    @Test
+    void readinessWarnsWhenRunsWouldStartWithoutProcessSteps() throws Exception {
+        // An empty workflow's published revision cannot run as a graph, so its runs keep no steps (above).
+        String empty = data(post("/workflows"), Map.of("projectId", DEMO_PROJECT, "workflowName", "Empty " + UUID.randomUUID()))
+            .path("workflowId").asText();
+        data(post("/workflows/" + empty + "/revisions"), null);
+        String bare = data(post("/work-orders"), Map.of("projectId", DEMO_PROJECT, "workflowId", empty,
+            "workOrderTitle", "No steps " + UUID.randomUUID(), "targetQuantity", 1)).path("workOrderId").asText();
+        JsonNode warned = null;
+        for (JsonNode check : data(get("/work-orders/" + bare + "/readiness"), null).path("checks")) {
+            if ("steps".equals(check.path("code").asText())) warned = check;
+        }
+        assertNotNull(warned);
+        assertEquals("warn", warned.path("status").asText());
+        assertEquals("Runs will start without process steps: Published revision has no executable graph.",
+            warned.path("message").asText());
+
+        // A workflow that runs as a graph says nothing about steps.
+        Line line = new Line();
+        String order = data(post("/work-orders"), Map.of("projectId", DEMO_PROJECT, "workflowId", line.workflow,
+            "workOrderTitle", "Steps " + UUID.randomUUID(), "targetQuantity", 1)).path("workOrderId").asText();
+        List<String> codes = new ArrayList<>();
+        data(get("/work-orders/" + order + "/readiness"), null).path("checks").forEach(check -> codes.add(check.path("code").asText()));
+        assertTrue(codes.contains("workflow"), codes.toString());
+        assertFalse(codes.contains("steps"), codes.toString());
+    }
+
     /** A published workflow Mix -> Bake in the demo project. */
     private final class Line {
         final String workflow;

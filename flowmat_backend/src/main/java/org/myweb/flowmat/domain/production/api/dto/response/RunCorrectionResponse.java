@@ -22,7 +22,7 @@ public record RunCorrectionResponse(
 
     public record Line(
         int lineNo,
-        /** void_item, add_item, set_output_qty, cancel_setup, add_setup, cancel_running_time or add_running_time. */
+        /** void_item, add_item, set_output_qty, cancel_setup, add_setup, cancel_running_time, add_running_time, cancel_labor or add_labor. */
         String kind,
         String targetRunItemId,
         String direction,
@@ -39,7 +39,14 @@ public record RunCorrectionResponse(
         String createdRunSetupId,
         String targetRunEquipmentTimeId,
         Integer runningMinutes,
-        String createdRunEquipmentTimeId
+        String createdRunEquipmentTimeId,
+        /** cancel_labor: the worked time it cancels; add_labor: who worked, their minutes and the worked time it made. */
+        String targetRunLaborId,
+        String userId,
+        Integer workedMinutes,
+        String createdRunLaborId,
+        /** add_labor: the process step it names; null for the whole run (LB17). */
+        String stepId
     ) {
     }
 }

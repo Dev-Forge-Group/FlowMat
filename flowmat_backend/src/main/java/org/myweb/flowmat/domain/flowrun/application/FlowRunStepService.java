@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -625,7 +626,8 @@ public class FlowRunStepService {
             return null;
         }
         try {
-            return objectMapper.readTree(value);
+            // Decimals stay exact, as conditions and totals compare them.
+            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored flow run step JSON is invalid.", exception);
         }

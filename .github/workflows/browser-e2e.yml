@@ -105,6 +105,20 @@ jobs:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/data-flow-browser.spec.ts --workers=1
 
+      - name: Run real worked time browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_LABOR_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/run-labor-real-api.spec.ts --workers=1 --retries=0
+
+      - name: Run real working delay browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_WORKING_DELAY_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/working-delay-real-api.spec.ts --workers=1 --retries=0
+
       - name: Run real organization browser acceptance
         working-directory: flowmat_frontend
         env:

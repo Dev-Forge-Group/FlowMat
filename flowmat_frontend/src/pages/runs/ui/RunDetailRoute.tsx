@@ -23,6 +23,7 @@ import { RunQualityPanel } from './RunQualityPanel'
 import { RunCostPanel } from './RunCostPanel'
 import { RunSetupPanel } from './RunSetupPanel'
 import { RunEquipmentTimePanel } from './RunEquipmentTimePanel'
+import { RunLaborPanel } from './RunLaborPanel'
 import { RunExpectedOutputs } from './RunExpectedOutputs'
 import { useBomRequirementsQuery } from '../../../entities/bom/api/useBoms'
 import { finishByProductNote, finishOutput } from '../../inventory/model/bomLineTypeModel'
@@ -561,6 +562,7 @@ export function RunDetailRoute() {
               <RunCostPanel runId={run.productionRunId} />
               <RunSetupPanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
               <RunEquipmentTimePanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
+              <RunLaborPanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
               <RunQualityPanel
                 projectId={projectId}
                 run={run}

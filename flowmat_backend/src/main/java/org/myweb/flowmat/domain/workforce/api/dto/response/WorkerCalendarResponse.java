@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.workforce.api.dto.response;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -37,8 +38,12 @@ public record WorkerCalendarResponse(
     public record Rota(int weeks, LocalDate startsOn, int currentWeek) {
     }
 
-    /** A version from {@code effectiveFrom} (null: from the start) until the next; {@code current} is the one of today. */
-    public record Schedule(String scheduleId, LocalDate effectiveFrom, boolean current) {
+    /**
+     * A version from {@code effectiveFrom} (null: from the start) until the next; {@code current} is the one of today. Why and
+     * by whom it was last saved (docs/architecture/adr/ADR-017-version-reasons.md).
+     */
+    public record Schedule(String scheduleId, LocalDate effectiveFrom, boolean current, String reason, String updatedBy,
+                           OffsetDateTime updatedAt) {
     }
 
     public record DayOff(String dayOffId, LocalDate firstDay, LocalDate lastDay, String reason, String createdBy) {

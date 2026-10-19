@@ -29,6 +29,7 @@
 |---|---|---|---|
 | `status` | draft(승인 필요), completed·cancelled(더 이상 실행 없음) | – | approved·in_progress |
 | `workflow` | 워크플로 미지정 | 발행된 revision 없음 | 최신 발행 revision 번호 |
+| `steps` | – | 최신 발행 revision이 그래프로 돌 수 없어(공정 없음, 순환 등) 실행이 공정 단계 없이 시작된다. 이유를 붙인다(`Runs will start without process steps: Published revision has no executable graph.`). 2026-10-19, 2fd, 실행을 시작할 때와 같은 검사([Flow Run](flow-run.md) F10) | (표시 안 함) |
 | `target` | – | 대상 품목 없음 | (표시 안 함) |
 | `quantity` | – | 목표 수량 없음, 이미 다 생산함 | 남은 수량 |
 | `bom` | BOM이 없어짐, 승인 안 됨 | BOM 없음 | 승인된 revision |
@@ -85,3 +86,4 @@
 
 - ~~실행 시작 화면(Start)에서 같은 점검을 보여 주기~~ → 위 "화면"의 실행 시작 폼(2026-10-03)
 - ~~설비·달력·용량 점검은 벤치마크 P1(capacity/calendar)이 들어오면 항목을 추가합니다.~~ → [설비 달력·정지 시간](equipment-schedule.md)으로 구현(2026-09-27, V32): `equipment`·`schedule` 항목
+- `steps`(2026-10-19, 2fd): `ProductionRunStepsIntegrationTest.readinessWarnsWhenRunsWouldStartWithoutProcessSteps` — 빈 워크플로를 발행한 작업지시의 준비 점검에 `steps` 경고(`Runs will start without process steps: Published revision has no executable graph.`), Mix → Bake 워크플로의 작업지시에는 없음. 전체 백엔드 1,724건(276클래스, 실패 0).

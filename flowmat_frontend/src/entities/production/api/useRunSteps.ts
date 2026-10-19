@@ -29,6 +29,18 @@ export interface RunStepDto {
   /** The process's required work instruction steps and how many are confirmed. */
   instructionRequired: number
   instructionDone: number
+  /**
+   * When its delay ended and whose working time it waits for, the work order's equipment and crew
+   * (docs/architecture/adr/ADR-015-shift-aware-delay.md, ADR-016); null when it was not held.
+   */
+  held?: RunStepHeldDto | null
+}
+
+export interface RunStepHeldDto {
+  readyAt: string
+  equipmentId: string | null
+  equipmentCode: string | null
+  crew: string[]
 }
 
 const stepsKey = (runId: string) => ['production-run-steps', runId]

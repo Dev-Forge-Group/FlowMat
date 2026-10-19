@@ -9,6 +9,7 @@ import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftCopyRequest
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftsRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAvailabilityResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerCalendarResponse;
+import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleResponse;
 import org.myweb.flowmat.domain.workforce.application.WorkerCalendarService;
 import org.myweb.flowmat.global.response.ApiResponse;
@@ -113,6 +114,13 @@ public class WorkerCalendarController {
                                                         @PathVariable("userId") String userId,
                                                         @PathVariable("scheduleId") String scheduleId) {
         return ApiResponse.ok(service.schedule(projectId, userId, scheduleId));
+    }
+
+    /** Every save and removal of the worker's versions, newest first (ADR-024). */
+    @GetMapping("/{userId}/schedule-history")
+    public ApiResponse<List<WorkerScheduleHistoryResponse>> scheduleHistory(@PathVariable("projectId") String projectId,
+                                                                            @PathVariable("userId") String userId) {
+        return ApiResponse.ok(service.scheduleHistory(projectId, userId));
     }
 
     /** Deletes a version that has not started yet (ADR-013). */

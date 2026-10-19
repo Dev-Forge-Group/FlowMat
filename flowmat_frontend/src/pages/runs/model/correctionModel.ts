@@ -94,6 +94,10 @@ export function describeCorrectionLine(
     const on = line.equipmentId ? ` on ${equipmentLabel ? equipmentLabel(line.equipmentId) : line.equipmentId}` : ''
     return `Add ${line.runningMinutes ?? '?'} min of running time${on}`
   }
+  if (line.kind === 'cancel_labor') return 'Cancel worked time'
+  if (line.kind === 'add_labor') {
+    return `Add ${line.workedMinutes ?? '?'} min worked by ${line.userId ?? '?'}${line.stepId ? ' on a step' : ''}`
+  }
   if (line.kind === 'void_item') {
     const target = runItems.find((item) => item.productionRunItemId === line.targetRunItemId)
     if (!target) return 'Void a recording'

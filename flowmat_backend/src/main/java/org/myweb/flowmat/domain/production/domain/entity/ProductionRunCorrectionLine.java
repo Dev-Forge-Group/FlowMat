@@ -10,7 +10,7 @@ import lombok.Setter;
 
 /**
  * One change in a run correction: void a recording, add a recording, set the run's output quantity, or cancel or add a
- * setup or running time.
+ * setup, running time or worked time.
  */
 @Getter
 @Setter
@@ -27,6 +27,9 @@ public class ProductionRunCorrectionLine {
     /** Running-time corrections (docs/domain/equipment-setup-cost.md ER10). */
     public static final String CANCEL_RUNNING_TIME = "cancel_running_time";
     public static final String ADD_RUNNING_TIME = "add_running_time";
+    /** Worked-time corrections (docs/domain/worker-calendar.md LB9). */
+    public static final String CANCEL_LABOR = "cancel_labor";
+    public static final String ADD_LABOR = "add_labor";
 
     @Id
     private String productionRunCorrectionLineId;
@@ -65,4 +68,13 @@ public class ProductionRunCorrectionLine {
     /** add_running_time: whole minutes on {@link #equipmentId}, and the running time it made once applied. */
     private Integer runningMinutes;
     private String createdRunEquipmentTimeId;
+
+    /** cancel_labor: the worked time it cancels. */
+    private String targetRunLaborId;
+    /** add_labor: who worked and their whole minutes, and the worked time it made once applied. */
+    private String laborUserId;
+    private Integer workedMinutes;
+    private String createdRunLaborId;
+    /** add_labor: the process step it was worked on; null for the whole run (LB17, V100). */
+    private String laborStepId;
 }

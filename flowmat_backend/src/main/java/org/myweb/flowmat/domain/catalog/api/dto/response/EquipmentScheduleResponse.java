@@ -65,7 +65,11 @@ public record EquipmentScheduleResponse(
     ) {
     }
 
-    /** A calendar version from {@code effectiveFrom} (null: from the start); {@code alwaysRunning} when it has no shifts. */
-    public record CalendarVersion(String scheduleId, LocalDate effectiveFrom, boolean current, boolean alwaysRunning) {
+    /**
+     * A calendar version from {@code effectiveFrom} (null: from the start); {@code alwaysRunning} when it has no shifts. Why and
+     * by whom it was last saved (docs/architecture/adr/ADR-017-version-reasons.md).
+     */
+    public record CalendarVersion(String scheduleId, LocalDate effectiveFrom, boolean current, boolean alwaysRunning, String reason,
+                                  String updatedBy, OffsetDateTime updatedAt) {
     }
 }

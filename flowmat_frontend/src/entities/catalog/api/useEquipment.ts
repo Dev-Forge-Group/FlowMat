@@ -69,6 +69,10 @@ export interface EquipmentCalendarVersionLineDto {
   /** The version that applies today. */
   current: boolean
   alwaysRunning: boolean
+  /** Why it was saved, and by whom when (docs/architecture/adr/ADR-017-version-reasons.md). */
+  reason?: string | null
+  updatedBy?: string | null
+  updatedAt?: string | null
 }
 
 /** One calendar version with its shifts, to change one that has not started (ADR-014). */
@@ -127,6 +131,8 @@ export interface EquipmentCalendarInput {
   shifts: { shiftStart: string; shiftEnd: string; workDays: number[] }[]
   /** YYYY-MM-DD, today or later. */
   effectiveFrom?: string
+  /** Why, at most 200 characters (ADR-017). */
+  reason?: string
 }
 
 export interface EquipmentDowntimeInput {
@@ -157,6 +163,31 @@ export function useEquipmentScheduleQuery(equipmentId: string) {
         await httpClient.get<ApiEnvelope<EquipmentScheduleDto>>(`/equipments/${encodeURIComponent(equipmentId)}/schedule`),
       ),
     enabled: Boolean(equipmentId),
+  })
+}
+
+/** One save or removal of an equipment calendar version, with what it held then (docs/domain/equipment-schedule.md CV10). */
+export interface EquipmentCalendarHistoryDto {
+  historyId: string
+  scheduleId: string
+  /** YYYY-MM-DD; null for the version from the start. */
+  effectiveFrom: string | null
+  action: 'saved' | 'removed'
+  reason: string | null
+  /** None means around the clock from then. */
+  shifts: { shiftStart: string; shiftEnd: string; workDays: number[] }[]
+  savedBy: string
+  savedAt: string
+}
+
+/** Loaded once asked for ({@code enabled}); every schedule change refreshes it. */
+export function useEquipmentCalendarHistoryQuery(equipmentId: string, enabled: boolean) {
+  return useQuery<EquipmentCalendarHistoryDto[]>({
+    queryKey: [...scheduleKey(equipmentId), 'history'],
+    enabled: enabled && Boolean(equipmentId),
+    retry: false,
+    queryFn: async () => unwrapApiResponse(await httpClient.get<ApiEnvelope<EquipmentCalendarHistoryDto[]>>(
+      `/equipments/${encodeURIComponent(equipmentId)}/calendar/history`)),
   })
 }
 
@@ -218,6 +249,7 @@ export function useEquipmentScheduleMutations(equipmentId: string) {
   const onSuccess = (schedule: EquipmentScheduleDto) => {
     queryClient.setQueryData(scheduleKey(equipmentId), schedule)
     void queryClient.invalidateQueries({ queryKey: [...scheduleKey(equipmentId), 'availability'] })
+    void queryClient.invalidateQueries({ queryKey: [...scheduleKey(equipmentId), 'history'] })
     void queryClient.invalidateQueries({ queryKey: ['work-order-readiness'] })
   }
   return {
@@ -228,8 +260,14 @@ export function useEquipmentScheduleMutations(equipmentId: string) {
     }),
     /** Around the clock from {@code effectiveFrom}, today when left out; earlier dates keep their shifts (ADR-014). */
     clearCalendar: useMutation({
-      mutationFn: async (effectiveFrom?: string) => unwrapApiResponse(await httpClient.delete<ApiEnvelope<EquipmentScheduleDto>>(
-        effectiveFrom ? `${base}/calendar?effectiveFrom=${encodeURIComponent(effectiveFrom)}` : `${base}/calendar`)),
+      mutationFn: async (change?: { effectiveFrom?: string; reason?: string }) => {
+        const query = new URLSearchParams()
+        if (change?.effectiveFrom) query.set('effectiveFrom', change.effectiveFrom)
+        if (change?.reason) query.set('reason', change.reason)
+        const search = query.toString()
+        return unwrapApiResponse(await httpClient.delete<ApiEnvelope<EquipmentScheduleDto>>(
+          search ? `${base}/calendar?${search}` : `${base}/calendar`))
+      },
       onSuccess,
     }),
     /** Deletes a calendar version that has not started; one that has started stays as history (ADR-014). */

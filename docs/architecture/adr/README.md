@@ -17,6 +17,15 @@
 | [ADR-013](ADR-013-rota-history.md) | 근무표 이력(적용 시작일) | **Accepted** 2026-10-18(로컬 구현 2er) | 작업자의 주간 교대와 순환 근무표를 시작일이 있는 판으로 나눠, 근무표를 바꿔도 지난 날짜 계산이 그대로이게 한다 |
 | [ADR-014](ADR-014-equipment-calendar-history.md) | 설비 달력 이력(ADR-013 후속) | **Accepted** 2026-10-18(로컬 구현 2es) | 설비의 주간 교대도 시작일이 있는 판으로 나눈다. 달력 지우기는 그날부터 항상 가동, 첫 판 전은 지금처럼 항상 가동 |
 | [ADR-015](ADR-015-shift-aware-delay.md) | 근무 시간에 맞춘 연결 지연(ADR-010 후속) | **Accepted** 2026-10-18(로컬 구현 2et) | 생산 실행의 단계는 연결 지연이 작업지시 설비의 근무 밖에 끝나면 다음 가용 시간의 시작으로 미룬다. 설비·달력이 없거나 생산에 연결되지 않은 실행은 그대로 |
+| [ADR-016](ADR-016-crew-aware-delay.md) | 인력 근무에도 맞춘 연결 지연(ADR-015 후속) | **Accepted** 2026-10-18(로컬 구현 2eu) | 생산 단계의 지연 뒤 시각을 설비 가용 시간과 몫 100%인 교대 인력 모두의 근무 시간에 함께 맞춘다. 설비가 없으면 인력만으로 |
+| [ADR-017](ADR-017-version-reasons.md) | 판을 바꾼 사유(ADR-013·014 후속) | **Accepted** 2026-10-18(로컬 구현 2ev) | 근무표 판과 설비 달력 판마다 선택 사유(200자)와 마지막 저장자·시각을 둔다. V95 |
+| [ADR-018](ADR-018-entity-boundary.md) | 단계 C: 다른 도메인 엔티티를 쓰지 않는다(ADR-002 후속) | **Proposed** 2026-10-18(조사·설계만) | 다른 도메인 엔티티 import 37곳(20파일). 원인은 Facts(json) 공개 API, `ProjectAccessService`의 `Project` 반환, `ItemUsageCheck`. 가진 쪽의 공개 view로 바꾸고 0곳이 되면 규칙을 켜는 안 |
+| [ADR-019](ADR-019-run-labor.md) | 실행 작업자 시간(ADR-013·016 후속) | **Accepted** 2026-10-19(로컬 구현 2ex) | 실행마다 사람·분 기록(열린 실행, 사유와 함께 취소, 금액 없음). 인력은 몫 × 실행 중 근무 시간으로 제안. 작업지시마다 계획 인력 시간 대 기록. V96 |
+| [ADR-020](ADR-020-labor-correction.md) | 끝난 실행의 작업자 시간 보정(ADR-019 후속) | **Accepted** 2026-10-19(로컬 구현 2ey) | 실행 보정 줄 `cancel_labor`·`add_labor`(사람 필수), 소유자 승인 때 반영(`Correction #N: 사유`). 보정 본문 오류 500 → 400. V97 |
+| [ADR-021](ADR-021-labor-step.md) | 생산 단계의 작업자 시간(ADR-019 후속) | **Accepted** 2026-10-19(로컬 구현 2ez) | 기록이 실행의 공정 단계를 고를 수 있다(공개 API로 확인, 외래 키 없음). 응답에 단계 목록·단계 이름, 화면은 시작한 단계의 시간 × 몫으로 분을 채움. V98 |
+| [ADR-022](ADR-022-working-time-delay.md) | 근무 시간으로 세는 연결 지연(ADR-015 후속) | **Accepted** 2026-10-19(로컬 구현 2fa) | 연결마다 `delayBasis` elapsed/working. working은 작업지시 설비·인력이 함께 일한 시간을 지연만큼 쌓은 때가 예정 시각. 생산 실행이 아니거나 설비·인력이 없으면 모든 시간. schemaVersion 그대로. V99 |
+| [ADR-023](ADR-023-labor-step-followups.md) | 단계 작업자 시간의 보정과 공정별 합계(ADR-021 후속) | **Accepted** 2026-10-19(로컬 구현 2fb) | 보정 줄 `add_labor`의 `stepId`(실행 기록과 같은 검사), 작업지시 대비에 공정별 실제 분과 단계 없는 분. V100 |
+| [ADR-024](ADR-024-version-save-history.md) | 판의 저장 이력(ADR-017 후속) | **Accepted** 2026-10-19(로컬 구현 2fc) | 근무표 판·설비 달력 판을 저장·지울 때마다 그때의 교대·사유·누가·언제를 한 줄로 남김(지운 판도). 조회 API 둘과 화면 Version history·Calendar history. V101 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

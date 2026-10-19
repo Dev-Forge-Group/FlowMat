@@ -123,6 +123,7 @@ public class WorkflowCanvasServiceImpl implements WorkflowCanvasService {
             connection.getFlowRate(),
             connection.getUnit(),
             connection.getDelayTimeSec(),
+            connection.getDelayBasis(),
             connection.getLossRate(),
             connection.getPriority(),
             connection.getConditionExpr(),

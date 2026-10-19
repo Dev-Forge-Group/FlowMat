@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogEquipmentView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunStep;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunStepCompleteRequest;
@@ -40,6 +42,7 @@ public class ProductionRunStepService {
     private final ProjectAccessService projectAccessService;
     private final RunInstructionService instructions;
     private final LinkedRunSteps linkedSteps;
+    private final CatalogQuery catalogQuery;
     private final ObjectMapper objectMapper;
 
     public List<ProductionRunStepResponse> list(String productionRunId) {
@@ -47,13 +50,13 @@ public class ProductionRunStepService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         projectAccessService.requireProjectReadAccess(run.getProjectId());
         Map<String, RunInstructionService.NodeChecklist> nodes = instructions.byNode(run);
-        return linkedSteps.steps(productionRunId).stream().map(step -> response(step, nodes)).toList();
+        return linkedSteps.steps(productionRunId).stream().map(step -> response(step, nodes, run.getProjectId())).toList();
     }
 
     @Transactional
     public ProductionRunStepResponse start(String productionRunId, String stepId) {
         ProductionRun run = openRun(productionRunId);
-        return response(linkedSteps.start(productionRunId, stepId), instructions.byNode(run));
+        return response(linkedSteps.start(productionRunId, stepId), instructions.byNode(run), run.getProjectId());
     }
 
     @Transactional
@@ -73,7 +76,7 @@ public class ProductionRunStepService {
         }
         JsonNode output = request != null && request.outputSnapshot() != null
             ? request.outputSnapshot() : recordedOutput(run, step.nodeId());
-        return response(linkedSteps.complete(productionRunId, stepId, output), instructions.byNode(run));
+        return response(linkedSteps.complete(productionRunId, stepId, output), instructions.byNode(run), run.getProjectId());
     }
 
     @Transactional
@@ -82,7 +85,7 @@ public class ProductionRunStepService {
         ProductionText.requireStorable(request.errorCode(), "errorCode");
         ProductionText.requireStorable(request.errorMessage(), "errorMessage");
         return response(linkedSteps.fail(productionRunId, stepId, request.errorCode().trim(), request.errorMessage()),
-            instructions.byNode(run));
+            instructions.byNode(run), run.getProjectId());
     }
 
     private ProductionRun openRun(String productionRunId) {
@@ -120,12 +123,24 @@ public class ProductionRunStepService {
         return output.put("quantity", quantity).put("unit", unit).put("item", itemId);
     }
 
-    private static ProductionRunStepResponse response(LinkedRunStep step, Map<String, RunInstructionService.NodeChecklist> nodes) {
+    private ProductionRunStepResponse response(LinkedRunStep step, Map<String, RunInstructionService.NodeChecklist> nodes,
+                                               String projectId) {
         RunInstructionService.NodeChecklist node = nodes.get(step.nodeId());
         return new ProductionRunStepResponse(step.stepId(), step.nodeId(), step.nodeName(), step.sequenceNo(), step.status(),
             step.gateway(), step.sourceStepId(), step.sourceConnectionId(), step.scheduledAt(), step.startedAt(), step.endedAt(),
             step.errorCode(), step.errorMessage(), step.inputSnapshot(), step.outputSnapshot(), step.joinWaiting(), step.timeoutAt(),
             step.overdueAt(),
-            node == null ? 0 : node.required(), node == null ? 0 : node.done());
+            node == null ? 0 : node.required(), node == null ? 0 : node.done(), held(step.held(), projectId));
+    }
+
+    /** What the step waits for past its delay, the equipment by its code (ADR-015, ADR-016); null when it was not held. */
+    private ProductionRunStepResponse.Held held(LinkedRunStep.Held held, String projectId) {
+        if (held == null) {
+            return null;
+        }
+        String code = held.equipmentId() == null ? null : catalogQuery.findProjectEquipment(projectId, held.equipmentId())
+            .map(CatalogEquipmentView::equipmentCode)
+            .orElse(null);
+        return new ProductionRunStepResponse.Held(held.readyAt(), held.equipmentId(), code, held.crew());
     }
 }

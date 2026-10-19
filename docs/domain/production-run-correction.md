@@ -61,6 +61,7 @@
 | `set_output_qty` | 실행의 산출 수량 변경 | `before_qty`(요청 시점 값), `after_qty` |
 | `cancel_setup`·`add_setup` | 실제 setup 취소·추가 | `target_run_setup_id` / `equipment_id`, `setup_minutes`, 반영 뒤 `created_run_setup_id` — [설비 원가](equipment-setup-cost.md) AS7–AS10(V66) |
 | `cancel_running_time`·`add_running_time` | 설비 가동 시간 취소·추가 | `target_run_equipment_time_id` / `equipment_id`, `running_minutes`, 반영 뒤 `created_run_equipment_time_id` — [설비 원가](equipment-setup-cost.md) ER10–ER12(V76) |
+| `cancel_labor`·`add_labor` | 작업자 시간 취소·추가 | `target_run_labor_id` / `labor_user_id`, `worked_minutes`, 반영 뒤 `created_run_labor_id` — [작업자 달력](worker-calendar.md) LB9–LB11(V97). 보정 본문이 JSON이 아니면 400(2026-10-19) |
 
 - 수량 변경은 `void_item` + `add_item` 한 쌍으로 표현합니다. 기존 행을 고치지 않으므로 전후 기록이 모두 남습니다.
 - 반영되면 `add_item` 줄의 `created_run_item_id`에 새로 만든 실행 항목을 기록합니다.

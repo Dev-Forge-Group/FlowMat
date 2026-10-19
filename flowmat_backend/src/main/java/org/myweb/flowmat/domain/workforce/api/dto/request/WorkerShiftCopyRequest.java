@@ -12,13 +12,18 @@ import java.util.List;
  * Gives other workers one worker's weekly shifts and rota (docs/domain/worker-calendar.md WC51). {@code offsetWeeks}
  * puts a worker that many weeks further on in the rota: while the one copied from works week 1, they work week
  * 1 + offsetWeeks. 0 when left out. {@code effectiveFrom} is the date the copies apply from, today when left out
- * (docs/architecture/adr/ADR-013-rota-history.md).
+ * (docs/architecture/adr/ADR-013-rota-history.md); {@code reason} goes on every copy (docs/architecture/adr/ADR-017-version-reasons.md).
  */
-public record WorkerShiftCopyRequest(List<Target> targets, String effectiveFrom) {
+public record WorkerShiftCopyRequest(List<Target> targets, String effectiveFrom, String reason) {
 
     /** The copies from today, as callers sent them before V93. */
     public WorkerShiftCopyRequest(List<Target> targets) {
-        this(targets, null);
+        this(targets, null, null);
+    }
+
+    /** The copies without a reason, as callers sent them before V95. */
+    public WorkerShiftCopyRequest(List<Target> targets, String effectiveFrom) {
+        this(targets, effectiveFrom, null);
     }
 
     public record Target(String userId, @JsonDeserialize(using = WholeWeeks.class) Integer offsetWeeks) {

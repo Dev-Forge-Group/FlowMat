@@ -29,6 +29,8 @@ public record ProcessConnectionUpdateRequest(
     /** A Split gateway's share (ADR-008); unchanged when left out, removed by {@code clearSplit}. */
     String splitKind,
     BigDecimal splitValue,
-    Boolean clearSplit
+    Boolean clearSplit,
+    /** elapsed or working (ADR-022); unchanged when left out. */
+    String delayBasis
 ) {
 }

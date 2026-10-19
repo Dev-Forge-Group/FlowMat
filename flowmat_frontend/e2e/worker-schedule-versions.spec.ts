@@ -9,10 +9,10 @@ import { answerAuth, mockedLogin, ok } from './support/mockApi'
 test('the owner changes and deletes an upcoming version of the shifts', async ({ page }) => {
   const projectId = 'prj-versions'
   const now = { scheduleId: 'sc-now', effectiveFrom: null, current: true }
-  const next = { scheduleId: 'sc-next', effectiveFrom: '2041-09-09', current: false }
+  const next = { scheduleId: 'sc-next', effectiveFrom: '2041-09-09', current: false, reason: 'Late shift' }
   let kim = { projectId, userId: 'kim', owner: false, calendarSet: true, weeklyHours: 40, daysOff: [], days: [], rota: null,
     shifts: [{ shiftId: 's1', shiftStart: '09:00', shiftEnd: '17:00', workDays: [1, 2, 3, 4, 5], hours: 8, rotaWeek: 1 }],
-    schedules: [now, next] as { scheduleId: string; effectiveFrom: string | null; current: boolean }[] }
+    schedules: [now, next] as { scheduleId: string; effectiveFrom: string | null; current: boolean; reason?: string }[] }
   const owner = { projectId, userId: 'demo-owner', owner: true, calendarSet: false, weeklyHours: 0, shifts: [], daysOff: [], days: [] }
   const sent: { method: string; path: string; body: unknown }[] = []
 
@@ -52,7 +52,7 @@ test('the owner changes and deletes an upcoming version of the shifts', async ({
   await panel.getByText('kim · 40 h a week').click({ timeout: 15_000 })
   const calendar = panel.getByRole('group', { name: 'Worker kim' })
   const versions = calendar.getByRole('group', { name: 'Shift versions' })
-  await expect(versions.getByRole('listitem')).toHaveText(['From the start · now', 'From 2041-09-09 · upcoming Edit Delete'])
+  await expect(versions.getByRole('listitem')).toHaveText(['From the start · now', 'From 2041-09-09 · upcoming · Late shift Edit Delete'])
 
   // A start before today is refused before anything is sent.
   await calendar.getByLabel('Shifts start on').fill('2020-01-06')
@@ -64,11 +64,14 @@ test('the owner changes and deletes an upcoming version of the shifts', async ({
   await versions.getByRole('button', { name: 'Edit version from 2041-09-09' }).click()
   await expect(calendar.getByLabel('Shift 1 start', { exact: true })).toHaveValue('14:00')
   await expect(calendar.getByLabel('Shifts start on')).toHaveValue('2041-09-09')
+  // Its note comes too (ADR-017) and goes back as the reason.
+  await expect(calendar.getByLabel('Shift version note')).toHaveValue('Late shift')
   await calendar.getByLabel('Shift 1 end', { exact: true }).fill('21:00')
   await calendar.getByRole('button', { name: 'Save shifts' }).click()
   await expect(calendar.getByRole('status')).toHaveText('Shifts saved from 2041-09-09; until then the current shifts stay.')
   expect(sent[0]).toEqual({ method: 'PUT', path: `/api/projects/${projectId}/workers/kim/shifts`,
-    body: { shifts: [{ shiftStart: '14:00', shiftEnd: '21:00', workDays: [1, 2, 3, 4, 5] }], effectiveFrom: '2041-09-09' } })
+    body: { shifts: [{ shiftStart: '14:00', shiftEnd: '21:00', workDays: [1, 2, 3, 4, 5] }], effectiveFrom: '2041-09-09',
+      reason: 'Late shift' } })
 
   // It can go before it starts; with one version left the list is not shown.
   await versions.getByRole('button', { name: 'Delete version from 2041-09-09' }).click()

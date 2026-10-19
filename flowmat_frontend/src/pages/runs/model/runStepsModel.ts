@@ -36,3 +36,17 @@ export function stepStartsFrom(step: { status: string; scheduledAt?: string | nu
   if (step.status !== 'planned' || !step.scheduledAt) return null
   return new Date(step.scheduledAt).getTime() > now.getTime() ? step.scheduledAt : null
 }
+
+/**
+ * Whose working time a planned step still waits for past its delay (docs/architecture/adr/ADR-015-shift-aware-delay.md,
+ * ADR-016): the work order's equipment by its code and the crew, as "waits for PRESS, kim". Empty when it was not held or can
+ * already start.
+ */
+export function stepWaitsFor(
+  step: { status: string; scheduledAt?: string | null; held?: { equipmentId: string | null; equipmentCode: string | null; crew: string[] } | null },
+  now: Date = new Date(),
+): string {
+  if (!step.held || !stepStartsFrom(step, now)) return ''
+  const names = [step.held.equipmentCode ?? step.held.equipmentId, ...step.held.crew].filter((name): name is string => Boolean(name))
+  return names.length === 0 ? '' : `waits for ${names.join(', ')}`
+}

@@ -200,3 +200,18 @@ PC-21은 포트·연결 서비스와 revision 발행이 함께 쓰는 워크플�
 | GR-52 | 발행 검사: 오류 `DELAY_RANGE`(규칙 전에 저장된 음수). 실행 화면: 지연이 정한 예정 시각 옆에 `· after a 2 h delay`(그 뒤 누가 일정을 바꾸면 보이지 않음) | 발행 409 |
 
 검증(2026-10-17, 격리 복사본): `ConnectionDelayIntegrationTest` 5건 — 지연 7 200초(발행 `schemaVersion` 3, B `scheduledAt` = A 완료 + 2시간, 그 전 `start` 409, `step_scheduled` `connection_delay`·연결·7200·같은 시각), 게이트웨이(A →1 800→ Exclusive X →3 600→ C: X는 바로 완료·`scheduledAt` A + 30분, C는 A + 90분; Join: B는 지연 없음·`scheduledAt` 없음, D→J 600초 → J는 D 완료 + 10분, 뒤 단계 E도 같은 시각·그 전 `start` 409), 바닥(1시간 당기기 409, 지우기 409, 1시간 늦추기 200), 예전 발행본(`schemaVersion` 2로 되돌린 발행본은 `scheduledAt` 없음·`step_scheduled` 없음·바로 `start`), 저장·발행 검사(생성 −1 400, 수정 −1 400, 0.5 저장, 예전 값 −5는 `DELAY_RANGE`·발행 409). 지연·손실·Split·Join·Exclusive·그래프 실행·워크플로 검사·연결·revision·모듈 경계 104건 실패 0, 전체 백엔드 1,442건 실패 0. 프런트 Vitest(`delayText.test.ts` 1건), 모의 E2E `flow-run-delay.spec.ts`(`after a 2 h delay`, 다시 잡은 단계엔 없음)·`connection-loss-editor.spec.ts`(지연 −5 거절·보내지 않음) 2회 반복 통과.
+
+## 2026-10-19 근무 시간으로 세는 연결 지연 (ADR-022, V99)
+
+[ADR-022](../architecture/adr/ADR-022-working-time-delay.md). 연결 지연(GR-45–GR-52)이 세는 시간을 연결마다 고른다.
+
+| # | 규칙 | 위반 응답 |
+|---|---|---|
+| GR-53 | 저장: `delayBasis`는 `elapsed`(기본) 또는 `working`(앞뒤 공백·대소문자 무시). 생성에서 빠지면 `elapsed`, 수정에서 빠지면 그대로다. 응답·캔버스·발행 snapshot에 있다 | 400 `delayBasis is elapsed or working.` |
+| GR-54 | 계산: `working` 지연은 생산 실행에 연결된 Flow Run에서 앞 단계의 끝(게이트웨이는 받은 시각)부터 작업지시 설비의 가용 시간 ∩ 몫 100%이고 교대가 있는 인력의 근무 시간을 지연만큼 쌓은 시각에 끝나고, 그 시각이 다음 단계의 `scheduledAt`이다. 근무 구간의 끝에 정확히 닿으면 다음 근무 시작으로 미룬다(ADR-015) | |
+| GR-55 | `working`인데 생산 실행이 아니거나, 작업지시·설비·그런 인력이 없거나, 1년 안에 그만큼 근무가 없으면 모든 시간으로 센다(`elapsed`와 같음) | |
+| GR-56 | 기록: `step_scheduled`에 `delayBasis: "working"`. 예정 시각 전에는 시작할 수 없다 | 409 `Step cannot start before its scheduledAt.` |
+| GR-57 | 이미 발행한 revision: snapshot에 `delayBasis`가 없으면 모든 시간이다. `schemaVersion`은 3 그대로다 | |
+| GR-58 | 화면: 연결 검사기 **Delay counts**(All time / Working time). Working time이면 `In a production run, only the time its work order's equipment and crew work counts.` 되돌리기(undo)는 이전 값으로 돌린다 | |
+
+검증(2026-10-19, 격리 복사본): `WorkingTimeDelayIntegrationTest` 3건 — 매일 한 시간 교대(지금부터 2–3시간 뒤)인 설비로 30분 working 지연 → 예정 시각 = 교대 시작 + 30분, `step_scheduled`의 `delayBasis` working·`readyAt` 없음, 그 전 시작 409. 90분 working 지연 → 이 교대 한 시간 + 다음 날 30분. 작업지시 없는 생산 실행의 30분 working 지연 → 끝 + 30분(모든 시간). 연결 API: 생성의 `working`이 응답·발행 snapshot에 있고, 빠지면 `elapsed`, `calendar`·`always`는 400, `Working`은 working, 지연만 바꾸면 basis 그대로. 근무 시간 지연·인력·장기 탐색·연결·revision·게이트웨이·설비 일정 관련 99건(19클래스) 통과, 전체 백엔드 1,647건(272클래스, 실패 0). 프런트 `connectionUndo.test.ts`(이전 basis로 되돌림), 모의 e2e `connection-delay-basis-editor.spec.ts`(basis 없는 응답은 All time, Working time 저장 본문), 기존 연결 편집기 e2e 3건. 모의 e2e 전체 195건 통과·39건 조건부 제외, 실패·flaky 0.

@@ -77,7 +77,7 @@ final class FlowRunGraph {
     private record Edge(String id, String target, String fromIoId, String toIoId,
         ConditionExpression condition, BigDecimal capacity, String unit, String failurePolicy, int priority,
         boolean defaultRoute, int order, String splitKind, BigDecimal splitValue, BigDecimal lossRate,
-        BigDecimal delaySeconds) {}
+        BigDecimal delaySeconds, boolean workingDelay) {}
 
     private final List<String> roots;
     private final Map<String, List<Edge>> outgoing;
@@ -231,8 +231,10 @@ final class FlowRunGraph {
                     throw conflict("Published revision has an invalid delayTimeSec: " + id);
                 }
             }
+            // A revision published before ADR-022 has no basis: its delays count all time.
+            boolean workingDelay = "working".equals(textOrNull(connection.path("delayBasis")));
             Edge edge = new Edge(id, target, fromIoId, toIoId, condition, capacity, unit, policy, priority, defaultRoute,
-                byId.size(), splitKind, splitValue, lossRate, delaySeconds);
+                byId.size(), splitKind, splitValue, lossRate, delaySeconds, workingDelay);
             if (byId.putIfAbsent(id, edge) != null) {
                 throw conflict("Published revision has duplicate connection IDs.");
             }
@@ -295,6 +297,12 @@ final class FlowRunGraph {
     Duration delay(String connectionId) {
         BigDecimal seconds = delaySeconds(connectionId);
         return seconds.signum() == 0 ? null : Duration.ofNanos(seconds.movePointRight(9).longValue());
+    }
+
+    /** Whether the connection's delay counts only the work order's working time (ADR-022); false before it or by default. */
+    boolean workingDelay(String connectionId) {
+        Edge edge = byId.get(connectionId);
+        return edge != null && edge.workingDelay();
     }
 
     /** The connection's delay in seconds as published, 0 without one. */

@@ -18,6 +18,8 @@ public record ProcessConnectionResponse(
     BigDecimal flowRate,
     String unit,
     BigDecimal delayTimeSec,
+    /** elapsed or working: what the delay counts in production runs (ADR-022). */
+    String delayBasis,
     BigDecimal lossRate,
     Integer priority,
     String conditionExpr,
