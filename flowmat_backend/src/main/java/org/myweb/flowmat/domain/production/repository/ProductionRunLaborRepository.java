@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.production.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -12,4 +13,7 @@ public interface ProductionRunLaborRepository extends JpaRepository<ProductionRu
     List<ProductionRunLabor> findAllByProductionRunIdOrderByRecordedAtAscRunLaborIdAsc(String productionRunId);
     List<ProductionRunLabor> findAllByProductionRunIdInAndCancelledYnOrderByRecordedAtAscRunLaborIdAsc(
         Collection<String> productionRunIds, String cancelledYn);
+    /** One person's records that count in a project, recorded in [from, to) (ADR-026 comparison). */
+    List<ProductionRunLabor> findAllByProjectIdAndUserIdAndCancelledYnAndRecordedAtGreaterThanEqualAndRecordedAtLessThan(
+        String projectId, String userId, String cancelledYn, OffsetDateTime from, OffsetDateTime to);
 }

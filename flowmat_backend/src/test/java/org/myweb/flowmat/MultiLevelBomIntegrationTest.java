@@ -96,6 +96,9 @@ class MultiLevelBomIntegrationTest extends IntegrationTestSupport {
         order("Sponges " + c.tag(), c.sponge(), 15, c.spongeBom());
         needs()
             .andExpect(jsonPath(line.formatted(c.sponge()) + ".plannedSupply").value(hasItem(15.0)))
+            // Order by order, so the screen can tell when it comes (docs/domain/purchasing.md PO25).
+            .andExpect(jsonPath(line.formatted(c.sponge()) + ".supplies[0].workOrderTitle").value(hasItem("Sponges " + c.tag())))
+            .andExpect(jsonPath(line.formatted(c.sponge()) + ".supplies[0].quantity").value(hasItem(15.0)))
             .andExpect(jsonPath(line.formatted(c.sponge()) + ".shortage").value(hasItem(0.0)))
             .andExpect(jsonPath(line.formatted(c.flour()) + ".required").value(hasItem(3.0)))
             .andExpect(jsonPath(line.formatted(c.flour()) + ".orders[0].workOrderTitle").value(hasItem("Sponges " + c.tag())))

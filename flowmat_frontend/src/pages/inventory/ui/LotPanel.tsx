@@ -3,6 +3,7 @@ import {
   useCloseLotMutation, useCreateLotMutation, useLotTraceQuery, useLotsQuery, useReleaseLotMutation, useReopenLotMutation,
 } from '../../../entities/inventory/api/useLots'
 import { useInventoriesQuery } from '../../../entities/inventory/api/useInventoriesQuery'
+import { usePurchaseOrdersQuery } from '../../../entities/purchasing/api/usePurchaseOrders'
 import { useInspectionStandardsQuery } from '../../../entities/quality/api/useInspectionStandards'
 import { useQualityInspectionsQuery } from '../../../entities/quality/api/useQuality'
 import { receiptCheckCounts, receiptCheckText } from '../../../entities/quality/model/standardModel'
@@ -18,6 +19,7 @@ import { lotsCsv } from '../model/lotExportModel'
 import { ExpiryOutlook } from './ExpiryOutlook'
 import { ItemScanInput } from './ItemScanInput'
 import { pickableItems } from '../model/itemStatusModel'
+import { lotOrigins, originText } from '../model/purchaseOrderModel'
 
 const STATUS_COLORS: Record<LotStatus, string> = {
   available: '#15803d',
@@ -249,6 +251,8 @@ function LotDetail({
   const releaseMutation = useReleaseLotMutation(projectId)
   const reopenMutation = useReopenLotMutation(projectId)
   const inventoriesQuery = useInventoriesQuery(projectId)
+  // A LOT bought in names the orders it came on, back to the supplier (docs/domain/purchasing.md PO13).
+  const origins = lotOrigins(usePurchaseOrdersQuery(projectId).data ?? [], lot)
 
   return (
     <>
@@ -269,6 +273,11 @@ function LotDetail({
           : ''}
         {lot.expired ? ` · expired ${lot.expiryDate}: it cannot go into production or be reserved; issue it to scrap it` : ''}
       </p>
+      {origins.length > 0 && (
+        <ul aria-label="LOT origin" style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 12 }}>
+          {origins.map((origin, index) => <li key={index}>{originText(origin)}</li>)}
+        </ul>
+      )}
 
       {lot.lotStatus !== 'closed' && (
         <button

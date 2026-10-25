@@ -11,7 +11,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.PlaceSafetyStockRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.PlaceSafetyStockResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.ReorderLineResponse;
@@ -80,22 +80,22 @@ public class PlaceSafetyStockService {
                 "Give the safety stock as a number below 10,000,000,000 with at most 4 decimal places.");
         }
         String itemId = required(request.itemId(), "itemId");
-        Item item = catalogReferences.projectItems(projectId).stream()
-            .filter(found -> found.getItemId().equals(itemId))
+        CatalogItemView item = catalogReferences.projectItems(projectId).stream()
+            .filter(found -> found.itemId().equals(itemId))
             .findFirst()
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The item was not found in this project."));
         StorageLocation place = storageLocationRepository.findByLocationIdAndDeletedYn(required(request.locationId(), "locationId"), NOT_DELETED)
             .filter(found -> found.getProjectId().equals(projectId))
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The place is not in this project's location list."));
-        Optional<PlaceSafetyStock> existing = placeSafetyStockRepository.findByItemIdAndLocationId(item.getItemId(), place.getLocationId());
+        Optional<PlaceSafetyStock> existing = placeSafetyStockRepository.findByItemIdAndLocationId(item.itemId(), place.getLocationId());
         if (removing) {
             existing.ifPresent(placeSafetyStockRepository::delete);
             placeSafetyStockRepository.flush();
             return responses(projectId);
         }
-        if (!ItemStatusRule.isActive(item)) {
+        if (!ItemStatusRule.isActive(item.itemStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT,
-                "Item " + item.getItemCode() + " is " + item.getItemStatus() + "; it takes no new stock, so it is not watched.");
+                "Item " + item.itemCode() + " is " + item.itemStatus() + "; it takes no new stock, so it is not watched.");
         }
         if (!"Y".equals(place.getActiveYn())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Location " + place.getLocationCode() + " is inactive; activate it first.");
@@ -105,7 +105,7 @@ public class PlaceSafetyStockService {
             PlaceSafetyStock created = new PlaceSafetyStock();
             created.setPlaceSafetyStockId(idGenerator.generate());
             created.setProjectId(projectId);
-            created.setItemId(item.getItemId());
+            created.setItemId(item.itemId());
             created.setLocationId(place.getLocationId());
             created.setCreatedBy(actor);
             created.setCreatedAt(OffsetDateTime.now());
@@ -139,7 +139,9 @@ public class PlaceSafetyStockService {
             return List.of();
         }
         // An inactive or discontinued item takes no new stock, so it is not suggested for ordering.
-        List<Item> watched = catalogReferences.items(safety.keySet()).stream().filter(ItemStatusRule::isActive).toList();
+        List<CatalogItemView> watched = catalogReferences.items(safety.keySet()).stream()
+            .filter(item -> ItemStatusRule.isActive(item.itemStatus()))
+            .toList();
         if (watched.isEmpty()) {
             return List.of();
         }
@@ -149,7 +151,7 @@ public class PlaceSafetyStockService {
             .collect(Collectors.toMap(LotMaster::getLotId, Function.identity(), (one, other) -> one));
         Map<String, BigDecimal> usable = ReorderLines.usable(rows, lots, projectCalendar.today(project),
             row -> row.getLocation() != null && place.codes().contains(StorageLocationService.key(row.getLocation())));
-        Map<String, String> units = catalogReferences.unitCodes(watched.stream().map(Item::getUnitId).filter(Objects::nonNull).distinct().toList());
+        Map<String, String> units = catalogReferences.unitCodes(watched.stream().map(CatalogItemView::unitId).filter(Objects::nonNull).distinct().toList());
         return ReorderLines.shortLines(watched, safety, usable, units, place.code());
     }
 
@@ -160,18 +162,18 @@ public class PlaceSafetyStockService {
         }
         Map<String, StorageLocation> places = storageLocationRepository.findAllByProjectIdAndDeletedYn(projectId, NOT_DELETED).stream()
             .collect(Collectors.toMap(StorageLocation::getLocationId, Function.identity()));
-        Map<String, Item> items = catalogReferences.items(rows.stream().map(PlaceSafetyStock::getItemId).distinct().toList()).stream()
-            .collect(Collectors.toMap(Item::getItemId, Function.identity(), (one, other) -> one));
+        Map<String, CatalogItemView> items = catalogReferences.items(rows.stream().map(PlaceSafetyStock::getItemId).distinct().toList()).stream()
+            .collect(Collectors.toMap(CatalogItemView::itemId, Function.identity(), (one, other) -> one));
         Map<String, String> units = catalogReferences.unitCodes(
-            items.values().stream().map(Item::getUnitId).filter(Objects::nonNull).distinct().toList());
+            items.values().stream().map(CatalogItemView::unitId).filter(Objects::nonNull).distinct().toList());
         return rows.stream()
             // A place taken off the list keeps its rows, but they no longer show (PS6).
             .filter(row -> places.containsKey(row.getLocationId()))
             .map(row -> {
-                Item item = items.get(row.getItemId());
+                CatalogItemView item = items.get(row.getItemId());
                 return new PlaceSafetyStockResponse(row.getPlaceSafetyStockId(), row.getItemId(),
-                    item == null ? null : item.getItemCode(), item == null ? null : item.getItemName(),
-                    item == null ? null : units.get(item.getUnitId()), row.getLocationId(),
+                    item == null ? null : item.itemCode(), item == null ? null : item.itemName(),
+                    item == null ? null : units.get(item.unitId()), row.getLocationId(),
                     places.get(row.getLocationId()).getLocationCode(), row.getSafetyStockQty(),
                     row.getUpdatedBy() != null ? row.getUpdatedBy() : row.getCreatedBy(),
                     row.getUpdatedAt() != null ? row.getUpdatedAt() : row.getCreatedAt());

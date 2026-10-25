@@ -146,6 +146,7 @@ public class CatalogQueryImpl implements CatalogQuery {
         UnitMaster unit = item.getUnitId() == null ? null : units.get(item.getUnitId());
         return new CatalogItemView(item.getItemId(), item.getProjectId(), item.getItemCode(), item.getItemName(),
             item.getUnitId(), unit == null ? null : unit.getUnitCode(), unit == null ? null : unit.getUnitType(), item.getUnitCost(),
-            item.getLeadTimeDays(), item.getItemStatus(), item.getLotManageYn(), item.getPurchaseUnit(), item.getConversionRate());
+            item.getLeadTimeDays(), item.getItemStatus(), item.getLotManageYn(), item.getPurchaseUnit(), item.getConversionRate(),
+            item.getSafetyStockQty(), item.getLotReleaseRequiredYn());
     }
 }

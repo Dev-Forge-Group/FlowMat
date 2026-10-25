@@ -11,6 +11,7 @@ import type { ProjectMemberDto, ProjectInviteDto } from '../../../shared/types/a
 import { ProjectTimeZonePanel } from './ProjectTimeZonePanel'
 import { NotificationSubscriptionsPanel } from './NotificationSubscriptionsPanel'
 import { WorkerCalendarsPanel } from './WorkerCalendarsPanel'
+import { HTTPProfilesPanel } from './HTTPProfilesPanel'
 
 const ROLES = ['viewer', 'editor'] as const
 
@@ -297,6 +298,7 @@ export function ProjectSettingsRoute() {
       </header>
 
       <ProjectTimeZonePanel key={projectId} projectId={projectId} />
+      <HTTPProfilesPanel key={`http-${projectId}`} projectId={projectId} />
       <NotificationSubscriptionsPanel key={`notifications-${projectId}`} projectId={projectId} />
       <WorkerCalendarsPanel key={`workers-${projectId}`} projectId={projectId} />
       <MembersPanel projectId={projectId} />

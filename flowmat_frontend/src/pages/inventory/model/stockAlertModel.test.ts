@@ -119,7 +119,7 @@ describe('fromPacks', () => {
 describe('needsCsv', () => {
   const lines: MaterialRequirementDto['lines'] = [
     {
-      itemId: 'flour', itemCode: 'FL', itemName: 'Flour, fine', unit: 'kg', required: 40, usable: 12, shortage: 28,
+      itemId: 'flour', itemCode: 'FL', itemName: 'Flour, fine', unit: 'kg', required: 40, usable: 12, shortage: 20, onOrder: 8,
       orders: [{ workOrderId: 'w1', workOrderTitle: 'Bread', required: 30 }, { workOrderId: 'w2', workOrderTitle: 'Buns', required: 10 }],
     },
     { itemId: 'salt', itemCode: 'SA', itemName: 'Salt', unit: 'kg', required: 1, usable: 5, shortage: 0, orders: [] },
@@ -136,13 +136,14 @@ describe('needsCsv', () => {
   it('lists every material with the shortage in purchase units and the orders that need it', () => {
     const rows = needsCsv(lines, items).replace('\ufeff', '').trim().split('\r\n')
     expect(rows[0]).toBe(
-      'item_code,item_name,unit,needed,usable,short,purchase_unit,packs,item_status,work_orders,being_made,made_here,left_after,safety_stock,under_safety',
+      'item_code,item_name,unit,needed,usable,short,purchase_unit,packs,item_status,work_orders,being_made,made_here,left_after,safety_stock,under_safety,on_order',
     )
-    expect(rows[1]).toBe('FL,"Flour, fine",kg,40,12,28,bag,2,active,Bread 30; Buns 10,0,no,0,,0')
+    // 8 kg still to come on purchase orders is already out of the shortage (purchasing.md PO8) and shown last (PO17).
+    expect(rows[1]).toBe('FL,"Flour, fine",kg,40,12,20,bag,1,active,Bread 30; Buns 10,0,no,0,,0,8')
     // Covered: no packs to buy, but the 4 left are 2 under the safety stock of 6.
-    expect(rows[2]).toBe('SA,Salt,kg,1,5,0,,,discontinued,,0,no,4,6,2')
+    expect(rows[2]).toBe('SA,Salt,kg,1,5,0,,,discontinued,,0,no,4,6,2,0')
     // A sub-assembly: its need comes from making a short item above it, and open orders already make 5.
-    expect(rows[3]).toBe('DO,Dough,kg,8,2,1,,,,via LOAF 8,5,yes,0,,0')
+    expect(rows[3]).toBe('DO,Dough,kg,8,2,1,,,,via LOAF 8,5,yes,0,,0,0')
   })
 })
 
@@ -160,6 +161,7 @@ describe('leftAfterOrders', () => {
   it('leaves usable stock and what is being made after the open orders, against the safety stock', () => {
     expect(leftAfterOrders({ required: 6, usable: 10 }, 8)).toEqual({ left: 4, underSafety: 4 })
     expect(leftAfterOrders({ required: 6, usable: 10, plannedSupply: 5 }, 8)).toEqual({ left: 9, underSafety: 0 })
+    expect(leftAfterOrders({ required: 6, usable: 2, plannedSupply: 0, onOrder: 7 }, 8)).toEqual({ left: 3, underSafety: 5 })
     // Short: nothing left, so the whole safety stock is missing on top of the shortage.
     expect(leftAfterOrders({ required: 12, usable: 10 }, 8)).toEqual({ left: 0, underSafety: 8 })
     expect(leftAfterOrders({ required: 0.3, usable: 0.5 }, 0.4)).toEqual({ left: 0.2, underSafety: 0.2 })

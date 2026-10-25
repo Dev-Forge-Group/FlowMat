@@ -16,13 +16,14 @@ import { useRunQualityChecklistQuery } from '../../../entities/quality/api/useIn
 import { finishQualityWarning } from '../../../entities/quality/model/standardModel'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { BomOutputDto, ProductionRunItemDto } from '../../../shared/types/api'
-import { cancelSummary, recordedAgainstPlan, remainingOfPlan } from '../model/runPlan'
+import { canAllocateAgain, cancelSummary, recordedAgainstPlan, remainingOfPlan } from '../model/runPlan'
 import { inputLotOptions } from '../model/correctionModel'
 import { RunCorrectionsPanel } from './RunCorrectionsPanel'
 import { RunQualityPanel } from './RunQualityPanel'
 import { RunCostPanel } from './RunCostPanel'
 import { RunSetupPanel } from './RunSetupPanel'
 import { RunEquipmentTimePanel } from './RunEquipmentTimePanel'
+import { RunLaborCost } from './RunLaborCost'
 import { RunLaborPanel } from './RunLaborPanel'
 import { RunExpectedOutputs } from './RunExpectedOutputs'
 import { useBomRequirementsQuery } from '../../../entities/bom/api/useBoms'
@@ -93,6 +94,7 @@ export function RunDetailRoute() {
   const allocateMutation = useAllocateRunInputMutation(runId, projectId)
   const [allocation, setAllocation] = useState<string | null>(null)
   const cancelMutation = useCancelRunItemMutation(runId, projectId)
+  const [cancelNote, setCancelNote] = useState<string | null>(null)
   const finishMutation = useFinishProductionRunMutation()
   // The same query the run's quality checklist uses, so finishing can warn about checks not done.
   const qualityWarning = finishQualityWarning(useRunQualityChecklistQuery(projectId, runId).data)
@@ -230,6 +232,7 @@ export function RunDetailRoute() {
                   {errorMessage(cancelMutation.error, 'The item could not be cancelled.')}
                 </p>
               )}
+              {cancelNote && <p role="status" style={{ fontSize: 12 }}>{cancelNote}</p>}
               {runItemsQuery.isLoading && <p>Loading items...</p>}
               {runItemsQuery.isError && (
                 <p style={{ color: '#dc2626' }}>{errorMessage(runItemsQuery.error, 'Failed to load run items.')}</p>
@@ -316,7 +319,12 @@ export function RunDetailRoute() {
                               onClick={() => {
                                 const reason = window.prompt('Why is this recording being cancelled? Its stock movement will be reversed.')
                                 if (reason?.trim()) {
-                                  cancelMutation.mutate({ productionRunItemId: item.productionRunItemId, reason: reason.trim() })
+                                  // An input of a work order's run may go back to the order instead of free stock (R4).
+                                  const reallocate = canAllocateAgain(item, run) && window.confirm(
+                                    'Allocate the returned stock to the work order again?\n\nOK keeps it for the order. Cancel returns it to free stock.')
+                                  setCancelNote(null)
+                                  cancelMutation.mutate({ productionRunItemId: item.productionRunItemId, reason: reason.trim(), reallocate },
+                                    { onSuccess: () => setCancelNote(reallocate ? 'Cancelled. The returned stock is allocated to the work order again.' : null) })
                                 }
                               }}
                               style={{ marginLeft: 6, fontSize: 11 }}
@@ -563,6 +571,7 @@ export function RunDetailRoute() {
               <RunSetupPanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
               <RunEquipmentTimePanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
               <RunLaborPanel projectId={projectId} runId={run.productionRunId} open={isRunOpen(run.runStatus)} />
+              <RunLaborCost projectId={projectId} runId={run.productionRunId} />
               <RunQualityPanel
                 projectId={projectId}
                 run={run}

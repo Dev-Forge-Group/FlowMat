@@ -1,7 +1,9 @@
 package org.myweb.flowmat.domain.workflow.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -12,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.annotation.application.CanvasAnnotationService;
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionPolicyResponse;
+import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionBindingResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSnapshot;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSummaryResponse;
@@ -57,6 +60,7 @@ public class WorkflowRevisionService {
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final IdGenerator idGenerator;
+    private final ProcessExecutionBindingService bindingService;
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public WorkflowRevisionResponse publish(String workflowId) {
@@ -84,8 +88,10 @@ public class WorkflowRevisionService {
             : processIoRepository.findAllByProcessIdInAndDeletedYnOrderByCreatedAtAsc(processIds, NOT_DELETED);
         List<ProcessConnection> connections = connectionRepository
             .findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, NOT_DELETED);
+        List<NodeExecutionBindingResponse> bindings = bindingService.snapshotBindings(workflow.getProjectId(), processes, processIos);
+        int schemaVersion = bindings.isEmpty() ? SCHEMA_VERSION : 4;
         WorkflowRevisionSnapshot snapshot = new WorkflowRevisionSnapshot(
-            SCHEMA_VERSION,
+            schemaVersion,
             WorkflowCanvasServiceImpl.toWorkflowResponse(workflow),
             readJson(workflow.getCanvasSnapshot()),
             readJson(workflow.getSimulationConfig()),
@@ -98,7 +104,8 @@ public class WorkflowRevisionService {
                 .map(process -> new NodeExecutionPolicyResponse(process.getProcessId(), process.getTimeoutSeconds(),
                     process.getRetryLimit(), process.getRetryDelaySeconds(), process.getRetryBackoff(),
                     process.getMaxRetryDelaySeconds(), process.getConcurrencyLimit()))
-                .toList()
+                .toList(),
+            bindings
         );
 
         WorkflowRevision revision = new WorkflowRevision();
@@ -106,7 +113,7 @@ public class WorkflowRevisionService {
         revision.setWorkflowId(workflowId);
         revision.setRevisionNo(nextNumber);
         revision.setStatus("published");
-        revision.setSchemaVersion(SCHEMA_VERSION);
+        revision.setSchemaVersion(schemaVersion);
         revision.setSnapshotJson(writeSnapshot(snapshot));
         revision.setPublishedBy(projectAccessService.requireCurrentUserId());
         revision.setPublishedAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -166,7 +173,9 @@ public class WorkflowRevisionService {
     private WorkflowRevisionResponse toResponse(WorkflowRevision revision) {
         JsonNode snapshot;
         try {
-            snapshot = objectMapper.readTree(revision.getSnapshotJson());
+            // Published mapping literals must round-trip without binary floating-point rounding or scale loss.
+            snapshot = objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+                .without(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES).readTree(revision.getSnapshotJson());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored workflow revision snapshot is invalid.", exception);
         }

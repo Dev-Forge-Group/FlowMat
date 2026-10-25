@@ -19,7 +19,7 @@ test('real schedule versions preserve earlier hours when future shifts are saved
   const load = () => api<Calendar>('GET', base)
   const open = async () => {
     await page.goto(`/projects/${projectId}/settings`)
-    await calendar.locator('summary').click()
+    await calendar.locator(':scope > summary').click()
     await expect(calendar.getByRole('button', { name: 'Save shifts', exact: true })).toBeVisible()
   }
   const save = async () => {

@@ -117,6 +117,37 @@ async function mockAuthApi(page: Page) {
 }
 
 async function mockWorkspaceApi(page: Page) {
+  await page.route('**/api/processes/process-e2e/execution-policy', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: {
+        processId: 'process-e2e', timeoutSeconds: null, retryLimit: null,
+        retryDelaySeconds: null, retryBackoff: null, maxRetryDelaySeconds: null,
+        concurrencyLimit: null, version: 0,
+      }, message: null }) })
+  })
+
+  await page.route('**/api/processes/process-e2e/execution-binding', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: {
+        processId: 'process-e2e', profileVersionId: null, operationId: null,
+        outputPortId: null, requestMapping: null, responseMapping: null,
+        requestMappingJson: null, responseMappingJson: null, version: 0,
+      }, message: null }) })
+  })
+
+  await page.route('**/api/projects/prj-e2e/http-profiles', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
+  await page.route('**/api/project-members?projectId=prj-e2e', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [{
+        projectMemberId: 'member-e2e-owner', projectId: 'prj-e2e', userId: 'demo-owner',
+        projectRole: 'owner', memberStatus: 'active', joinedAt: null,
+      }], message: null }) })
+  })
+
   await page.route('**/api/workflows/wf-e2e/revisions', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ success: true, data: [], message: null }) })
@@ -316,14 +347,15 @@ test('authenticated home keeps notification queries inside the mocked API', asyn
 
 test('simultaneous tabs serialize rotating refresh cookies', async ({ browser }) => {
   const context = await browser.newContext()
+  let releaseRefresh = () => {}
   const unmockedApiPaths: string[] = []
-  // Reject API calls that escape the fixtures, as the real backend rejects the fake access token.
-  await context.route((url) => url.pathname.startsWith('/api/'), async (route) => {
-    unmockedApiPaths.push(new URL(route.request().url()).pathname)
-    await route.fulfill({ status: 401, contentType: 'application/json',
-      body: JSON.stringify({ success: false, data: null, message: 'Unmocked API request' }) })
-  })
   try {
+    // Reject API calls that escape the fixtures, as the real backend rejects the fake access token.
+    await context.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+      unmockedApiPaths.push(new URL(route.request().url()).pathname)
+      await route.fulfill({ status: 401, contentType: 'application/json',
+        body: JSON.stringify({ success: false, data: null, message: 'Unmocked API request' }) })
+    })
     const first = await context.newPage()
     const second = await context.newPage()
     await mockAuthApi(first)
@@ -339,8 +371,13 @@ test('simultaneous tabs serialize rotating refresh cookies', async ({ browser })
 
     const usedTokens = new Set<string>()
     let currentToken = 'test-refresh'
+    let refreshStarted = false
+    const release = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    let refreshRequests = 0
+    let completedRefreshes = 0
     let rejectedRefreshes = 0
     const rotatingRefresh = async (route: import('@playwright/test').Route) => {
+      refreshRequests += 1
       const cookie = await route.request().headerValue('cookie') ?? ''
       const presented = /(?:^|;\s*)flowmat_rt=([^;]+)/.exec(cookie)?.[1]
       if (presented !== currentToken || usedTokens.has(presented)) {
@@ -350,28 +387,52 @@ test('simultaneous tabs serialize rotating refresh cookies', async ({ browser })
         return
       }
       usedTokens.add(presented)
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      if (usedTokens.size === 1) {
+        refreshStarted = true
+        await release
+      }
       currentToken = `refresh-${usedTokens.size + 1}`
       await route.fulfill({ status: 200,
         headers: { 'content-type': 'application/json', 'set-cookie': `flowmat_rt=${currentToken}; HttpOnly; Path=/api/auth` },
         body: JSON.stringify({ success: true, data: { accessToken, refreshToken: null }, message: null }),
       })
+      completedRefreshes += 1
     }
     await first.unroute('**/api/auth/refresh')
     await second.unroute('**/api/auth/refresh')
     await first.route('**/api/auth/refresh', rotatingRefresh)
     await second.route('**/api/auth/refresh', rotatingRefresh)
 
-    await Promise.all([
-      first.goto('/projects/prj-e2e/workflows/wf-e2e'),
-      second.goto('/projects/prj-e2e/workflows/wf-e2e'),
-    ])
+    await first.goto('/projects/prj-e2e/workflows/wf-e2e', { waitUntil: 'commit' })
+    await expect.poll(() => refreshStarted, { message: 'The first refresh must reach the response gate' }).toBe(true)
+    await second.goto('/projects/prj-e2e/workflows/wf-e2e', { waitUntil: 'commit' })
+    await expect.poll(async () => {
+      const locks = await second.evaluate(async () => {
+        const snapshot = await navigator.locks.query()
+        const isRefreshLock = (lock: { name?: string; mode?: string }) =>
+          lock.name === 'flowmat-refresh' && lock.mode === 'exclusive'
+        return {
+          held: snapshot.held?.filter(isRefreshLock).length ?? 0,
+          pending: snapshot.pending?.filter(isRefreshLock).length ?? 0,
+        }
+      })
+      return { ...locks, refreshRequests, completedRefreshes, rejectedRefreshes, consumedTokens: usedTokens.size }
+    }, { message: 'The second tab must wait for the held refresh lock before sending its refresh' }).toEqual({
+      held: 1, pending: 1, refreshRequests: 1, completedRefreshes: 0, rejectedRefreshes: 0, consumedTokens: 1,
+    })
+    releaseRefresh()
+    await expect.poll(() => ({
+      refreshRequests, completedRefreshes, rejectedRefreshes, consumedTokens: usedTokens.size,
+    }), { message: 'Both rotating refreshes must finish successfully before checking the workspace UI' }).toEqual({
+      refreshRequests: 2, completedRefreshes: 2, rejectedRefreshes: 0, consumedTokens: 2,
+    })
     await expect(first.getByText('E2E Workflow')).toBeVisible()
     await expect(second.getByText('E2E Workflow')).toBeVisible()
     expect(unmockedApiPaths, 'Auth fixtures must cover every workspace API request').toEqual([])
     expect(rejectedRefreshes).toBe(0)
     expect(usedTokens.size).toBe(2)
   } finally {
+    releaseRefresh()
     await context.close()
   }
 })
@@ -467,6 +528,12 @@ test('a mocked OAuth provider callback completes login without storing a token',
 })
 
 test('authenticated user can open workspace, select a node, and switch canvas tools', async ({ page }) => {
+  const unmockedApiPaths: string[] = []
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+    unmockedApiPaths.push(new URL(route.request().url()).pathname)
+    await route.fulfill({ status: 401, contentType: 'application/json',
+      body: JSON.stringify({ success: false, data: null, message: 'Unmocked API request' }) })
+  })
   await mockAuthApi(page)
   await mockWorkspaceApi(page)
   await page.goto('/')
@@ -479,11 +546,24 @@ test('authenticated user can open workspace, select a node, and switch canvas to
   await expect(page.getByText('Input Node')).toBeVisible()
   await expect(page.getByText('1 nodes | 0 connections')).toBeVisible()
 
-  await page.getByText('Input Node').click()
+  await Promise.all([
+    ...[
+      '/api/processes/process-e2e/execution-policy',
+      '/api/project-members',
+      '/api/processes/process-e2e/execution-binding',
+      '/api/projects/prj-e2e/http-profiles',
+    ].map(async (path) => {
+      const response = await page.waitForResponse((response) =>
+        new URL(response.url()).pathname === path && response.request().method() === 'GET')
+      expect(response.status(), `${path} must use its workspace API fixture`).toBe(200)
+    }),
+    page.getByText('Input Node').click(),
+  ])
   await expect(page.locator('.inspector__title')).toHaveText('Input Node')
 
   await page.getByRole('tab', { name: 'Annotate' }).click()
   await expect(page.getByRole('button', { name: 'Save Editor' })).toBeVisible()
   await page.getByRole('tab', { name: 'View' }).click()
   await expect(page.locator('button.ribbon-button', { hasText: 'Fit View' })).toBeVisible()
+  expect(unmockedApiPaths, 'The selected node inspector must stay inside the workspace API fixtures').toEqual([])
 })

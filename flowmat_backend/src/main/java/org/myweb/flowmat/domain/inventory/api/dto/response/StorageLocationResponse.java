@@ -5,6 +5,7 @@ package org.myweb.flowmat.domain.inventory.api.dto.response;
  * @param depth how many places this one sits inside
  * @param stockRecords stock records here that hold stock (on hand or reserved)
  * @param itemCount different items in those records
+ * @param storageCondition this place's own; places inside without one take the nearest outer place's (SL1)
  */
 public record StorageLocationResponse(
     String locationId,
@@ -18,6 +19,7 @@ public record StorageLocationResponse(
     String path,
     int depth,
     long stockRecords,
-    long itemCount
+    long itemCount,
+    String storageCondition
 ) {
 }

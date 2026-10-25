@@ -3,6 +3,7 @@ package org.myweb.flowmat.domain.inventory.api;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanAssignRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanRecordRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.InventoryCountPlanResponse;
@@ -31,6 +32,9 @@ public class InventoryCountPlanController {
         @Valid @RequestBody InventoryCountPlanRecordRequest request) { return ApiResponse.ok(service.record(planId, lineId, request)); }
     @PostMapping("/{planId}/lines/{lineId}/recount")
     public ApiResponse<InventoryCountPlanResponse> recount(@PathVariable String planId, @PathVariable String lineId) { return ApiResponse.ok(service.recount(planId, lineId)); }
+    @PostMapping("/{planId}/assignee")
+    public ApiResponse<InventoryCountPlanResponse> assign(@PathVariable String planId,
+        @RequestBody(required = false) InventoryCountPlanAssignRequest request) { return ApiResponse.ok(service.assign(planId, request)); }
     @PostMapping("/{planId}/submit")
     public ApiResponse<InventoryCountPlanResponse> submit(@PathVariable String planId) {
         InventoryCountPlanResponse result = service.submit(planId);

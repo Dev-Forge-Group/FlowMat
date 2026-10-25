@@ -72,6 +72,7 @@ public class ProductionRunController {
         @PathVariable("productionRunItemId") String productionRunItemId,
         @Valid @RequestBody RunItemCancelRequest request
     ) {
-        return ApiResponse.ok(productionRunService.cancelRunItem(productionRunId, productionRunItemId, request.reason()));
+        return ApiResponse.ok(productionRunService.cancelRunItem(productionRunId, productionRunItemId, request.reason(),
+            Boolean.TRUE.equals(request.reallocate())));
     }
 }

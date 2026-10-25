@@ -21,6 +21,8 @@ export interface StorageLocationDto {
   /** Stock records here that hold stock (on hand or reserved), and their different items. */
   stockRecords: number
   itemCount: number
+  /** How the place keeps stock, free text; places inside without one take the nearest outer place's (SL1). */
+  storageCondition?: string | null
 }
 
 export interface StorageLocationCreateInput {
@@ -30,6 +32,7 @@ export interface StorageLocationCreateInput {
   locationType: StorageLocationType
   parentLocationId: string | null
   note: string | null
+  storageCondition: string | null
 }
 
 /** Only the fields given change; an empty name or note clears it. */
@@ -41,6 +44,8 @@ export interface StorageLocationUpdateInput {
   clearParent?: boolean
   active?: boolean
   note?: string
+  /** An empty one clears it. */
+  storageCondition?: string
 }
 
 export const storageLocationsKey = (projectId: string) => ['storage-locations', projectId] as const

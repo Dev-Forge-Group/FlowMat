@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useProjectTimeZone } from '../../../entities/project/api/useProjectTimeZone'
+import { usePurchaseOrdersQuery } from '../../../entities/purchasing/api/usePurchaseOrders'
 import { useDefectsQuery } from '../../../entities/quality/api/useQuality'
 import {
   useNonconformitiesQuery,
@@ -14,6 +16,7 @@ import { errorMessage } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
 import type { DefectSeverity } from '../../../shared/types/api'
 import { zoneDay } from '../model/bomModel'
+import { lotOrigins, ncrReturnText, ncrReturns, originOrders, originSuppliers } from '../model/purchaseOrderModel'
 import {
   ACTION_TYPES,
   ACTION_TYPE_LABELS,
@@ -183,6 +186,14 @@ function NonconformityDetail({ projectId, ncr, onFollowUp }: {
 }) {
   const { update, addAction, finishAction, close, cancel, verify, setVerificationDue } = useNonconformityMutations(projectId)
   const today = zoneDay(useProjectTimeZone(projectId).query.data?.timeZone)
+  const purchaseOrders = usePurchaseOrdersQuery(projectId).data ?? []
+  // Returned to the supplier: the purchase orders the LOT came on say who that is (docs/domain/purchasing.md PO13).
+  const origins = ncr.lotNo && ncr.itemId ? lotOrigins(purchaseOrders, { lotNo: ncr.lotNo, itemId: ncr.itemId }) : []
+  const supplier = originSuppliers(origins)
+  // It goes back from the order it came on (PO26, PO37).
+  const backFrom = originOrders(origins, purchaseOrders)
+  // What went back naming this NCR (PO43).
+  const sentBack = ncrReturns(purchaseOrders, ncr.nonconformityId)
   // Null until changed: the suggested day follows the project's today once its time zone is known.
   const [checkBy, setCheckBy] = useState<string | null>(null)
   const closeCheckBy = checkBy ?? addDays(today, CHECK_AFTER_DAYS)
@@ -307,6 +318,25 @@ function NonconformityDetail({ projectId, ncr, onFollowUp }: {
             {DISPOSITIONS.map((value) => <option key={value} value={value}>{DISPOSITION_LABELS[value]}</option>)}
           </select>
         </label>
+        {disposition === 'return_to_supplier' && (
+          <p role="note" aria-label="Supplier" className="inspector-hint" style={{ margin: 0 }}>
+            {supplier ? `LOT ${ncr.lotNo} came from ${supplier}.` : 'No purchase order brought this in; name the supplier in an action.'}
+          </p>
+        )}
+        {disposition === 'return_to_supplier' && backFrom.length > 0 && (
+          <p className="inspector-hint" style={{ margin: 0 }}>
+            Send it back from{' '}
+            {backFrom.map((one, index) => <span key={one.purchaseOrderId}>
+              {index > 0 ? ', ' : ''}
+              <Link to={`/projects/${encodeURIComponent(projectId)}/inventory?tab=purchasing&order=${encodeURIComponent(one.purchaseOrderId)}&ncr=${encodeURIComponent(ncr.nonconformityId)}`}>
+                {one.orderNumber}
+              </Link>
+            </span>)}
+          </p>
+        )}
+        {sentBack.length > 0 && <ul aria-label="Sent back" style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+          {sentBack.map(({ order, back }) => <li key={back.returnId}>{ncrReturnText(order, back)}</li>)}
+        </ul>}
         {open && (
           <div>
             <button type="button" disabled={update.isPending}

@@ -36,6 +36,7 @@ import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftCopyRequest
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftsRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAvailabilityResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerCalendarResponse;
+import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerDayHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleResponse;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
@@ -89,6 +90,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
     private final WorkerRotaRepository rotaRepository;
     private final WorkerScheduleRepository scheduleRepository;
     private final WorkerScheduleHistoryService history;
+    private final WorkerDayHistoryService dayChangeHistory;
     private final ProjectAccessService access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
@@ -230,14 +232,15 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             offsets.put(id, offset);
         }
         String owner = members.ownerOf(projectId);
-        List<WorkerCalendarResponse> copied = new ArrayList<>();
-        for (Map.Entry<String, Integer> target : offsets.entrySet()) {
+        Map<String, WorkerCalendarResponse> copied = new java.util.HashMap<>();
+        // Acquire workers' locks in one order; keep the response in the caller's target order.
+        for (String target : offsets.keySet().stream().sorted().toList()) {
             // Starting that many weeks earlier puts them that many weeks further on in the rota (WC45).
-            LocalDate startsOn = rota == null ? null : rota.getStartsOn().minusWeeks(target.getValue());
-            writeShifts(projectId, target.getKey(), plans, weeks, startsOn, from, reason);
-            copied.add(response(projectId, target.getKey(), owner));
+            LocalDate startsOn = rota == null ? null : rota.getStartsOn().minusWeeks(offsets.get(target));
+            writeShifts(projectId, target, plans, weeks, startsOn, from, reason);
+            copied.put(target, response(projectId, target, owner));
         }
-        return copied;
+        return offsets.keySet().stream().map(copied::get).toList();
     }
 
     /**
@@ -328,6 +331,14 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         return history.list(projectId, userId);
     }
 
+    /** Every change of the worker's own dates and days off, newest first, at most 100 (ADR-024 decisions 7-12). */
+    @Transactional(readOnly = true)
+    public List<WorkerDayHistoryResponse> dayHistory(String projectId, String userId) {
+        access.requireProjectReadAccess(projectId);
+        requireWorker(projectId, userId);
+        return dayChangeHistory.list(projectId, userId);
+    }
+
     /** Deletes a version that has not started yet (ADR-013 decision 4); one that has started stays as the worker's history. */
     @Transactional
     public WorkerCalendarResponse removeSchedule(String projectId, String userId, String scheduleId) {
@@ -367,6 +378,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         if (ChronoUnit.DAYS.between(first, last) > LONGEST_DAYS_OFF) {
             throw bad("Days off can span at most " + LONGEST_DAYS_OFF + " days at a time.");
         }
+        StorableText.require(request.reason(), "reason");
         String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().trim();
         if (reason != null && reason.length() > MAX_REASON) {
             throw bad("reason must be at most " + MAX_REASON + " characters.");
@@ -381,6 +393,8 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         dayOff.setCreatedBy(access.requireCurrentUserId());
         dayOff.setCreatedAt(OffsetDateTime.now());
         dayOffRepository.saveAndFlush(dayOff);
+        // Each day off stays in the history, also once it is removed (ADR-024).
+        dayChangeHistory.recordDayOff(dayOff, "saved", dayOff.getCreatedBy(), dayOff.getCreatedAt());
         return response(projectId, userId, members.ownerOf(projectId));
     }
 
@@ -389,6 +403,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         requireEditor(projectId, userId);
         WorkerDayOff dayOff = dayOffRepository.findByDayOffIdAndProjectIdAndUserId(dayOffId, projectId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        dayChangeHistory.recordDayOff(dayOff, "removed", access.requireCurrentUserId(), OffsetDateTime.now());
         dayOffRepository.delete(dayOff);
         dayOffRepository.flush();
         return response(projectId, userId, members.ownerOf(projectId));
@@ -446,6 +461,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             }
         }
         requireNoDayOverlap(shifts);
+        StorableText.require(request == null ? null : request.reason(), "reason");
         String reason = request == null || request.reason() == null || request.reason().isBlank() ? null : request.reason().trim();
         if (reason != null && reason.length() > MAX_REASON) {
             throw bad("reason must be at most " + MAX_REASON + " characters.");
@@ -476,6 +492,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         }
         dayShiftRepository.saveAll(saved);
         dayShiftRepository.flush();
+        dayChangeHistory.recordDays(projectId, userId, "saved", saved, reason, null, actor, now);
         return response(projectId, userId, members.ownerOf(projectId));
     }
 
@@ -493,6 +510,8 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         if (found.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+        // The history keeps what each date had (ADR-024).
+        dayChangeHistory.recordDays(projectId, userId, "removed", found, null, null, access.requireCurrentUserId(), OffsetDateTime.now());
         dayShiftRepository.deleteAll(found);
         dayShiftRepository.flush();
         return response(projectId, userId, members.ownerOf(projectId));
@@ -557,6 +576,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         }
         dayShiftRepository.saveAll(saved);
         dayShiftRepository.flush();
+        dayChangeHistory.recordDays(projectId, target, "saved", saved, null, userId, actor, now);
         return response(projectId, target, members.ownerOf(projectId));
     }
 

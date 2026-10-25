@@ -3,6 +3,7 @@ package org.myweb.flowmat.global.util;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,7 +25,7 @@ public final class ExactJsonNodeDeserializer extends StdDeserializer<JsonNode> {
     @Override
     public JsonNode deserialize(JsonParser parser, DeserializationContext context) throws IOException {
         JsonNode root = ((ObjectMapper) parser.getCodec()).reader()
-            .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(parser);
+            .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).without(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES).readTree(parser);
         Deque<JsonNode> pending = new ArrayDeque<>();
         if (root != null) {
             pending.push(root);

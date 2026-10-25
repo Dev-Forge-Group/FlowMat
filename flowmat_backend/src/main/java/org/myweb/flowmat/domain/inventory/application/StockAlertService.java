@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.response.ReorderLineResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockAlertResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
@@ -107,28 +107,28 @@ public class StockAlertService {
             : stockAlertRepository.findTop200ByProjectIdOrderByTriggeredAtDesc(projectId);
         Map<String, Inventory> rows = byId(inventoryRepository.findAllById(ids(alerts.stream().map(StockAlert::getInventoryId))),
             Inventory::getInventoryId);
-        Map<String, Item> items = byId(catalogReferences.items(ids(alerts.stream().map(StockAlert::getItemId))), Item::getItemId);
+        Map<String, CatalogItemView> items = byId(catalogReferences.items(ids(alerts.stream().map(StockAlert::getItemId))), CatalogItemView::itemId);
         Map<String, String> lotNos = StreamSupport.stream(
                 lotMasterRepository.findAllById(ids(rows.values().stream().map(Inventory::getLotId))).spliterator(), false)
             .collect(Collectors.toMap(LotMaster::getLotId, LotMaster::getLotNo, (first, second) -> first));
-        Map<String, String> units = catalogReferences.unitCodes(ids(items.values().stream().map(Item::getUnitId)));
+        Map<String, String> units = catalogReferences.unitCodes(ids(items.values().stream().map(CatalogItemView::unitId)));
         return alerts.stream().map(alert -> {
             Inventory row = rows.get(alert.getInventoryId());
-            Item item = items.get(alert.getItemId());
+            CatalogItemView item = items.get(alert.getItemId());
             return new StockAlertResponse(
                 alert.getStockAlertId(),
                 alert.getProjectId(),
                 alert.getInventoryId(),
                 alert.getItemId(),
-                item == null ? null : item.getItemCode(),
-                item == null ? null : item.getItemName(),
+                item == null ? null : item.itemCode(),
+                item == null ? null : item.itemName(),
                 row == null ? null : row.getLocation(),
                 row == null || row.getLotId() == null ? null : lotNos.get(row.getLotId()),
                 alert.getAlertType(),
                 alert.getSeverity(),
                 alert.getThresholdValue(),
                 alert.getActualValue(),
-                item == null ? null : units.get(item.getUnitId()),
+                item == null ? null : units.get(item.unitId()),
                 alert.getAlertMessage(),
                 alert.isResolved(),
                 alert.getTriggeredAt(),
@@ -145,10 +145,10 @@ public class StockAlertService {
     @Transactional(readOnly = true)
     public List<ReorderLineResponse> reorderList(String projectId) {
         projectAccessService.requireProjectReadAccess(projectId);
-        List<Item> watched = catalogReferences.projectItems(projectId).stream()
-            .filter(item -> item.getSafetyStockQty() != null && item.getSafetyStockQty().signum() > 0)
+        List<CatalogItemView> watched = catalogReferences.projectItems(projectId).stream()
+            .filter(item -> item.safetyStockQty() != null && item.safetyStockQty().signum() > 0)
             // An inactive or discontinued item takes no new stock, so it is not suggested for ordering.
-            .filter(ItemStatusRule::isActive)
+            .filter(item -> ItemStatusRule.isActive(item.itemStatus()))
             .toList();
         if (watched.isEmpty()) {
             return List.of();
@@ -157,8 +157,8 @@ public class StockAlertService {
         LocalDate today = projectCalendar.today(projectId);
         Map<String, LotMaster> lots = byId(lotMasterRepository.findAllById(ids(rows.stream().map(Inventory::getLotId))), LotMaster::getLotId);
         Map<String, BigDecimal> usable = ReorderLines.usable(rows, lots, today, row -> true);
-        Map<String, String> units = catalogReferences.unitCodes(ids(watched.stream().map(Item::getUnitId)));
-        return ReorderLines.shortLines(watched, watched.stream().collect(Collectors.toMap(Item::getItemId, Item::getSafetyStockQty)),
+        Map<String, String> units = catalogReferences.unitCodes(ids(watched.stream().map(CatalogItemView::unitId)));
+        return ReorderLines.shortLines(watched, watched.stream().collect(Collectors.toMap(CatalogItemView::itemId, CatalogItemView::safetyStockQty)),
             usable, units, null);
     }
 
@@ -210,7 +210,7 @@ public class StockAlertService {
             case StockAlert.OVER -> "Over the maximum";
             default -> "Expiring stock";
         };
-        String item = catalogReferences.item(inventory.getItemId()).map(Item::getItemCode).orElse(inventory.getItemId());
+        String item = catalogReferences.item(inventory.getItemId()).map(CatalogItemView::itemCode).orElse(inventory.getItemId());
         String place = inventory.getLocation() == null || inventory.getLocation().isBlank() ? "" : " at " + inventory.getLocation();
         String title = what + ": " + item + place;
         if (owner != null) {

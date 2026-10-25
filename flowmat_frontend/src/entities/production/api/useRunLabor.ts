@@ -61,7 +61,10 @@ export function useRecordRunLaborMutation(runId: string) {
   const client = useQueryClient()
   return useMutation({
     mutationFn: async (input: RunLaborInput) => unwrapApiResponse(await httpClient.post<ApiEnvelope<RunLabor>>(path(runId), input)),
-    onSuccess: (result) => client.setQueryData(key(runId), result),
+    onSuccess: (result) => {
+      client.setQueryData(key(runId), result)
+      void client.invalidateQueries({ queryKey: ['labor-cost'] })
+    },
   })
 }
 
@@ -71,6 +74,9 @@ export function useCancelRunLaborMutation(runId: string) {
     mutationFn: async ({ runLaborId, reason }: { runLaborId: string; reason: string }) =>
       unwrapApiResponse(await httpClient.post<ApiEnvelope<RunLabor>>(
         `${path(runId)}/${encodeURIComponent(runLaborId)}/cancel`, { reason })),
-    onSuccess: (result) => client.setQueryData(key(runId), result),
+    onSuccess: (result) => {
+      client.setQueryData(key(runId), result)
+      void client.invalidateQueries({ queryKey: ['labor-cost'] })
+    },
   })
 }

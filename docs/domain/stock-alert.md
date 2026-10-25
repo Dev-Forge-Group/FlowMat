@@ -82,6 +82,7 @@ V1 `stock_alert`에는 FK·CHECK·유일 제약이 없다. "행·종류별 열�
   - 품목에 [구매 단위](item-details.md)가 있으면 제안 아래에 `→ 2 bag (50 kg)`처럼 **올림한 구매 단위 수와 실제 주문량**이 보인다.
   - **Order value:** 주문량(구매 단위가 있으면 올린 양) × 품목 단가([재료비](material-cost.md)). 단가가 없거나 0이면 `-`. 표 위에 합계 "suggested orders ≈ N"과 단가 없는 품목 수가 보인다.
   - **Download CSV:** 구매 목록 `reorder-YYYY-MM-DD.csv`, 열 `item_code,item_name,unit,usable,safety_stock,short,lead_time_days,daily_use,suggested_order,unit_cost,order_value`(모르는 값은 빈 칸).
+  - **On order**·**Draft purchase order**(2026-10-24, 2fn): 주문한 발주의 남은 양과, 제안 주문량에서 그것을 뺀 초안 발주서([구매 발주](purchasing.md) PO8–PO9).
   - 분석 조회는 부족한 품목이 있을 때만 보낸다.
 - **검증:** `StockAlertIntegrationTest`의 재주문 테스트
   - 안전재고 20에 쓸 수 있는 8 + 격리 5 → 부족 12

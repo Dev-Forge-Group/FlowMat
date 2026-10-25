@@ -119,7 +119,7 @@ export function needLabel(need: MaterialRequirementDto['lines'][number]['orders'
 
 export function needsCsv(lines: MaterialRequirementDto['lines'], items: Map<string, ItemDto>): string {
   const header = ['item_code', 'item_name', 'unit', 'needed', 'usable', 'short', 'purchase_unit', 'packs', 'item_status', 'work_orders',
-    'being_made', 'made_here', 'left_after', 'safety_stock', 'under_safety']
+    'being_made', 'made_here', 'left_after', 'safety_stock', 'under_safety', 'on_order']
   const rows = lines.map((line) => {
     const item = items.get(line.itemId)
     const packs = line.shortage > 0 && item?.purchaseUnit ? packsFor(line.shortage, item.purchaseUnitQty) : null
@@ -127,7 +127,7 @@ export function needsCsv(lines: MaterialRequirementDto['lines'], items: Map<stri
     return [
       line.itemCode, line.itemName, line.unit, line.required, line.usable, line.shortage, packs == null ? null : item?.purchaseUnit ?? null,
       packs, item?.itemStatus ?? null, line.orders.map((order) => needLabel(order)).join('; '), line.plannedSupply ?? 0,
-      line.madeHere ? 'yes' : 'no', after.left, item?.safetyStockQty ? item.safetyStockQty : null, after.underSafety,
+      line.madeHere ? 'yes' : 'no', after.left, item?.safetyStockQty ? item.safetyStockQty : null, after.underSafety, line.onOrder ?? 0,
     ]
       .map(csvCell)
       .join(',')
@@ -142,15 +142,16 @@ export function alertsWithin(alerts: StockAlertDto[], codes: Set<string> | null)
 }
 
 /**
- * What a material has left once the open work orders are made from usable stock and what is being made, and how far that
- * is under the item's safety stock (docs/domain/material-requirements.md "주문 뒤 남는 양"). Never below zero: what is
- * missing beyond that is the shortage. No safety stock (none or 0) is never under it.
+ * What a material has left once the open work orders are made from usable stock, what is being made and what is on order,
+ * and how far that is under the item's safety stock (docs/domain/material-requirements.md "주문 뒤 남는 양",
+ * docs/domain/purchasing.md PO8). Never below zero: what is missing beyond that is the shortage. No safety stock (none or 0)
+ * is never under it.
  */
 export function leftAfterOrders(
-  line: Pick<MaterialRequirementDto['lines'][number], 'required' | 'usable' | 'plannedSupply'>,
+  line: Pick<MaterialRequirementDto['lines'][number], 'required' | 'usable' | 'plannedSupply' | 'onOrder'>,
   safetyStock: number | null | undefined,
 ): { left: number; underSafety: number } {
-  const left = Math.max(0, Math.round((line.usable + (line.plannedSupply ?? 0) - line.required) * 10000) / 10000)
+  const left = Math.max(0, Math.round((line.usable + (line.plannedSupply ?? 0) + (line.onOrder ?? 0) - line.required) * 10000) / 10000)
   const safety = safetyStock && safetyStock > 0 ? safetyStock : 0
   return { left, underSafety: safety > left ? Math.round((safety - left) * 10000) / 10000 : 0 }
 }

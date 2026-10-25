@@ -3,8 +3,11 @@ package org.myweb.flowmat.domain.production.api;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.production.api.dto.request.RunLaborCancelRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.RunLaborRequest;
+import org.myweb.flowmat.domain.production.api.dto.response.RunLaborCostResponse;
 import org.myweb.flowmat.domain.production.api.dto.response.RunLaborResponse;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderLaborComparisonResponse;
+import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderLaborCostResponse;
+import org.myweb.flowmat.domain.production.application.RunLaborCostService;
 import org.myweb.flowmat.domain.production.application.RunLaborService;
 import org.myweb.flowmat.domain.production.application.WorkOrderLaborComparisonService;
 import org.myweb.flowmat.global.response.ApiResponse;
@@ -27,6 +30,7 @@ public class RunLaborController {
 
     private final RunLaborService runLaborService;
     private final WorkOrderLaborComparisonService comparisonService;
+    private final RunLaborCostService costService;
 
     @GetMapping("/production-runs/{productionRunId}/labor")
     public ApiResponse<RunLaborResponse> labor(@PathVariable("productionRunId") String productionRunId) {
@@ -53,6 +57,18 @@ public class RunLaborController {
     @GetMapping("/work-orders/{workOrderId}/labor-comparison")
     public ApiResponse<WorkOrderLaborComparisonResponse> compare(@PathVariable("workOrderId") String workOrderId) {
         return ApiResponse.ok(comparisonService.compare(workOrderId));
+    }
+
+    /** What the run's worked time cost, for the project owner only (docs/architecture/adr/ADR-025-worker-labor-cost.md). */
+    @GetMapping("/production-runs/{productionRunId}/labor-cost")
+    public ApiResponse<RunLaborCostResponse> runCost(@PathVariable("productionRunId") String productionRunId) {
+        return ApiResponse.ok(costService.run(productionRunId));
+    }
+
+    /** What the worked time of the work order's runs cost, for the project owner only (ADR-025). */
+    @GetMapping("/work-orders/{workOrderId}/labor-cost")
+    public ApiResponse<WorkOrderLaborCostResponse> workOrderCost(@PathVariable("workOrderId") String workOrderId) {
+        return ApiResponse.ok(costService.workOrder(workOrderId));
     }
 
     /** A body that is not JSON, a requestId that is not a UUID or minutes that are not a whole number are the caller's mistake. */

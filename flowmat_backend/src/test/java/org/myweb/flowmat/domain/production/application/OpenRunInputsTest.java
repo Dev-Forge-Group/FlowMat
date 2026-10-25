@@ -92,6 +92,6 @@ class OpenRunInputsTest {
     }
 
     private static CatalogItemView material(String unitId) {
-        return new CatalogItemView("material-1", "project-1", "MAT-1", "Material", unitId, "kg", "mass", null, null, null, "N", null, null);
+        return new CatalogItemView("material-1", "project-1", "MAT-1", "Material", unitId, "kg", "mass", null, null, null, "N", null, null, null, "N");
     }
 }

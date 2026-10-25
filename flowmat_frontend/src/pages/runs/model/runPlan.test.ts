@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProductionRunItemDto } from '../../../shared/types/api'
-import { cancelSummary, recordedAgainstPlan, remainingOfPlan } from './runPlan'
+import { canAllocateAgain, cancelSummary, recordedAgainstPlan, remainingOfPlan } from './runPlan'
 
 function row(overrides: Partial<ProductionRunItemDto>): ProductionRunItemDto {
   return {
@@ -66,5 +66,21 @@ describe('cancel summary', () => {
 
   it('is empty for a recording that stands', () => {
     expect(cancelSummary(row({}))).toBeNull()
+  })
+})
+
+describe('allocating a cancelled input again', () => {
+  const ordered = { workOrderId: 'wo-1', runType: 'production' }
+
+  it('is offered for an input taken from stock by a run of a work order', () => {
+    expect(canAllocateAgain(row({ inventoryId: 'inv-1' }), ordered)).toBe(true)
+    expect(canAllocateAgain(row({ inventoryId: 'inv-1' }), { workOrderId: 'wo-1', runType: null })).toBe(true)
+  })
+
+  it('is not offered for outputs, inputs without stock, runs without an order or runs that move no stock', () => {
+    expect(canAllocateAgain(row({ inventoryId: 'inv-1', direction: 'output' }), ordered)).toBe(false)
+    expect(canAllocateAgain(row({}), ordered)).toBe(false)
+    expect(canAllocateAgain(row({ inventoryId: 'inv-1' }), { workOrderId: null, runType: 'production' })).toBe(false)
+    expect(canAllocateAgain(row({ inventoryId: 'inv-1' }), { workOrderId: 'wo-1', runType: 'Simulation' })).toBe(false)
   })
 })

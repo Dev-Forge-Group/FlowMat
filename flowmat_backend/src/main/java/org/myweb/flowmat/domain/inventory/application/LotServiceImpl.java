@@ -12,7 +12,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.LotCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotTraceResponse;
@@ -56,14 +56,14 @@ public class LotServiceImpl implements LotService {
     public LotResponse createLot(LotCreateRequest request) {
         String projectId = request.projectId().trim();
         projectAccessService.requireProjectWriteAccess(projectId);
-        Item item = catalogReferences.item(request.itemId().trim())
-            .filter(found -> projectId.equals(found.getProjectId()))
+        CatalogItemView item = catalogReferences.item(request.itemId().trim())
+            .filter(found -> projectId.equals(found.projectId()))
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Item does not exist in this project."));
-        if (!"Y".equals(item.getLotManageYn())) {
+        if (!"Y".equals(item.lotManageYn())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                item.getItemCode() + " is not LOT-tracked. Turn on LOT tracking for the item first.");
+                item.itemCode() + " is not LOT-tracked. Turn on LOT tracking for the item first.");
         }
-        ItemStatusRule.requireActive(item, "register a LOT");
+        ItemStatusRule.requireActive(item.itemCode(), item.itemStatus(), "register a LOT");
         String lotNo = request.lotNo().trim();
         if (lotMasterRepository.existsByProjectIdAndLotNoIgnoreCase(projectId, lotNo)) {
             throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lotNo + " already exists in this project.");
@@ -72,13 +72,13 @@ public class LotServiceImpl implements LotService {
         LotMaster lot = new LotMaster();
         lot.setLotId(idGenerator.generate());
         lot.setProjectId(projectId);
-        lot.setItemId(item.getItemId());
+        lot.setItemId(item.itemId());
         lot.setLotNo(lotNo);
         lot.setSerialNo(request.serialNo() == null || request.serialNo().isBlank() ? null : request.serialNo().trim());
         lot.setReceivedAt(request.receivedAt());
         lot.setExpiryDate(request.expiryDate());
         // An item that needs its receipt checks first starts its LOTs waiting for them (docs/domain/lot-release.md R1).
-        lot.setLotStatus(("Y".equals(item.getLotReleaseRequiredYn()) ? LotStatus.INSPECTION_PENDING : LotStatus.AVAILABLE).code());
+        lot.setLotStatus(("Y".equals(item.lotReleaseRequiredYn()) ? LotStatus.INSPECTION_PENDING : LotStatus.AVAILABLE).code());
         return toResponse(lotMasterRepository.saveAndFlush(lot), List.of());
     }
 
@@ -122,7 +122,7 @@ public class LotServiceImpl implements LotService {
         OffsetDateTime at = OffsetDateTime.now();
         String actor = projectAccessService.requireCurrentUserId();
         boolean needsChecks = catalogReferences.item(lot.getItemId())
-            .map(item -> "Y".equals(item.getLotReleaseRequiredYn())).orElse(false);
+            .map(item -> "Y".equals(item.lotReleaseRequiredYn())).orElse(false);
         if (needsChecks) {
             // Reopening counts as registering the LOT again, so it waits for its receipt checks and its records are held.
             // Checks that passed before still count, so Release LOT clears it at once (docs/domain/lot-release.md R6).

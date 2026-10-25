@@ -11,8 +11,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,21 +31,21 @@ public class UsableStock {
 
 
     public Map<String, BigDecimal> byItem(String projectId, Collection<String> itemIds) {
-        List<Inventory> rows = references.projectStocks(projectId).stream()
-            .filter(row -> itemIds.contains(row.getItemId()))
+        List<StockView> rows = references.projectStocks(projectId).stream()
+            .filter(row -> itemIds.contains(row.itemId()))
             .toList();
-        Map<String, LotMaster> lots = StreamSupport.stream(references.lots(
-                rows.stream().map(Inventory::getLotId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
-            .collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
+        Map<String, LotView> lots = StreamSupport.stream(references.lots(
+                rows.stream().map(StockView::lotId).filter(Objects::nonNull).collect(Collectors.toSet())).spliterator(), false)
+            .collect(Collectors.toMap(LotView::lotId, Function.identity()));
         LocalDate today = projectCalendar.today(projectId);
         Map<String, BigDecimal> usable = new HashMap<>();
-        for (Inventory row : rows) {
-            LotMaster lot = row.getLotId() == null ? null : lots.get(row.getLotId());
-            if ("quarantined".equals(row.getInventoryStatus())
-                || lot != null && ("closed".equals(lot.getLotStatus()) || lot.isExpiredOn(today))) {
+        for (StockView row : rows) {
+            LotView lot = row.lotId() == null ? null : lots.get(row.lotId());
+            if ("quarantined".equals(row.inventoryStatus())
+                || lot != null && ("closed".equals(lot.lotStatus()) || lot.isExpiredOn(today))) {
                 continue;
             }
-            usable.merge(row.getItemId(), row.getAvailableQuantity() == null ? BigDecimal.ZERO : row.getAvailableQuantity(), BigDecimal::add);
+            usable.merge(row.itemId(), row.availableQuantity() == null ? BigDecimal.ZERO : row.availableQuantity(), BigDecimal::add);
         }
         return usable;
     }

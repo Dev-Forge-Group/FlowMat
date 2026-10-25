@@ -4,7 +4,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
-import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowTemplateApplyRequest;
 import org.myweb.flowmat.global.rbac.PermissionService;
 import org.myweb.flowmat.global.rbac.SystemPermission;
@@ -123,11 +122,13 @@ public class WorkflowTemplateServiceImpl implements WorkflowTemplateService {
     @Transactional
     public WorkflowResponse applyTemplate(String templateId, WorkflowTemplateApplyRequest request) {
         WorkflowTemplate template = findReadableTemplate(templateId);
-        Project project = projectAccessService.requireProjectWriteAccess(request.projectId());
+        projectAccessService.requireProjectWriteAccess(request.projectId());
+        // The check found the project by this exact id (docs/architecture/adr/ADR-018-entity-boundary.md R2).
+        String projectId = request.projectId();
 
         Workflow workflow = new Workflow();
         workflow.setWorkflowId(idGenerator.generate());
-        workflow.setProjectId(project.getProjectId());
+        workflow.setProjectId(projectId);
         workflow.setWorkflowName(defaultText(request.workflowName(), template.getTemplateName()));
         workflow.setWorkflowDesc(template.getDefaultDesc());
         workflow.setWorkflowType(defaultIfBlank(template.getTemplateType(), "main"));
@@ -138,7 +139,7 @@ public class WorkflowTemplateServiceImpl implements WorkflowTemplateService {
         workflow.setDeletedYn(NOT_DELETED);
 
         Workflow savedWorkflow = workflowRepository.save(workflow);
-        projectWorkflows.workflowAdded(project.getProjectId(), savedWorkflow.getWorkflowId());
+        projectWorkflows.workflowAdded(projectId, savedWorkflow.getWorkflowId());
         return toWorkflowResponse(savedWorkflow);
     }
 

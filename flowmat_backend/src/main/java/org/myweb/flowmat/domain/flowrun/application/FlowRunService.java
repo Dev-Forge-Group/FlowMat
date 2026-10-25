@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
@@ -16,9 +17,7 @@ import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStartRequest;
 import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunResponse;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStep;
-import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepAttempt;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
-import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
@@ -40,13 +39,13 @@ public class FlowRunService {
 
     private final FlowRunRepository flowRunRepository;
     private final FlowRunStepRepository stepRepository;
-    private final FlowRunStepAttemptRepository attemptRepository;
     private final FlowRunEventRecorder eventRecorder;
     private final WorkflowProductionQuery workflowQuery;
     private final ProjectAccessService projectAccessService;
     private final WorkflowAccess workflowAccess;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
+    private final FlowRunTermination termination;
 
     @Transactional
     public FlowRunResponse start(FlowRunStartRequest request) {
@@ -184,39 +183,7 @@ public class FlowRunService {
 
     private FlowRunResponse stop(FlowRun run, String terminalStatus, String errorCode, String errorMessage, JsonNode payload,
         String actor) {
-        String flowRunId = run.getFlowRunId();
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        for (FlowRunStep step : stepRepository.findAllByFlowRunIdOrderBySequenceNoAsc(flowRunId)) {
-            if (!"planned".equals(step.getStatus()) && !"running".equals(step.getStatus())) {
-                continue;
-            }
-            boolean wasRunning = "running".equals(step.getStatus());
-            String stepStatus = "failed".equals(terminalStatus) && wasRunning ? "failed" : "cancelled";
-            String stepErrorCode = "failed".equals(terminalStatus) && wasRunning
-                ? errorCode : "RUN_" + terminalStatus.toUpperCase();
-            if (wasRunning) {
-                FlowRunStepAttempt attempt = attemptRepository.findTopByStepIdOrderByAttemptNoDesc(step.getStepId())
-                    .orElseThrow(() -> new IllegalStateException("Running step has no attempt."));
-                if (!"running".equals(attempt.getStatus())) {
-                    throw new IllegalStateException("Running step's latest attempt is not running.");
-                }
-                attempt.setStatus(stepStatus);
-                attempt.setEndedAt(now);
-                attempt.setErrorCode(stepErrorCode);
-                attempt.setErrorMessage(errorMessage);
-                attemptRepository.save(attempt);
-            }
-            step.setStatus(stepStatus);
-            step.setEndedAt(now);
-            step.setErrorCode(stepErrorCode);
-            step.setErrorMessage(errorMessage);
-            stepRepository.save(step);
-            eventRecorder.record(flowRunId, step.getStepId(), "step_" + stepStatus, payload, actor);
-        }
-        run.setStatus(terminalStatus);
-        run.setEndedAt(now);
-        flowRunRepository.save(run);
-        eventRecorder.record(flowRunId, null, "run_" + terminalStatus, payload, actor);
+        termination.stop(run, terminalStatus, errorCode, errorMessage, payload, actor);
         return toResponse(run);
     }
 
@@ -262,7 +229,7 @@ public class FlowRunService {
         }
         try {
             // Decimals stay exact, as conditions and totals compare them.
-            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
+            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).without(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored flow run payload is invalid.", exception);
         }

@@ -18,13 +18,13 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
 import org.myweb.flowmat.domain.bom.application.BomService;
-import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWindow;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogEquipmentView;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderReadinessResponse;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderReadinessResponse.Check;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderReadinessResponse.Material;
@@ -116,18 +116,18 @@ public class WorkOrderReadinessService {
         }
 
         List<Material> materials = new ArrayList<>();
-        BomHeader bom = order.getBomId() == null
+        BomRevisionView bom = order.getBomId() == null
             ? null
             : references.bom(order.getBomId()).orElse(null);
         if (order.getBomId() == null) {
             checks.add(new Check("bom", WARN, "No BOM; materials are neither planned nor checked."));
         } else if (bom == null) {
             checks.add(new Check("bom", FAIL, "The work order's BOM no longer exists."));
-        } else if (!"approved".equals(bom.getBomStatus())) {
+        } else if (!"approved".equals(bom.bomStatus())) {
             checks.add(new Check("bom", FAIL,
-                "BOM " + bom.getBomName() + " v" + bom.getBomVersion() + " is " + bom.getBomStatus() + "; approve it first."));
+                "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is " + bom.bomStatus() + "; approve it first."));
         } else {
-            checks.add(new Check("bom", OK, "BOM " + bom.getBomName() + " v" + bom.getBomVersion() + " is approved."));
+            checks.add(new Check("bom", OK, "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is approved."));
             if (remaining != null && remaining.signum() > 0) {
                 materials = materials(order, bom, remaining, checks);
             }
@@ -350,41 +350,41 @@ public class WorkOrderReadinessService {
     }
 
     private String itemCode(String itemId) {
-        return references.item(itemId).map(Item::getItemCode).orElse(itemId);
+        return references.item(itemId).map(CatalogItemView::itemCode).orElse(itemId);
     }
 
-    private List<Material> materials(WorkOrder order, BomHeader bom, BigDecimal remaining, List<Check> checks) {
+    private List<Material> materials(WorkOrder order, BomRevisionView bom, BigDecimal remaining, List<Check> checks) {
         BomRequirementResponse requirement;
         try {
             // Phantoms expand as the order's run will freeze them: the planned day's revision (docs/domain/multi-level-bom.md P3).
             LocalDate phantomDay = order.getPlannedStartAt() == null ? null
                 : projectCalendar.date(order.getProjectId(), order.getPlannedStartAt().toInstant());
-            requirement = bomService.requirementsForRun(bom.getBomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay);
+            requirement = bomService.requirementsForRun(bom.bomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay);
         } catch (BusinessException exception) {
             checks.add(new Check("materials", FAIL, "Materials could not be calculated: " + exception.getMessage()));
             return List.of();
         }
 
-        List<Inventory> stock = references.projectStocks(order.getProjectId());
+        List<StockView> stock = references.projectStocks(order.getProjectId());
         // Stock allocated to this order is reserved for it, so it counts as available here (docs/domain/stock-allocation.md).
         Map<String, BigDecimal> ownAllocated = new HashMap<>();
         stockAllocationRepository.findAllByWorkOrderIdAndStatusOrderByCreatedAtAscAllocationIdAsc(order.getWorkOrderId(), "open")
             .forEach(allocation -> ownAllocated.merge(allocation.getInventoryId(), allocation.remaining(), BigDecimal::add));
         Set<String> lotIds = new HashSet<>();
         stock.forEach(row -> {
-            if (row.getLotId() != null) {
-                lotIds.add(row.getLotId());
+            if (row.lotId() != null) {
+                lotIds.add(row.lotId());
             }
         });
         Map<String, String> lotStatus = new HashMap<>();
         Set<String> expiredLots = new HashSet<>();
-        Map<String, LotMaster> lotsById = new HashMap<>();
+        Map<String, LotView> lotsById = new HashMap<>();
         LocalDate today = projectCalendar.today(order.getProjectId());
         references.lots(lotIds).forEach(lot -> {
-            lotsById.put(lot.getLotId(), lot);
-            lotStatus.put(lot.getLotId(), lot.getLotStatus() == null ? "" : lot.getLotStatus());
+            lotsById.put(lot.lotId(), lot);
+            lotStatus.put(lot.lotId(), lot.lotStatus() == null ? "" : lot.lotStatus());
             if (lot.isExpiredOn(today)) {
-                expiredLots.add(lot.getLotId());
+                expiredLots.add(lot.lotId());
             }
         });
         // Usable LOTs that expire within the warning window: counted, but worth using first.
@@ -395,27 +395,27 @@ public class WorkOrderReadinessService {
         // What this order's unfinished runs already put in has left stock, so it is not needed again.
         Map<String, BigDecimal> alreadyUsed = openRunInputs.forOrder(order.getWorkOrderId());
         for (BomRequirementResponse.Line line : requirement.lines()) {
-            Item item = references.item(line.childItemId()).orElse(null);
-            boolean lotTracked = item != null && "Y".equals(item.getLotManageYn());
+            CatalogItemView item = references.item(line.childItemId()).orElse(null);
+            boolean lotTracked = item != null && "Y".equals(item.lotManageYn());
             BigDecimal available = BigDecimal.ZERO;
             Set<String> usableLots = new HashSet<>();
-            for (Inventory row : stock) {
-                if (!line.childItemId().equals(row.getItemId()) || "quarantined".equals(row.getInventoryStatus())) {
+            for (StockView row : stock) {
+                if (!line.childItemId().equals(row.itemId()) || "quarantined".equals(row.inventoryStatus())) {
                     continue;
                 }
-                if (row.getLotId() != null && ("closed".equals(lotStatus.get(row.getLotId())) || expiredLots.contains(row.getLotId()))) {
+                if (row.lotId() != null && ("closed".equals(lotStatus.get(row.lotId())) || expiredLots.contains(row.lotId()))) {
                     continue;
                 }
-                BigDecimal free = zeroIfNull(row.getQuantity()).subtract(zeroIfNull(row.getReservedQuantity()))
-                    .add(ownAllocated.getOrDefault(row.getInventoryId(), BigDecimal.ZERO));
+                BigDecimal free = zeroIfNull(row.quantity()).subtract(zeroIfNull(row.reservedQuantity()))
+                    .add(ownAllocated.getOrDefault(row.inventoryId(), BigDecimal.ZERO));
                 if (free.signum() > 0) {
                     available = available.add(free);
-                    if (row.getLotId() != null) {
-                        usableLots.add(row.getLotId());
-                        LotMaster lot = lotsById.get(row.getLotId());
-                        if (lot != null && lot.getExpiryDate() != null && !lot.getExpiryDate().isAfter(today.plusDays(expiryWarningDays))) {
-                            expiringSoon.putIfAbsent(lot.getLotId(), "LOT " + lot.getLotNo() + " of "
-                                + (item != null ? item.getItemCode() : line.childItemId()) + " expires on " + lot.getExpiryDate());
+                    if (row.lotId() != null) {
+                        usableLots.add(row.lotId());
+                        LotView lot = lotsById.get(row.lotId());
+                        if (lot != null && lot.expiryDate() != null && !lot.expiryDate().isAfter(today.plusDays(expiryWarningDays))) {
+                            expiringSoon.putIfAbsent(lot.lotId(), "LOT " + lot.lotNo() + " of "
+                                + (item != null ? item.itemCode() : line.childItemId()) + " expires on " + lot.expiryDate());
                         }
                     }
                 }
@@ -423,11 +423,11 @@ public class WorkOrderReadinessService {
             BigDecimal required = line.requiredItemQuantity().subtract(alreadyUsed.getOrDefault(line.childItemId(), BigDecimal.ZERO))
                 .max(BigDecimal.ZERO);
             BigDecimal shortage = required.subtract(available).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
-            String code = item != null ? item.getItemCode() : line.childItemId();
+            String code = item != null ? item.itemCode() : line.childItemId();
             if (shortage.signum() > 0) {
                 shortages.add(code + " (need " + plain(required) + " " + line.itemUnit() + ", available " + plain(available) + ")");
             }
-            materials.add(new Material(line.childItemId(), code, item != null ? item.getItemName() : null, required,
+            materials.add(new Material(line.childItemId(), code, item != null ? item.itemName() : null, required,
                 line.itemUnit(), available, shortage, lotTracked, lotTracked ? usableLots.size() : 0));
         }
         checks.add(shortages.isEmpty()

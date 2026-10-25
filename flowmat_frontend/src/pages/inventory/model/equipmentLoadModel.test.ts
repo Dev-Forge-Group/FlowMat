@@ -5,6 +5,8 @@ import {
   dateInputValue,
   dayLabels,
   loadLabel,
+  localDateTimeInput,
+  movedWindow,
   loadTone,
   orderLine,
   parseDateInput,
@@ -130,5 +132,14 @@ describe('changeoverPlanText', () => {
     expect(changeoverPlanText({ plannedMinutes: 45, suggestedMinutes: null, suggestedOrder: null })).toBe('Changeovers 45 min as planned')
     expect(changeoverPlanText({ plannedMinutes: 30, suggestedMinutes: 0, suggestedOrder: ['WO-2', 'WO-1'] }))
       .toBe('Changeovers 30 min as planned · 0 min as WO-2, WO-1')
+  })
+
+  it('moves an order to a new start and keeps its length', () => {
+    const order = { plannedStartAt: '2030-01-07T09:00:00Z', plannedEndAt: '2030-01-07T13:30:00Z' }
+    const start = localDateTimeInput('2030-01-08T10:00:00Z')
+    expect(movedWindow(order, start)).toEqual({ plannedStartAt: '2030-01-08T10:00:00.000Z', plannedEndAt: '2030-01-08T14:30:00.000Z' })
+    expect(movedWindow(order, localDateTimeInput(order.plannedStartAt))).toBeNull()
+    expect(movedWindow(order, '')).toBeNull()
+    expect(movedWindow(order, 'not a time')).toBeNull()
   })
 })

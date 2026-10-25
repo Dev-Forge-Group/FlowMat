@@ -160,3 +160,26 @@ export function changeoverPlanText(plan: NonNullable<EquipmentLoadRowDto['change
     ? planned
     : `${planned} · ${formatMinutes(plan.suggestedMinutes)} as ${plan.suggestedOrder.join(', ')}`
 }
+
+/** "2030-01-07T09:00" in the browser's time, for a datetime-local input. */
+export function localDateTimeInput(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ''
+  return new Date(at.getTime() - at.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
+
+/**
+ * The order's planned window moved to start at {@code start} (a datetime-local value in the browser's time), keeping its
+ * length (docs/domain/equipment-load.md M1); null when the start cannot be read or does not move it.
+ */
+export function movedWindow(order: Pick<EquipmentLoadOrderDto, 'plannedStartAt' | 'plannedEndAt'>, start: string):
+  { plannedStartAt: string; plannedEndAt: string } | null {
+  const from = new Date(start)
+  const was = Date.parse(order.plannedStartAt)
+  const until = Date.parse(order.plannedEndAt)
+  if (!start || Number.isNaN(from.getTime()) || Number.isNaN(was) || Number.isNaN(until) || from.getTime() === was) return null
+  return {
+    plannedStartAt: from.toISOString(),
+    plannedEndAt: new Date(from.getTime() + (until - was)).toISOString(),
+  }
+}

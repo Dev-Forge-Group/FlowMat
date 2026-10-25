@@ -68,7 +68,7 @@ DB 제약: 분 범위 CHECK, 삭제되지 않은 규칙은 설비·앞 품목·�
 
 ## 2026-10-05 확정: Setup 속성과 비용
 
-**Accepted (정책).** 다차원 setup attributes 승인, 단일 setup_group 문자열 미채택. 품목 쌍 > 속성 쌍 > default. setupCost = 시간 × 설비 시간당 원가, Material Cost와 분리. 계획 estimate·실제 snapshot 구분. 아래 메모는 검토 이력이며 구현 전이다. [최종 결정](../status/DECISIONS-2026-10-05.md)이 아래 예전 선택지보다 우선한다.
+**Accepted (정책).** 다차원 setup attributes 승인, 단일 setup_group 문자열 미채택. 품목 쌍 > 속성 쌍 > default. setupCost = 시간 × 설비 시간당 원가, Material Cost와 분리. 계획 estimate·실제 snapshot 구분. 아래 메모는 검토 이력이다. 구현은 2026-10-08 2bt([setup 속성](setup-attributes.md), V57)·2bs(설비 시간당 원가, V56)와 2026-10-10 2cy(계획·실제 비교)로 끝났다(2026-10-24 정정). [최종 결정](../status/DECISIONS-2026-10-05.md)이 아래 예전 선택지보다 우선한다.
 
 ## 결정 메모: setup 묶음과 전환 비용 (Proposed, 2026-10-04)
 
@@ -86,6 +86,6 @@ DB 제약: 분 범위 CHECK, 삭제되지 않은 규칙은 설비·앞 품목·�
 
 ## 이후
 
-- 품목 대신 **setup 묶음**(색·금형·재질)으로 규칙 두기 — 품목이 많을 때 규칙 수를 줄임
-- 전환 비용(`cost`). ~~전환 순서 최적화~~ → [설비 부하표](equipment-load.md) "전환 순서 제안"(2026-10-03, 분 기준 제안만)
-- 실행 기록에 실제 전환 시간을 남겨 규칙과 비교
+- ~~품목 대신 **setup 묶음**(색·금형·재질)으로 규칙 두기~~ → 다차원 setup 속성(2bt, [setup 속성](setup-attributes.md), V57)(2026-10-24 정정)
+- ~~전환 비용(`cost`)~~ → 시간 × 설비 시간당 원가(2bs, V56)(2026-10-24 정정). ~~전환 순서 최적화~~ → [설비 부하표](equipment-load.md) "전환 순서 제안"(2026-10-03, 분 기준 제안만)
+- ~~실행 기록에 실제 전환 시간을 남겨 규칙과 비교~~ → 작업지시 setup 계획·실제 비교(2cy, V61 실행 setup 기록)(2026-10-24 정정)

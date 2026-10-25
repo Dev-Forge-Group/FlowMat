@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.workflow.api.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
@@ -17,6 +18,7 @@ public record WorkflowRevisionSnapshot(
     List<CanvasAnnotationResponse> annotations,
     EditorDocumentResponse editorDocument,
     /** Nodes with an execution policy, as fixed at publish (docs/domain/flow-run-execution-policy.md EP3). */
-    List<NodeExecutionPolicyResponse> nodePolicies
+    List<NodeExecutionPolicyResponse> nodePolicies,
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NodeExecutionBindingResponse> nodeBindings
 ) {
 }

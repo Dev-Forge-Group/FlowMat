@@ -20,7 +20,9 @@ function map(value: unknown): value is Record<string, string> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)
     && Object.entries(value).length <= 20 && Object.entries(value).every(([name, one]) =>
       name.length > 0 && name.length <= 50 && name.trim() === name && !['__proto__', 'prototype', 'constructor'].includes(name)
+      // eslint-disable-next-line no-control-regex -- Reject control characters in stored text.
       && !/[\u0000-\u001f\u007f]|[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/.test(name) && typeof one === 'string' && one.trim() === one && one.length > 0
+      // eslint-disable-next-line no-control-regex -- Reject control characters in stored text.
       && one.length <= 100 && !/[\u0000-\u001f\u007f]|[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/.test(one)))
 }
 function attrs(envelope: ApiEnvelope<ItemSetupAttributesDto>, id: string) {
@@ -35,6 +37,7 @@ function rule(value: SetupChangeoverDto, id: string): SetupChangeoverDto {
     || Object.keys(value.fromAttributes).length + Object.keys(value.toAttributes).length === 0
     || !Number.isInteger(value.priority) || value.priority < 1 || value.priority > 100000
     || !Number.isInteger(value.minutes) || value.minutes < 1 || value.minutes > 10080
+    // eslint-disable-next-line no-control-regex -- Reject control characters in stored text.
     || (value.note !== null && (typeof value.note !== 'string' || value.note.length > 500 || /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/.test(value.note))))
     throw new Error('Invalid setup changeover response. Reload current rules.')
   return value

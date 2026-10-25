@@ -94,4 +94,4 @@ DB 제약: 상태·종류·처리 값 CHECK, `(status = 'open') = (closed_at IS 
 - ~~불량 목록에서 이미 열린 NCR에 불량 더하기~~ → 위 화면의 **Add to**(2026-10-03)
 - 작업 지침 값이 한계 밖이면 실행 상세에서 그 실행의 NCR 발행을 제안(2026-10-03, [작업 지침](work-instruction.md) R8, 불량 없이 실행·제품 대상)
 - ~~조치 효과 확인(verification) 단계~~ → N12(2026-10-03, V48). ~~확인 예정일(닫은 뒤 N일)~~ → N13(2026-10-11, V70). ~~담당자 알림~~ → [알림](notification.md) NT2(2026-10-11, V74. 직접 맡긴 일이라 구독 설정 없이)
-- 공급자 반품(`return_to_supplier`)을 구매·입고와 연결
+- 공급자 반품(`return_to_supplier`)을 구매·입고와 연결: 2026-10-24 처리에서 **Return to supplier**를 고르면 그 LOT를 들여온 발주의 공급처를 보여 준다([구매 발주](purchasing.md) PO13, 2fq). ~~공급처로 돌려보내는 재고 이동과 발주의 반품 기록은 아직~~ → 발주서의 **Return to supplier**([구매 발주](purchasing.md) PO26–PO28, 2fz, V111, 2026-10-24). ~~NCR 처리에서 바로 반품을 만들기~~ → 처리 화면의 `Send it back from PO-0001` 링크가 그 발주를 연다([구매 발주](purchasing.md) PO37, 2gf). ~~반품 기록에 NCR을 잇기는 남음~~ → 반품이 그 NCR을 적고, NCR 상세가 그 반품을 **Sent back**으로 보여 준다([구매 발주](purchasing.md) PO42–PO43, 2gv, V118, 2026-10-25)

@@ -1,8 +1,5 @@
 package org.myweb.flowmat.domain.production.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -26,7 +23,7 @@ import org.myweb.flowmat.domain.production.repository.WorkInstructionStepReposit
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardQuery;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardView;
-import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -54,8 +51,7 @@ public class WorkInstructionService {
     private final InspectionStandardQuery standardQuery;
     private final ProjectAccessService projectAccessService;
     private final IdGenerator idGenerator;
-    private final WorkflowProductionQuery workflowQuery;
-    private final ObjectMapper objectMapper;
+    private final WorkflowRunQuery workflowRuns;
 
     public List<WorkInstructionResponse> list(String projectId, String itemId) {
         if (projectId == null || projectId.isBlank()) {
@@ -107,19 +103,10 @@ public class WorkInstructionService {
      * (docs/architecture/adr/ADR-011-production-steps.md decision 6).
      */
     private String processName(String projectId, String processId) {
-        return workflowQuery.findProcess(processId)
-            .map(facts -> readJson(facts.json()))
-            .filter(process -> projectId == null || projectId.equals(process.path("projectId").asText()))
-            .map(process -> process.path("processName").asText(processId))
+        return workflowRuns.findProcess(processId)
+            .filter(process -> projectId == null || projectId.equals(process.projectId()))
+            .map(process -> process.processName() == null ? processId : process.processName())
             .orElse(null);
-    }
-
-    private JsonNode readJson(String json) {
-        try {
-            return objectMapper.readTree(json);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Process facts could not be read.", exception);
-        }
     }
 
     @Transactional

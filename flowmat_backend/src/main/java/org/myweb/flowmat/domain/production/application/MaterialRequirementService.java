@@ -25,6 +25,7 @@ import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
+import org.myweb.flowmat.domain.purchasing.application.publicapi.PurchaseSupplyQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +35,8 @@ import org.springframework.stereotype.Service;
  * materials by the BOM, less what the order's unfinished runs already recorded as input, added up per material and set
  * against the usable stock (the reorder list's rule). A material with its own approved BOM is a sub-assembly
  * (docs/domain/multi-level-bom.md): what usable stock and the open orders making it do not cover is exploded into its own
- * materials, level by level. Like readiness it has no surrounding transaction, so an order whose BOM cannot be worked
+ * materials, level by level. What is ordered from suppliers and not received yet counts as supply too
+ * (docs/domain/purchasing.md PO8). Like readiness it has no surrounding transaction, so an order whose BOM cannot be worked
  * out is reported, not rolled back.
  */
 @Service
@@ -54,6 +56,7 @@ public class MaterialRequirementService {
     private final OpenRunInputs openRunInputs;
     private final BomStructureQuery bomStructure;
     private final StockAllocationService stockAllocationService;
+    private final PurchaseSupplyQuery purchaseSupply;
 
     public MaterialRequirementResponse summary(String projectId) {
         projectAccessService.requireProjectReadAccess(projectId);
@@ -111,20 +114,26 @@ public class MaterialRequirementService {
 
         // What open orders will still make of each item: that supply covers a sub-assembly before its BOM is exploded.
         Map<String, BigDecimal> supply = new HashMap<>();
+        // The same, order by order, so the screen can tell when it comes (docs/domain/purchasing.md PO25).
+        Map<String, List<MaterialRequirementResponse.Supply>> supplies = new HashMap<>();
         for (WorkOrder order : active) {
             if (order.getTargetItemId() != null && order.getTargetQuantity() != null) {
                 BigDecimal remaining = order.getTargetQuantity().subtract(produced.getOrDefault(order.getWorkOrderId(), BigDecimal.ZERO));
                 if (remaining.signum() > 0) {
                     supply.merge(order.getTargetItemId(), remaining, BigDecimal::add);
+                    supplies.computeIfAbsent(order.getTargetItemId(), id -> new ArrayList<>())
+                        .add(new MaterialRequirementResponse.Supply(order.getWorkOrderId(), order.getWorkOrderTitle(), scale(remaining)));
                 }
             }
         }
         // Stock allocated to open orders is reserved for the needs counted here, so it counts as usable for them
         // (docs/domain/stock-allocation.md).
         Map<String, BigDecimal> allocated = stockAllocationService.openByItem(active.stream().map(WorkOrder::getWorkOrderId).toList());
+        // Ordered from suppliers and still to come (docs/domain/purchasing.md PO8).
+        Map<String, BigDecimal> onOrder = purchaseSupply.onOrder(projectId);
         // Undated, so the revisions effective on the project's today (docs/domain/multi-level-bom.md M3).
         Map<String, String> approved = bomStructure.approvedBomIdByItem(projectId, projectCalendar.today(projectId));
-        explodeSubAssemblies(projectId, approved, supply, allocated, required, units, needs, problems);
+        explodeSubAssemblies(projectId, approved, supply, onOrder, allocated, required, units, needs, problems);
 
         Map<String, BigDecimal> usable = new HashMap<>(usableStock.byItem(projectId, required.keySet()));
         allocated.forEach((itemId, quantity) -> usable.merge(itemId, quantity, BigDecimal::add));
@@ -134,6 +143,7 @@ public class MaterialRequirementService {
                 CatalogItemView item = items.get(entry.getKey());
                 BigDecimal free = usable.getOrDefault(entry.getKey(), BigDecimal.ZERO);
                 BigDecimal planned = supply.getOrDefault(entry.getKey(), BigDecimal.ZERO);
+                BigDecimal ordered = onOrder.getOrDefault(entry.getKey(), BigDecimal.ZERO);
                 return new MaterialRequirementResponse.Line(
                     entry.getKey(),
                     item == null ? null : item.itemCode(),
@@ -141,10 +151,12 @@ public class MaterialRequirementService {
                     units.get(entry.getKey()),
                     scale(entry.getValue()),
                     scale(free),
-                    scale(entry.getValue().subtract(free).subtract(planned).max(BigDecimal.ZERO)),
+                    scale(entry.getValue().subtract(free).subtract(planned).subtract(ordered).max(BigDecimal.ZERO)),
                     needs.getOrDefault(entry.getKey(), List.of()),
                     scale(planned),
-                    approved.containsKey(entry.getKey())
+                    approved.containsKey(entry.getKey()),
+                    scale(ordered),
+                    supplies.getOrDefault(entry.getKey(), List.of())
                 );
             })
             .sorted(Comparator.comparing(MaterialRequirementResponse.Line::shortage).reversed()
@@ -162,6 +174,7 @@ public class MaterialRequirementService {
         String projectId,
         Map<String, String> approved,
         Map<String, BigDecimal> supply,
+        Map<String, BigDecimal> onOrder,
         Map<String, BigDecimal> allocated,
         Map<String, BigDecimal> required,
         Map<String, String> units,
@@ -185,7 +198,8 @@ public class MaterialRequirementService {
             done.add(next);
             BigDecimal free = usableStock.byItem(projectId, Set.of(next)).getOrDefault(next, BigDecimal.ZERO)
                 .add(allocated.getOrDefault(next, BigDecimal.ZERO));
-            BigDecimal toMake = required.get(next).subtract(free).subtract(supply.getOrDefault(next, BigDecimal.ZERO));
+            BigDecimal toMake = required.get(next).subtract(free).subtract(supply.getOrDefault(next, BigDecimal.ZERO))
+                .subtract(onOrder.getOrDefault(next, BigDecimal.ZERO));
             if (toMake.signum() <= 0) {
                 continue;
             }

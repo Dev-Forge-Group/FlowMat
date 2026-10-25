@@ -1,9 +1,5 @@
 package org.myweb.flowmat.domain.production.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
@@ -20,11 +16,11 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
 import org.myweb.flowmat.domain.bom.application.BomService;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
 import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
 import org.myweb.flowmat.domain.inventory.application.LotService;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunFinishRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
@@ -44,12 +40,15 @@ import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
 import org.myweb.flowmat.domain.rule.application.RuleEvaluationContext;
 import org.myweb.flowmat.domain.rule.application.RuleTarget;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
-import org.myweb.flowmat.domain.workflow.domain.entity.Process;
-import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
+import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessIoRunView;
+import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessRunView;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
-import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemFactsQuery;
-import org.myweb.flowmat.domain.inventory.application.publicapi.StockFactsQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemRuleFactsQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockRuleFactsQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockViewQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -72,10 +71,12 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private final ProductionRunItemRepository productionRunItemRepository;
     private final ProjectAccessService projectAccessService;
     private final WorkflowAccess workflowAccess;
-    private final ObjectMapper objectMapper;
     private final WorkflowProductionQuery workflowReferences;
-    private final CatalogItemFactsQuery itemFacts;
-    private final StockFactsQuery stockFacts;
+    private final WorkflowRunQuery workflowRuns;
+    private final CatalogQuery catalogQuery;
+    private final CatalogItemRuleFactsQuery ruleFacts;
+    private final StockViewQuery stockViews;
+    private final StockRuleFactsQuery stockRuleFactsQuery;
     private final InventoryCommandService inventoryCommandService;
     private final FlowRuleEngineService flowRuleEngineService;
     private final IdGenerator idGenerator;
@@ -115,21 +116,21 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         request = new ProductionRunStartRequest(request.projectId(), request.workflowId(), request.targetItemId(),
             storedQuantity(request.plannedOutputQty(), "plannedOutputQty"), request.runType(), request.startedBy(),
             request.workOrderId(), request.bomId(), request.workflowRevisionId());
-        Workflow workflow = findActiveWorkflow(request.workflowId());
-        validateSameProject(request.projectId(), workflow.getProjectId());
+        WorkflowRunView workflow = findActiveWorkflow(request.workflowId());
+        validateSameProject(request.projectId(), workflow.projectId());
         // Publish and retire lock the workflow; resolve its revision under the same lock.
-        workflow = readFacts(workflowReferences.lockWorkflow(workflow.getWorkflowId()).json(), Workflow.class);
-        validateSameProject(request.projectId(), workflow.getProjectId());
-        WorkflowProductionQuery.Revision workflowRevision = resolveWorkflowRevision(workflow.getWorkflowId(), request.workflowRevisionId());
+        workflow = workflowRuns.lockWorkflow(workflow.workflowId());
+        validateSameProject(request.projectId(), workflow.projectId());
+        WorkflowProductionQuery.Revision workflowRevision = resolveWorkflowRevision(workflow.workflowId(), request.workflowRevisionId());
         WorkOrder workOrder = findRunnableWorkOrder(request.workOrderId(), request.projectId(), workflow);
         String targetItemId = trimToNull(request.targetItemId());
         if (targetItemId == null && workOrder != null) {
             targetItemId = workOrder.getTargetItemId();
         }
-        Item item = null;
+        CatalogItemView item = null;
         if (targetItemId != null) {
             item = findActiveItem(targetItemId);
-            validateSameProject(request.projectId(), item.getProjectId());
+            validateSameProject(request.projectId(), item.projectId());
         }
         evaluateRunStartRules(request, workflow, item);
 
@@ -163,7 +164,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         ProductionRun run = new ProductionRun();
         run.setProductionRunId(idGenerator.generate());
         run.setProjectId(request.projectId().trim());
-        run.setWorkflowId(workflow.getWorkflowId());
+        run.setWorkflowId(workflow.workflowId());
         run.setWorkflowRevisionId(workflowRevision != null ? workflowRevision.workflowRevisionId() : null);
         run.setRunNumber(generateRunNumber());
         run.setRunType(runType);
@@ -231,29 +232,29 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         request = new ProductionRunItemRecordRequest(request.processId(), request.processIoId(), request.inventoryId(),
             request.itemId(), request.direction(), storedQuantity(request.plannedQty(), "plannedQty"),
             request.actualQty() == null ? null : storedQuantity(request.actualQty(), "actualQty"), storedUnit(request.unit()));
-        Item item = findActiveItem(request.itemId());
-        validateSameProject(run.getProjectId(), item.getProjectId());
-        Inventory inventory = null;
+        CatalogItemView item = findActiveItem(request.itemId());
+        validateSameProject(run.getProjectId(), item.projectId());
+        StockView inventory = null;
         RunProcessSelection selection = resolveRunProcessSelection(run, request);
-        Process process = selection.process();
-        ProcessIo processIo = selection.processIo();
+        ProcessRunView process = selection.process();
+        ProcessIoRunView processIo = selection.processIo();
         if (request.inventoryId() != null && !request.inventoryId().isBlank()) {
             inventory = findActiveInventory(request.inventoryId());
-            validateSameProject(run.getProjectId(), inventory.getProjectId());
-            if (!item.getItemId().equals(inventory.getItemId())) {
+            validateSameProject(run.getProjectId(), inventory.projectId());
+            if (!item.itemId().equals(inventory.itemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "The selected stock record holds a different item.");
             }
         }
         // LOT-tracked items are only consumed or produced through an explicit LOT (its stock record).
-        if ("Y".equals(item.getLotManageYn()) && inventory == null) {
+        if ("Y".equals(item.lotManageYn()) && inventory == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                item.getItemCode() + " is LOT-tracked; choose the stock record (LOT) this " + request.direction().trim().toLowerCase(Locale.ROOT)
+                item.itemCode() + " is LOT-tracked; choose the stock record (LOT) this " + request.direction().trim().toLowerCase(Locale.ROOT)
                     + " uses.");
         }
 
         // Reject incompatible units before anything is saved, even when no stock record is linked.
         BigDecimal recordedQty = request.actualQty() != null ? request.actualQty() : request.plannedQty();
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(recordedQty, request.unit(), item.getUnitId());
+        UnitConverter.Conversion conversion = unitConverter.toItemUnit(recordedQty, request.unit(), item.unitId());
         if (inventory != null && run.affectsPhysicalState()) {
             requireNonNegativeQuantity(conversion.quantity(), "stockQuantity");
         }
@@ -263,22 +264,22 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         ProductionRunItem runItem = new ProductionRunItem();
         runItem.setProductionRunItemId(idGenerator.generate());
         runItem.setProductionRunId(run.getProductionRunId());
-        runItem.setProcessId(process != null ? process.getProcessId() : null);
-        runItem.setProcessIoId(processIo != null ? processIo.getProcessIoId() : null);
+        runItem.setProcessId(process != null ? process.processId() : null);
+        runItem.setProcessIoId(processIo != null ? processIo.processIoId() : null);
         runItem.setInventoryId(trimToNull(request.inventoryId()));
-        runItem.setItemId(item.getItemId());
+        runItem.setItemId(item.itemId());
         runItem.setDirection(request.direction().trim().toLowerCase(Locale.ROOT));
         runItem.setPlannedQty(request.plannedQty());
         runItem.setActualQty(request.actualQty());
         runItem.setUnit(request.unit().trim());
         runItem.setQuantitySource("manual");
-        runItem.setLotId(inventory != null ? inventory.getLotId() : null);
+        runItem.setLotId(inventory != null ? inventory.lotId() : null);
         ProductionRunItem savedRunItem = productionRunItemRepository.save(runItem);
 
         if (inventory != null && run.affectsPhysicalState()) {
             if ("input".equals(savedRunItem.getDirection()) && run.getWorkOrderId() != null && conversion.quantity() != null) {
                 // Stock allocated to the run's work order is released into use first (docs/domain/stock-allocation.md).
-                stockAllocationService.consume(run.getWorkOrderId(), inventory.getInventoryId(),
+                stockAllocationService.consume(run.getWorkOrderId(), inventory.inventoryId(),
                     conversion.quantity().setScale(4, RoundingMode.HALF_UP), savedRunItem.getProductionRunItemId());
             }
             applyInventoryEffect(run, savedRunItem, inventory, conversion);
@@ -292,7 +293,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
 
     @Override
     @Transactional
-    public ProductionRunItemResponse cancelRunItem(String productionRunId, String productionRunItemId, String reason) {
+    public ProductionRunItemResponse cancelRunItem(String productionRunId, String productionRunItemId, String reason, boolean reallocate) {
         ProductionRun run = findRunForUpdate(productionRunId);
         projectAccessService.requireProjectWriteAccess(run.getProjectId());
         requireOpenRun(run);
@@ -311,10 +312,15 @@ public class ProductionRunServiceImpl implements ProductionRunService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Give a reason for cancelling the item.");
         }
         String actor = projectAccessService.requireCurrentUserId();
+        BigDecimal returned = reallocate ? returnedToOrder(run, item) : null;
 
         // Stock first: if the produced stock was already used, the reversal fails and nothing else changes.
         inventoryCommandService.reverseMovementsOf("production_run_item", item.getProductionRunItemId(),
             "Run " + run.getRunNumber() + " item cancelled: " + normalizedReason, actor);
+        if (returned != null) {
+            // What the input took goes back to the order rather than to free stock (docs/domain/stock-allocation.md R4).
+            stockAllocationService.allocateReturned(run.getWorkOrderId(), item.getInventoryId(), returned, item.getProductionRunItemId());
+        }
 
         item.setCancelledYn("Y");
         item.setCancelledBy(actor);
@@ -326,6 +332,26 @@ public class ProductionRunServiceImpl implements ProductionRunService {
             rebuildLotGenealogy(run, saved);
         }
         return toItemResponse(saved);
+    }
+
+    /**
+     * Checks, before anything changes, that a recording being cancelled can go back to its run's work order (R4): an input
+     * taken from a stock record by a physical run of an order. Locks the order's allocations ahead of the stock, as recording
+     * an input does, and returns how much the input took in the item's unit.
+     */
+    private BigDecimal returnedToOrder(ProductionRun run, ProductionRunItem item) {
+        if (!"input".equals(item.getDirection()) || item.getInventoryId() == null || run.getWorkOrderId() == null
+            || !run.affectsPhysicalState()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                "Only an input taken from a stock record by a run of a work order can be allocated to the order again.");
+        }
+        BigDecimal recorded = item.getActualQty() != null ? item.getActualQty() : item.getPlannedQty();
+        BigDecimal quantity = unitConverter.toItemUnit(recorded, item.getUnit(), findActiveItem(item.getItemId()).unitId()).quantity();
+        if (quantity == null || quantity.setScale(4, RoundingMode.HALF_UP).signum() <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "This input took no stock; there is nothing to allocate again.");
+        }
+        stockAllocationService.lockForConsumption(run.getWorkOrderId());
+        return quantity.setScale(4, RoundingMode.HALF_UP);
     }
 
     private void rebuildLotGenealogy(ProductionRun run, ProductionRunItem cancelled) {
@@ -389,15 +415,15 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         ProductionRunItem runItem = new ProductionRunItem();
         runItem.setProductionRunItemId(idGenerator.generate());
         runItem.setProductionRunId(run.getProductionRunId());
-        runItem.setInventoryId(resolved.inventory() != null ? resolved.inventory().getInventoryId() : null);
-        runItem.setItemId(resolved.item().getItemId());
+        runItem.setInventoryId(resolved.inventory() != null ? resolved.inventory().inventoryId() : null);
+        runItem.setItemId(resolved.item().itemId());
         runItem.setDirection(direction.trim().toLowerCase(Locale.ROOT));
         runItem.setPlannedQty(resolved.quantity());
         runItem.setActualQty(resolved.quantity());
         runItem.setUnit(storedUnit(unit));
         runItem.setQuantitySource("correction");
         runItem.setProductionRunCorrectionId(correctionId);
-        runItem.setLotId(resolved.inventory() != null ? resolved.inventory().getLotId() : null);
+        runItem.setLotId(resolved.inventory() != null ? resolved.inventory().lotId() : null);
         ProductionRunItem saved = productionRunItemRepository.save(runItem);
         if (resolved.inventory() != null && run.affectsPhysicalState()) {
             applyInventoryEffect(run, saved, resolved.inventory(), resolved.conversion());
@@ -419,7 +445,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         productionRunItemRepository.save(item);
     }
 
-    private record CorrectionRecording(Item item, Inventory inventory, UnitConverter.Conversion conversion, BigDecimal quantity) {
+    private record CorrectionRecording(CatalogItemView item, StockView inventory, UnitConverter.Conversion conversion, BigDecimal quantity) {
     }
 
     private CorrectionRecording resolveCorrectionRecording(ProductionRun run, String direction, String itemId,
@@ -441,22 +467,22 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         }
         ProductionText.requireStorable(itemId, "itemId");
         ProductionText.requireStorable(inventoryId, "inventoryId");
-        Item item = findActiveItem(itemId.trim());
-        validateSameProject(run.getProjectId(), item.getProjectId());
-        Inventory inventory = null;
+        CatalogItemView item = findActiveItem(itemId.trim());
+        validateSameProject(run.getProjectId(), item.projectId());
+        StockView inventory = null;
         if (inventoryId != null && !inventoryId.isBlank()) {
             inventory = findActiveInventory(inventoryId.trim());
-            validateSameProject(run.getProjectId(), inventory.getProjectId());
-            if (!item.getItemId().equals(inventory.getItemId())) {
+            validateSameProject(run.getProjectId(), inventory.projectId());
+            if (!item.itemId().equals(inventory.itemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "The selected stock record holds a different item.");
             }
         }
-        if ("Y".equals(item.getLotManageYn()) && inventory == null) {
+        if ("Y".equals(item.lotManageYn()) && inventory == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                item.getItemCode() + " is LOT-tracked; choose the stock record (LOT) this " + direction.trim().toLowerCase(Locale.ROOT)
+                item.itemCode() + " is LOT-tracked; choose the stock record (LOT) this " + direction.trim().toLowerCase(Locale.ROOT)
                     + " uses.");
         }
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(qty, unit.trim(), item.getUnitId());
+        UnitConverter.Conversion conversion = unitConverter.toItemUnit(qty, unit.trim(), item.unitId());
         if (inventory != null && run.affectsPhysicalState()) {
             requireNonNegativeQuantity(conversion.quantity(), "stockQuantity");
         }
@@ -528,23 +554,18 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         return toResponse(savedRun);
     }
 
-    private <T> T readFacts(String json, Class<T> type) {
-        try { return objectMapper.readValue(json, type); }
-        catch (JsonProcessingException error) { throw new IllegalStateException("Stored production reference facts are invalid.", error); }
-    }
-
-    private Workflow findActiveWorkflow(String workflowId) {
-        return workflowReferences.findWorkflow(workflowId).map(facts -> readFacts(facts.json(), Workflow.class))
+    private WorkflowRunView findActiveWorkflow(String workflowId) {
+        return workflowRuns.findWorkflow(workflowId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
-    private Process findActiveProcess(String processId) {
-        return workflowReferences.findProcess(processId).map(facts -> readFacts(facts.json(), Process.class))
+    private ProcessRunView findActiveProcess(String processId) {
+        return workflowRuns.findProcess(processId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
-    private ProcessIo findActiveProcessIo(String processIoId) {
-        return workflowReferences.findProcessIo(processIoId).map(facts -> readFacts(facts.json(), ProcessIo.class))
+    private ProcessIoRunView findActiveProcessIo(String processIoId) {
+        return workflowRuns.findProcessIo(processIoId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
@@ -555,17 +576,17 @@ public class ProductionRunServiceImpl implements ProductionRunService {
             return new RunProcessSelection(null, null);
         }
         if (run.getWorkflowRevisionId() == null) {
-            ProcessIo io = processIoId != null ? findActiveProcessIo(processIoId) : null;
-            if (io != null && processId != null && !processId.equals(io.getProcessId())) {
+            ProcessIoRunView io = processIoId != null ? findActiveProcessIo(processIoId) : null;
+            if (io != null && processId != null && !processId.equals(io.processId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Process I/O belongs to a different process.");
             }
-            Process process = findActiveProcess(processId != null ? processId : io.getProcessId());
-            validateSameWorkflow(run.getWorkflowId(), process.getWorkflowId());
+            ProcessRunView process = findActiveProcess(processId != null ? processId : io.processId());
+            validateSameWorkflow(run.getWorkflowId(), process.workflowId());
             if (io != null) {
-                if (!request.itemId().equals(io.getItemId())) {
+                if (!request.itemId().equals(io.itemId())) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST, "itemId does not match the selected processIoId.");
                 }
-                if (!request.direction().trim().equalsIgnoreCase(io.getDirection())) {
+                if (!request.direction().trim().equalsIgnoreCase(io.direction())) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST, "direction does not match the selected processIoId.");
                 }
             }
@@ -575,76 +596,51 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         WorkflowProductionQuery.Revision revision = workflowReferences
             .findRevision(run.getWorkflowRevisionId(), run.getWorkflowId())
             .orElseThrow(() -> new IllegalStateException("Run refers to a missing workflow revision."));
-        JsonNode snapshot;
-        try {
-            snapshot = objectMapper.readTree(revision.snapshotJson());
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Stored workflow revision snapshot is invalid.", exception);
-        }
-        JsonNode ioNode = processIoId == null ? null : findSnapshotEntry(snapshot.path("processIos"), "processIoId", processIoId);
-        if (processIoId != null && ioNode == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Process I/O is not part of this run's workflow revision.");
-        }
-        if (ioNode != null) {
-            String ioProcessId = ioNode.path("processId").asText();
-            if (processId != null && !processId.equals(ioProcessId)) {
+        // The workflow context reads its own snapshot (docs/architecture/adr/ADR-018-entity-boundary.md, 2gu).
+        ProcessIoRunView io = processIoId == null ? null : workflowRuns.revisionProcessIo(revision.snapshotJson(), processIoId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Process I/O is not part of this run's workflow revision."));
+        if (io != null) {
+            if (processId != null && !processId.equals(io.processId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Process I/O belongs to a different process.");
             }
-            if (!request.itemId().equals(ioNode.path("itemId").asText())
-                || !request.direction().trim().equalsIgnoreCase(ioNode.path("direction").asText())) {
+            if (!request.itemId().equals(io.itemId())
+                || !request.direction().trim().equalsIgnoreCase(io.direction())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Process I/O item or direction differs from the published revision.");
             }
-            processId = ioProcessId;
+            processId = io.processId();
         }
-        JsonNode processNode = findSnapshotEntry(snapshot.path("processes"), "processId", processId);
-        if (processNode == null || !run.getWorkflowId().equals(processNode.path("workflowId").asText())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Process is not part of this run's workflow revision.");
-        }
-        try {
-            return new RunProcessSelection(objectMapper.treeToValue(processNode, Process.class),
-                ioNode != null ? toSnapshotProcessIo(ioNode) : null);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Stored workflow revision process is invalid.", exception);
-        }
+        ProcessRunView process = workflowRuns.revisionProcess(revision.snapshotJson(), processId)
+            .filter(found -> run.getWorkflowId().equals(found.workflowId()))
+            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Process is not part of this run's workflow revision."));
+        return new RunProcessSelection(process, io);
     }
 
-    /** Snapshots carry schemaJson as a JSON object, while the entity keeps it as JSON text. */
-    private ProcessIo toSnapshotProcessIo(JsonNode ioNode) throws JsonProcessingException {
-        JsonNode schema = ioNode.get("schemaJson");
-        if (ioNode instanceof ObjectNode source && schema != null && !schema.isNull() && !schema.isTextual()) {
-            ObjectNode copy = source.deepCopy();
-            copy.put("schemaJson", schema.toString());
-            return objectMapper.treeToValue(copy, ProcessIo.class);
-        }
-        return objectMapper.treeToValue(ioNode, ProcessIo.class);
+    private record RunProcessSelection(ProcessRunView process, ProcessIoRunView processIo) {
     }
 
-    private static JsonNode findSnapshotEntry(JsonNode entries, String idField, String id) {
-        if (id == null || !entries.isArray()) {
-            return null;
-        }
-        for (JsonNode entry : entries) {
-            if (id.equals(entry.path(idField).asText())) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
-    private record RunProcessSelection(Process process, ProcessIo processIo) {
-    }
-
-    private Item findActiveItem(String itemId) {
-        return itemFacts.findActiveItem(itemId).map(facts -> readFacts(facts.json(), Item.class))
+    private CatalogItemView findActiveItem(String itemId) {
+        return catalogQuery.findActiveItem(itemId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
-    private Inventory findActiveInventory(String inventoryId) {
-        return stockFacts.findActiveStock(inventoryId).map(facts -> readFacts(facts.json(), Inventory.class))
+    /** The item as flow rules read it, with all its catalog properties (docs/architecture/adr/ADR-018-entity-boundary.md decision 5). */
+    private Map<String, Object> itemRuleFacts(CatalogItemView item) {
+        return ruleFacts.findActiveItem(item.itemId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
-    private WorkOrder findRunnableWorkOrder(String workOrderId, String projectId, Workflow workflow) {
+    private StockView findActiveInventory(String inventoryId) {
+        return stockViews.findActiveStock(inventoryId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    /** The stock record as flow rules read it, with all its properties (docs/architecture/adr/ADR-018-entity-boundary.md decision 5). */
+    private Map<String, Object> stockRuleFacts(StockView inventory) {
+        return stockRuleFactsQuery.findActiveStock(inventory.inventoryId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    private WorkOrder findRunnableWorkOrder(String workOrderId, String projectId, WorkflowRunView workflow) {
         String normalized = trimToNull(workOrderId);
         if (normalized == null) {
             return null;
@@ -652,7 +648,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         WorkOrder workOrder = workOrderRepository.findForUpdate(normalized)
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Work order does not exist."));
         validateSameProject(projectId.trim(), workOrder.getProjectId());
-        if (workOrder.getWorkflowId() != null && !workOrder.getWorkflowId().equals(workflow.getWorkflowId())) {
+        if (workOrder.getWorkflowId() != null && !workOrder.getWorkflowId().equals(workflow.workflowId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
                 "Work order " + workOrder.getWorkOrderNumber() + " belongs to a different workflow.");
         }
@@ -805,7 +801,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private void applyInventoryEffect(
         ProductionRun run,
         ProductionRunItem runItem,
-        Inventory inventory,
+        StockView inventory,
         UnitConverter.Conversion conversion
     ) {
         // Stock is kept in the item's unit; inventory columns hold 4 decimals.
@@ -831,7 +827,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         // Conditional atomic UPDATE: concurrent runs cannot lose updates, and consuming more than is available
         // (or quarantined stock) is refused instead of driving the record negative.
         inventoryCommandService.apply(new InventoryMovement(
-            inventory.getInventoryId(),
+            inventory.inventoryId(),
             type,
             quantityDelta,
             BigDecimal.ZERO,
@@ -858,19 +854,19 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         return "RUN-" + timestamp + "-" + suffix;
     }
 
-    private void evaluateRunStartRules(ProductionRunStartRequest request, Workflow workflow, Item item) {
+    private void evaluateRunStartRules(ProductionRunStartRequest request, WorkflowRunView workflow, CatalogItemView item) {
         List<RuleTarget> targets = new ArrayList<>();
         targets.add(new RuleTarget("project", request.projectId()));
-        targets.add(new RuleTarget("workflow", workflow.getWorkflowId()));
+        targets.add(new RuleTarget("workflow", workflow.workflowId()));
         if (item != null) {
-            targets.add(new RuleTarget("item", item.getItemId()));
+            targets.add(new RuleTarget("item", item.itemId()));
         }
 
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("operation", "run_start");
         facts.put("request", request);
-        facts.put("workflow", workflow);
-        facts.put("item", item);
+        facts.put("workflow", workflow.ruleFacts());
+        facts.put("item", item == null ? null : itemRuleFacts(item));
         facts.put("plannedOutputQty", request.plannedOutputQty());
         facts.put("runType", defaultIfBlank(request.runType(), "actual"));
 
@@ -880,24 +876,24 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private void evaluateRunItemRules(
         ProductionRun run,
         ProductionRunItemRecordRequest request,
-        Item item,
-        Process process,
-        ProcessIo processIo,
-        Inventory inventory
+        CatalogItemView item,
+        ProcessRunView process,
+        ProcessIoRunView processIo,
+        StockView inventory
     ) {
         List<RuleTarget> targets = new ArrayList<>();
         targets.add(new RuleTarget("project", run.getProjectId()));
         targets.add(new RuleTarget("workflow", run.getWorkflowId()));
         targets.add(new RuleTarget("run", run.getProductionRunId()));
-        targets.add(new RuleTarget("item", item.getItemId()));
+        targets.add(new RuleTarget("item", item.itemId()));
         if (process != null) {
-            targets.add(new RuleTarget("process", process.getProcessId()));
+            targets.add(new RuleTarget("process", process.processId()));
         }
         if (processIo != null) {
-            targets.add(new RuleTarget("process_io", processIo.getProcessIoId()));
+            targets.add(new RuleTarget("process_io", processIo.processIoId()));
         }
         if (inventory != null) {
-            targets.add(new RuleTarget("inventory", inventory.getInventoryId()));
+            targets.add(new RuleTarget("inventory", inventory.inventoryId()));
         }
 
         BigDecimal requestQuantity = request.actualQty() != null ? request.actualQty() : request.plannedQty();
@@ -905,10 +901,10 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         facts.put("operation", "run_item_record");
         facts.put("run", run);
         facts.put("request", request);
-        facts.put("item", item);
-        facts.put("process", process);
-        facts.put("processIo", processIo);
-        facts.put("inventory", inventory);
+        facts.put("item", itemRuleFacts(item));
+        facts.put("process", process == null ? null : process.ruleFacts());
+        facts.put("processIo", processIo == null ? null : processIo.ruleFacts());
+        facts.put("inventory", inventory == null ? null : stockRuleFacts(inventory));
         facts.put("requestQuantity", requestQuantity);
         facts.put("direction", request.direction().trim().toLowerCase(Locale.ROOT));
 

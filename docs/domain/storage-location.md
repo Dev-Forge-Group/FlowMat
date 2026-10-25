@@ -21,6 +21,7 @@
 | `parent_location_id` | 바깥 종류의 위치. 비우면 최상위 |
 | `active_yn` | `N`이면 새 재고를 받지 않음 |
 | `location_name`, `note` | 설명용(100자, 500자) |
+| `storage_condition` | 보관 조건, 자유 글 100자(2026-10-24, V105). 품목의 보관 조건과 견준다(SL1–SL4) |
 
 `inventory.location`은 계속 텍스트입니다. 외래 키를 걸지 않은 이유: 기존 행의 자유 입력 위치를 깨지 않고, 목록을 쓰지 않는 프로젝트는 지금처럼 쓸 수 있게 하기 위해서입니다.
 
@@ -56,7 +57,7 @@
 | 요청 | 권한 | 설명 |
 |---|---|---|
 | `GET /storage-locations?projectId=` | 읽기 | 트리 순서(부모 다음 자식)로 전체. 각 위치에 `path`("S1 / WH1 / Z1"), `depth`, `stockRecords`(재고를 가진 행 수), `itemCount` |
-| `POST /storage-locations` | 쓰기 | `{projectId, locationCode, locationType, parentLocationId?, locationName?, note?}` |
+| `POST /storage-locations` | 쓰기 | `{projectId, locationCode, locationType, parentLocationId?, locationName?, note?, storageCondition?}` |
 | `PUT /storage-locations/{id}` | 쓰기 | 준 필드만 변경. `clearParent: true`는 최상위로, `active: false/true`, 빈 이름·메모는 지움 |
 | `DELETE /storage-locations/{id}` | 쓰기 | 소프트 삭제(L7) |
 | `POST /storage-locations/adopt-used?projectId=` | 쓰기 | 위 "기존 위치 받아들이기" |
@@ -71,6 +72,29 @@
 - 오른쪽 폼: 코드, 이름, 종류, Inside(바깥 종류의 활성 위치만, 자기와 자기 안쪽 제외), 메모. 종류를 바꾸면 담을 수 없는 부모는 비움. 추가 후 종류와 부모를 유지해 같은 선반의 bin을 연달아 넣기 쉬움
 
 Stock 탭의 위치 입력(Add Stock, 행 편집)과 **Move to another place**의 도착 위치는 목록의 활성 위치를 제안합니다(`datalist`). 목록이 비어 있으면 제안이 없고 자유 입력 그대로입니다. 서버 거절 메시지는 기존처럼 폼에 보입니다.
+
+## 보관 조건 (2026-10-24, 2fl, V105)
+
+사용자 위임(2026-10-24, "의사결정도 recommend 로 계속 알아서 밀고나가")에 따라 리드가 고른 권장안이다.
+
+| # | 규칙 | 위반 응답 |
+|---|---|---|
+| SL1 | 위치마다 **보관 조건**(자유 글 100자, 품목의 `storageCondition`과 같은 방식). 앞뒤 공백을 떼고 안쪽 공백을 하나로 저장한다. 자기 조건이 없는 위치는 바깥 위치 중 가장 가까운 것의 조건을 따른다(창고에 한 번 적으면 그 안의 선반·통이 따름). `POST /storage-locations`·`PUT /storage-locations/{id}`의 `storageCondition`: PUT은 주면 바꾸고 빈 값이면 지우며 빼면 그대로. 응답은 그 위치 자기 조건 | 400 100자 초과·NUL 같은 저장할 수 없는 글자 |
+| SL2 | 같고 다름: 공백을 정리하고 대소문자를 무시해 견준다. 어느 한쪽이라도 비면 견주지 않는다. Locations 탭의 **Storage** 열(`Chilled`, 물려받으면 `Chilled (from COLD)`, 없으면 `—`). 보유·예약이 있는 재고 행 중 품목 조건이 그 위치 조건과 다른 것을 그 위치 줄에 `1 record needs another condition: FISH (Frozen)`, 목록 위에 `N stock records are kept where the storage condition differs from the item's.` | |
+| SL3 | **기본은 막지 않는다**(프로젝트가 고르면 SL5). Add Stock과 **Move to another place**에서 고른 목록 위치의 조건이 품목과 다르면 `FISH is kept "Frozen"; B1 is "Chilled".`를 보여 줄 뿐, 저장은 그대로(L5·이동·가져오기·창고 작업 규칙은 바뀌지 않음) | |
+| SL4 | 위치 폼의 **Storage condition**은 위치와 품목이 이미 쓰는 조건을 한 번씩 제안한다(datalist). 안내 `Places inside without their own take this one. Stock is not refused; …` | |
+| SL5 | **막기**(2026-10-24, 2gk, V117 `inventory_setting`, 사용자 위임 "의사결정도 recommend 로 계속 알아서 밀고나가"): 프로젝트가 `refuse`를 고르면 목록 위치로 재고가 들어오는 움직임 — 받기(Add Stock·입고 가져오기·발주 입고), 이동 도착, 생산 산출 — 에서 그 위치의 조건(없으면 바깥 위치의 것, SL1)이 품목 조건과 다르면(SL2처럼 견줌) 그 움직임 전체를 거절한다. 한쪽이라도 비었거나 목록에 없는 위치는 견주지 않는다. 이미 있는 재고·조정·실사는 그대로 | 409 `FISH is kept "Frozen"; B1 is "Chilled". This project refuses stock in a place with another storage condition.` |
+| SL6 | **설정**: `GET /inventory-settings?projectId=`(읽기 권한, 없으면 `warn`·version null), `PUT /inventory-settings {{projectId, storageConditionPolicy: warn|refuse, expectedVersion}}`은 프로젝트 소유자만, 연 때의 version(같은 값이면 그대로). 기본은 `warn`(SL3) | 403 소유자 아님, 400 다른 값, 409 version |
+| SL7 | **화면**: 위치 목록이 있으면 Locations 탭의 `Storage condition policy`(**Different storage condition**: warn only·refuse the stock), 소유자만 바꾼다. 거절은 Add Stock·이동 폼의 서버 메시지로 보인다. 확인은 재고 명령 한 곳(`InventoryCommandService` → `StorageConditionGuard`, 품목 조건은 catalog 공개 조회 `CatalogStorageQuery`) | |
+
+결정:
+1. 자유 글로 둔다. 품목의 보관 조건이 V1부터 자유 글이라, 정해진 목록을 만들면 기존 품목 값을 옮겨야 한다.
+2. 바깥 위치의 조건을 물려받는다. 창고·구역 단위로 관리하는 일이 많다.
+3. 막지 않고 알린다. 재고를 쓰는 경로(등록·이동·입고 가져오기·창고 작업)의 잠금과 규칙을 건드리지 않는다. 막을지는 나중에 프로젝트 설정으로.
+4. 견주기는 화면에서 한다. 위치·재고·품목 목록을 이미 불러오므로 새 API가 없다.
+5. 위치 용량은 이번에 하지 않는다. 품목에 부피·무게가 없어 무엇으로 셀지 먼저 정해야 한다.
+
+- 검증: `StorageConditionIntegrationTest`(새 프로젝트) — 창고 `  Chilled   2-8 C ` → `Chilled 2-8 C`, 그 안의 통은 조건 없음 → 통 `Frozen`, 이름만 바꾸면 그대로, 목록에 둘 다, 빈 값으로 지움 → 101자·NUL 400(그대로), 101자로 만들기 400, 외부인 403. 프런트 `storageConditionModel.test.ts`(비교, 물려받기, 경고, 다른 조건의 재고 행, 제안), `locationModel.test.ts`(요청 본문), 모의 e2e `storage-conditions.spec.ts`(통이 창고의 Chilled를 물려받고 Frozen 품목 재고 행을 알림 → 통에 Frozen 저장하면 알림 사라짐·보낸 본문, Add Stock에서 `b1`을 고르면 경고·목록 밖 위치는 없음). 관련 백엔드 41건/17클래스(새 `StorageConditionIntegrationTest` 1, 위치·동시성 13, 재고 이동·입고 가져오기 9, 마이그레이션 16, `ModuleBoundaryTest` 2), 프런트 typecheck·lint·Vitest 714건(새 `storageConditionModel.test.ts` 5), 모의 e2e `storage-conditions.spec.ts` 2건과 위치·재고·창고 작업·실사 화면 43건 통과(격리본, 실제 API용 3건 조건부 제외). 전체 백엔드 2,128건(301클래스) 실패·오류·제외 0(커버리지 검사 생략).
 
 ## 위치 라벨 (L10)
 
@@ -107,6 +131,7 @@ Stock 탭의 위치 입력(Add Stock, 행 편집)과 **Move to another place**�
 - ~~위치별(창고별) 재고 분석~~ → [재고 흐름 분석](stock-analysis.md) A5(2026-10-03)
 
 - ~~Putaway/Pick 작업 지시(FM-WMS-002 나머지)~~ → [창고 작업](warehouse-task.md)으로 구현(2026-09-27, V31)
-- 위치별 용량·보관 조건(냉장 등)과 품목 보관 조건 대조
+- ~~보관 조건(냉장 등)과 품목 보관 조건 대조~~ → SL1–SL4(2026-10-24, 2fl, V105). 막지 않고 알린다(막기는 SL5–SL7)
+- 위치별 용량(품목에 부피·무게가 없어 아직). ~~보관 조건이 다르면 막을지(프로젝트 설정)~~ → SL5–SL7(2026-10-24, 2gk, V117)
 - ~~위치 코드 변경 시 재고 행 위치 일괄 변경~~ → L7(2026-10-03). 이동 이력·실사 이력의 위치 칸은 재고 행의 지금 위치라 옛 이동도 새 코드로 보임([재고 이동 이력](stock-ledger.md) "한계")
 - ~~재고 경보를 위치 계층(창고 단위)으로 묶어 보기~~ → Stock 탭 경보의 **Alerts at place**(2026-10-03, [재고 경보](stock-alert.md) 화면). 위치 목록의 계층별 재고 행·품목 합계와 실사의 **Place** 거르기(그 위치와 안쪽 위치의 행만, 실사표 내려받기에도 적용)도 2026-10-03 구현

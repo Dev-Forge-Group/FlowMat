@@ -35,15 +35,16 @@ function hours(value: number): string {
 }
 
 /**
- * One line, e.g. "Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 10 h", with the changeover and the orders the
- * suggestion was moved after when there are any.
+ * One line, e.g. "Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 10 h", with the changeover, the labor the step plan
+ * leaves for the crew (docs/domain/worker-calendar.md LB25) and the orders the suggestion was moved after when there are any.
  */
 export function planSummary(plan: WorkOrderPlanSuggestionDto): string {
   const changeover = plan.changeoverHours > 0
     ? ` (with ${hours(plan.changeoverHours)} changeover${plan.changeoverFrom ? ` after ${plan.changeoverFrom}` : ''})`
     : ''
+  const labor = plan.laborHours != null ? ` · labor ${hours(plan.laborHours)} for ${plan.laborMinutes ?? 0} worker min` : ''
   const after = plan.movedPast.length > 0 ? ` · after ${plan.movedPast.join(', ')}` : ''
-  return `${planStamp(plan.plannedStartAt)} → ${planStamp(plan.plannedEndAt)} · needs ${hours(plan.neededHours)}${changeover}${after}`
+  return `${planStamp(plan.plannedStartAt)} → ${planStamp(plan.plannedEndAt)} · needs ${hours(plan.neededHours)}${changeover}${labor}${after}`
     + crewDelayNote(plan.waitedForCrew, plan.crewMovedPast) + crewNote(plan.crew)
 }
 

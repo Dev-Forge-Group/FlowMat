@@ -26,6 +26,7 @@ import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
+import org.myweb.flowmat.global.util.StorableText;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,6 +100,7 @@ public class StorageLocationService {
         location.setLocationType(type);
         location.setActiveYn("Y");
         location.setNote(text(request.note()));
+        location.setStorageCondition(condition(request.storageCondition()));
         location.setDeletedYn(NOT_DELETED);
         location.setCreatedBy(projectAccessService.requireCurrentUserId());
         return single(storageLocationRepository.saveAndFlush(location));
@@ -144,6 +146,9 @@ public class StorageLocationService {
         }
         if (request.note() != null) {
             location.setNote(text(request.note()));
+        }
+        if (request.storageCondition() != null) {
+            location.setStorageCondition(condition(request.storageCondition()));
         }
         if (Boolean.FALSE.equals(request.active()) && active(location)) {
             // New stock for this place waits for the switch-off, so the check below sees all it brought.
@@ -419,7 +424,8 @@ public class StorageLocationService {
             String.join(" / ", lineage),
             lineage.size() - 1,
             held == null ? 0 : held[0],
-            held == null ? 0 : held[1]
+            held == null ? 0 : held[1],
+            location.getStorageCondition()
         );
     }
 
@@ -452,6 +458,20 @@ public class StorageLocationService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, field + " is required.");
         }
         return text;
+    }
+
+    /** Trimmed with inner spaces collapsed; blank is none (SL1). */
+    private static String condition(String value) {
+        StorableText.require(value, "storageCondition");
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        String collapsed = trimmed.replaceAll("\\s+", " ");
+        if (collapsed.length() > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "storageCondition takes at most 100 characters.");
+        }
+        return collapsed;
     }
 
     private static String text(String value) {

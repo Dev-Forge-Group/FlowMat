@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useWorkOrderLaborComparisonQuery } from '../../../entities/production/api/useWorkOrderLaborComparison'
 import { useWorkOrderPlanSuggestionQuery } from '../../../entities/production/api/useWorkOrderPlan'
 import { useSaveWorkOrderMutation } from '../../../entities/production/api/useWorkOrders'
 import { errorMessage } from '../../../shared/lib/errorMessage'
@@ -9,7 +10,8 @@ import { defaultPlanFrom, planInput, planSummary } from '../model/workOrderPlanM
 /**
  * Suggests planned dates from the assigned equipment's shifts, downtime, changeover and the orders already planned on it
  * (docs/domain/equipment-schedule.md "계획 기간 제안"), and from the crew's shifts and other orders
- * (docs/domain/worker-calendar.md WC24-WC26). A draft can take them; other orders only show them.
+ * (docs/domain/worker-calendar.md WC24-WC26), counting the labor its step plan leaves for the crew; without equipment it shows
+ * once there is a step plan, and the crew's time decides (LB25). A draft can take them; other orders only show them.
  */
 export function WorkOrderPlanSuggestion({ order, projectId }: { order: WorkOrderDto; projectId: string }) {
   const queryClient = useQueryClient()
@@ -18,6 +20,7 @@ export function WorkOrderPlanSuggestion({ order, projectId }: { order: WorkOrder
   const [asked, setAsked] = useState<string | null>(null)
   const suggestion = useWorkOrderPlanSuggestionQuery(order.workOrderId, asked)
   const save = useSaveWorkOrderMutation(projectId)
+  const labor = useWorkOrderLaborComparisonQuery(order.workOrderId)
   const plan = suggestion.isError ? undefined : suggestion.data
 
   function ask() {
@@ -37,6 +40,7 @@ export function WorkOrderPlanSuggestion({ order, projectId }: { order: WorkOrder
     })
   }
 
+  if (!order.equipmentId && labor.data?.stepPlannedMinutes == null) return null
   return (
     <div aria-label="Plan dates"
       style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, marginBottom: 8 }}>

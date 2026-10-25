@@ -9,6 +9,7 @@ import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftCopyRequest
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerShiftsRequest;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAvailabilityResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerCalendarResponse;
+import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerDayHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleResponse;
 import org.myweb.flowmat.domain.workforce.application.WorkerCalendarService;
@@ -121,6 +122,13 @@ public class WorkerCalendarController {
     public ApiResponse<List<WorkerScheduleHistoryResponse>> scheduleHistory(@PathVariable("projectId") String projectId,
                                                                             @PathVariable("userId") String userId) {
         return ApiResponse.ok(service.scheduleHistory(projectId, userId));
+    }
+
+    /** Every change of the worker's own dates and days off, newest first (ADR-024). */
+    @GetMapping("/{userId}/day-history")
+    public ApiResponse<List<WorkerDayHistoryResponse>> dayHistory(@PathVariable("projectId") String projectId,
+                                                                  @PathVariable("userId") String userId) {
+        return ApiResponse.ok(service.dayHistory(projectId, userId));
     }
 
     /** Deletes a version that has not started yet (ADR-013). */

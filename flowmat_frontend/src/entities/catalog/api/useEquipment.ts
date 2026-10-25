@@ -191,6 +191,38 @@ export function useEquipmentCalendarHistoryQuery(equipmentId: string, enabled: b
   })
 }
 
+/** One save or removal of an equipment's own dates or downtime, with what it held (docs/domain/equipment-schedule.md CV12). */
+export interface EquipmentDayHistoryDto {
+  historyId: string
+  kind: 'day' | 'downtime'
+  action: 'saved' | 'removed'
+  /** YYYY-MM-DD; null for a downtime. */
+  firstDate: string | null
+  lastDate: string | null
+  /** For a day change, each date with its shifts (none: closed) and reason; empty for a downtime. */
+  days: { date: string; shifts: { shiftStart: string; shiftEnd: string }[]; reason: string | null }[]
+  downtimeId: string | null
+  downtimeType: DowntimeType | null
+  startsAt: string | null
+  endsAt: string | null
+  reason: string | null
+  /** The equipment the dates were copied from. */
+  copiedFrom: string | null
+  savedBy: string
+  savedAt: string
+}
+
+/** Loaded once asked for ({@code enabled}); every schedule change refreshes it. */
+export function useEquipmentDayHistoryQuery(equipmentId: string, enabled: boolean) {
+  return useQuery<EquipmentDayHistoryDto[]>({
+    queryKey: [...scheduleKey(equipmentId), 'day-history'],
+    enabled: enabled && Boolean(equipmentId),
+    retry: false,
+    queryFn: async () => unwrapApiResponse(await httpClient.get<ApiEnvelope<EquipmentDayHistoryDto[]>>(
+      `/equipments/${encodeURIComponent(equipmentId)}/day-history`)),
+  })
+}
+
 /** One version of the equipment's calendar, to change one that has not started (ADR-014). */
 export async function fetchEquipmentCalendarVersion(equipmentId: string, scheduleId: string): Promise<EquipmentCalendarVersionDto> {
   return unwrapApiResponse(await httpClient.get<ApiEnvelope<EquipmentCalendarVersionDto>>(
@@ -250,6 +282,7 @@ export function useEquipmentScheduleMutations(equipmentId: string) {
     queryClient.setQueryData(scheduleKey(equipmentId), schedule)
     void queryClient.invalidateQueries({ queryKey: [...scheduleKey(equipmentId), 'availability'] })
     void queryClient.invalidateQueries({ queryKey: [...scheduleKey(equipmentId), 'history'] })
+    void queryClient.invalidateQueries({ queryKey: [...scheduleKey(equipmentId), 'day-history'] })
     void queryClient.invalidateQueries({ queryKey: ['work-order-readiness'] })
   }
   return {
@@ -306,6 +339,7 @@ export function useEquipmentScheduleMutations(equipmentId: string) {
       onSuccess: (schedule: EquipmentScheduleDto) => {
         queryClient.setQueryData(scheduleKey(schedule.equipmentId), schedule)
         void queryClient.invalidateQueries({ queryKey: [...scheduleKey(schedule.equipmentId), 'availability'] })
+        void queryClient.invalidateQueries({ queryKey: [...scheduleKey(schedule.equipmentId), 'day-history'] })
         void queryClient.invalidateQueries({ queryKey: ['work-order-readiness'] })
       },
     }),

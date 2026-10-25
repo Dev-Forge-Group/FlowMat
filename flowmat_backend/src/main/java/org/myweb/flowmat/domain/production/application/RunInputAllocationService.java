@@ -12,9 +12,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.RunInputAllocationRequest;
@@ -58,67 +58,67 @@ public class RunInputAllocationService {
         ProductionRunServiceImpl.requireOpenRun(run);
         ProductionText.requireStorable(request.itemId(), "itemId");
         ProductionText.requireStorable(request.processId(), "processId");
-        Item item = references.item(request.itemId())
-            .filter(found -> run.getProjectId().equals(found.getProjectId()))
+        CatalogItemView item = references.item(request.itemId())
+            .filter(found -> run.getProjectId().equals(found.projectId()))
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!"Y".equals(item.getLotManageYn())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, item.getItemCode() + " is not LOT-tracked; record it directly.");
+        if (!"Y".equals(item.lotManageYn())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, item.itemCode() + " is not LOT-tracked; record it directly.");
         }
         // Allocate in the item's own unit; each piece is then recorded in that unit.
         String unit = ProductionRunServiceImpl.storedUnit(request.unit());
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(request.quantity(), unit, item.getUnitId());
+        UnitConverter.Conversion conversion = unitConverter.toItemUnit(request.quantity(), unit, item.unitId());
         if (conversion.quantity().compareTo(new BigDecimal("0.00005")) < 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
                 "quantity must round to at least 0.0001 in the item's stock unit.");
         }
         BigDecimal needed = conversion.quantity().setScale(4, RoundingMode.HALF_UP);
-        String recordUnit = item.getUnitId() == null
+        String recordUnit = item.unitId() == null
             ? unit
-            : references.unitCode(item.getUnitId()).orElse(unit);
+            : references.unitCode(item.unitId()).orElse(unit);
 
         // An actual run can consume its order's reservation through the ordinary recording path.
         // Simulations do not release physical reservations, so they can only plan against free stock.
         Map<String, BigDecimal> ownAllocated = ownAllocations(run);
 
         // Locked before they are read, so a concurrent movement waits instead of draining a record this split counts on.
-        List<Inventory> stock = references.lockItemStock(run.getProjectId(), item.getItemId())
+        List<StockView> stock = references.lockItemStock(run.getProjectId(), item.itemId())
             .stream()
-            .sorted(Comparator.comparing(Inventory::getCreatedAt, Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
-                .thenComparing(Inventory::getInventoryId))
-            .filter(row -> row.getLotId() != null)
-            .filter(row -> !"quarantined".equalsIgnoreCase(row.getInventoryStatus()))
+            .sorted(Comparator.comparing(StockView::createdAt, Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
+                .thenComparing(StockView::inventoryId))
+            .filter(row -> row.lotId() != null)
+            .filter(row -> !"quarantined".equalsIgnoreCase(row.inventoryStatus()))
             .filter(row -> usableQuantity(row, ownAllocated).signum() > 0)
             .toList();
-        Map<String, LotMaster> lots = references.lots(stock.stream().map(Inventory::getLotId).distinct().toList())
+        Map<String, LotView> lots = references.lots(stock.stream().map(StockView::lotId).distinct().toList())
             .stream()
-            .collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
+            .collect(Collectors.toMap(LotView::lotId, Function.identity()));
         LocalDate today = projectCalendar.today(run.getProjectId());
-        List<Inventory> usable = stock.stream()
+        List<StockView> usable = stock.stream()
             .filter(row -> {
-                LotMaster lot = lots.get(row.getLotId());
-                return lot != null && LotStatus.fromCode(lot.getLotStatus()).usable() && !lot.isExpiredOn(today);
+                LotView lot = lots.get(row.lotId());
+                return lot != null && LotStatus.fromCode(lot.lotStatus()).usable() && !lot.isExpiredOn(today);
             })
             .sorted(Comparator
-                .comparing((Inventory row) -> lots.get(row.getLotId()).getExpiryDate(), Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(row -> lots.get(row.getLotId()).getReceivedAt(), Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
-                .thenComparing(row -> lots.get(row.getLotId()).getLotNo(), Comparator.nullsLast(Comparator.naturalOrder())))
+                .comparing((StockView row) -> lots.get(row.lotId()).expiryDate(), Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(row -> lots.get(row.lotId()).receivedAt(), Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
+                .thenComparing(row -> lots.get(row.lotId()).lotNo(), Comparator.nullsLast(Comparator.naturalOrder())))
             .toList();
         BigDecimal available = usable.stream().map(row -> usableQuantity(row, ownAllocated)).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (available.compareTo(needed) < 0) {
             throw new BusinessException(ErrorCode.CONFLICT, "Only " + available.stripTrailingZeros().toPlainString() + " " + recordUnit
-                + " of " + item.getItemCode() + " is in usable LOTs; " + needed.stripTrailingZeros().toPlainString()
+                + " of " + item.itemCode() + " is in usable LOTs; " + needed.stripTrailingZeros().toPlainString()
                 + " needed. Nothing was recorded.");
         }
 
         List<ProductionRunItemResponse> recorded = new ArrayList<>();
         BigDecimal remaining = needed;
-        for (Inventory row : usable) {
+        for (StockView row : usable) {
             if (remaining.signum() <= 0) {
                 break;
             }
             BigDecimal piece = usableQuantity(row, ownAllocated).min(remaining);
             recorded.add(productionRunService.recordRunItem(productionRunId, new ProductionRunItemRecordRequest(
-                request.processId(), null, row.getInventoryId(), item.getItemId(), "input", piece, piece, recordUnit)));
+                request.processId(), null, row.inventoryId(), item.itemId(), "input", piece, piece, recordUnit)));
             remaining = remaining.subtract(piece);
         }
         return recorded;
@@ -133,8 +133,8 @@ public class RunInputAllocationService {
             .stream().collect(Collectors.toMap(allocation -> allocation.getInventoryId(), allocation -> allocation.remaining(), BigDecimal::add));
     }
 
-    private static BigDecimal usableQuantity(Inventory row, Map<String, BigDecimal> ownAllocated) {
-        return row.getAvailableQuantity() == null ? BigDecimal.ZERO
-            : row.getAvailableQuantity().add(ownAllocated.getOrDefault(row.getInventoryId(), BigDecimal.ZERO));
+    private static BigDecimal usableQuantity(StockView row, Map<String, BigDecimal> ownAllocated) {
+        return row.availableQuantity() == null ? BigDecimal.ZERO
+            : row.availableQuantity().add(ownAllocated.getOrDefault(row.inventoryId(), BigDecimal.ZERO));
     }
 }

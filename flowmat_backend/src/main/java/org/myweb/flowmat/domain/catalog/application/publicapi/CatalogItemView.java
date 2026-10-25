@@ -9,7 +9,9 @@ import java.math.BigDecimal;
  * {@code leadTimeDays} is how long an order takes to arrive, null when unknown; {@code itemStatus} is active, inactive or
  * discontinued (null on items saved before statuses, which count as active; see ItemStatusRule); {@code lotManageYn} is "Y"
  * when stock is tracked per LOT; {@code purchaseUnit} is what the item is bought in and {@code conversionRate} how many
- * stock units one holds, the unit null when it is bought in its stock unit.
+ * stock units one holds, the unit null when it is bought in its stock unit; {@code safetyStockQty} is the stock it should not
+ * fall below, null when unset; {@code lotReleaseRequiredYn} is "Y" when a new LOT of it is held until its receipt checks
+ * pass (docs/domain/lot-release.md).
  */
 public record CatalogItemView(
     String itemId,
@@ -24,6 +26,8 @@ public record CatalogItemView(
     String itemStatus,
     String lotManageYn,
     String purchaseUnit,
-    BigDecimal conversionRate
+    BigDecimal conversionRate,
+    BigDecimal safetyStockQty,
+    String lotReleaseRequiredYn
 ) {
 }

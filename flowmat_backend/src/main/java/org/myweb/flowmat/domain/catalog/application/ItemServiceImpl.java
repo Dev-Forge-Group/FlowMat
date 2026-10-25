@@ -9,6 +9,8 @@ import org.myweb.flowmat.domain.catalog.api.dto.request.ItemCreateRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.request.ItemDetails;
 import org.myweb.flowmat.domain.catalog.api.dto.request.ItemUpdateRequest;
 import org.myweb.flowmat.domain.catalog.api.dto.response.ItemResponse;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
@@ -36,6 +38,7 @@ public class ItemServiceImpl implements ItemService {
     private final ItemCostHistoryService itemCostHistoryService;
     /** Other domains that still rely on an item; see {@link ItemUsageCheck}. */
     private final List<ItemUsageCheck> itemUsageChecks;
+    private final CatalogQuery catalogQuery;
 
     /** Blank clears the unit; otherwise it must reference an active unit_master row. */
     private String requireActiveUnit(String unitId) {
@@ -179,8 +182,9 @@ public class ItemServiceImpl implements ItemService {
     public void deleteItem(String itemId) {
         Item item = findActiveItem(itemId);
         projectAccessService.requireProjectOwnerAccess(item.getProjectId());
+        CatalogItemView view = catalogQuery.findItems(List.of(item.getItemId())).get(item.getItemId());
         List<String> reasons = itemUsageChecks.stream()
-            .map(check -> check.whyInUse(item))
+            .map(check -> check.whyInUse(view))
             .flatMap(Optional::stream)
             .toList();
         if (!reasons.isEmpty()) {

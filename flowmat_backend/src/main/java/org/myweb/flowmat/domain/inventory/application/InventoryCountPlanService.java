@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanAssignRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountPlanRecordRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryCountRequest;
@@ -22,7 +23,9 @@ import org.myweb.flowmat.domain.inventory.domain.entity.InventoryCountPlanLine;
 import org.myweb.flowmat.domain.inventory.repository.InventoryCountPlanRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryCountPlanLineRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
+import org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -37,6 +40,8 @@ public class InventoryCountPlanService {
     private final InventoryRepository stocks;
     private final InventoryCountService countService;
     private final ProjectAccessService access;
+    private final ProjectMemberQuery projectMembers;
+    private final NotificationCommand notifications;
     private final IdGenerator ids;
 
     @Transactional(readOnly = true)
@@ -121,6 +126,30 @@ public class InventoryCountPlanService {
         return view(plans.saveAndFlush(plan), lines, owner(plan.getProjectId()));
     }
 
+    /**
+     * Gives an open plan to the project owner or an active member, who hears of it unless they took it themselves; blank gives
+     * it to no one (docs/domain/stock-count.md P9-P10). Giving it to the same person again tells no one.
+     */
+    @Transactional
+    public InventoryCountPlanResponse assign(String planId, InventoryCountPlanAssignRequest request) {
+        InventoryCountPlan plan = writable(planId);
+        String userId = request == null ? null : text(request.assignedTo(), "assignedTo");
+        if (userId != null && !userId.equals(projectMembers.ownerOf(plan.getProjectId())) && !projectMembers.isActiveMember(plan.getProjectId(), userId)) {
+            throw bad(userId + " is not a member of this project.");
+        }
+        String before = plan.getAssignedTo();
+        plan.setAssignedTo(userId);
+        List<InventoryCountPlanLine> lines = entries.findAllByPlanIdOrderByInventoryIdAsc(planId);
+        InventoryCountPlan saved = plans.saveAndFlush(plan);
+        if (userId != null && !userId.equals(before)) {
+            notifications.notifyAssignee(userId, access.requireCurrentUserId(), plan.getProjectId(), "count_plan",
+                "Count plan " + (plan.getNote() == null ? "of " + lines.size() + (lines.size() == 1 ? " record" : " records") : plan.getNote()) + " is yours",
+                (plan.isBlind() ? "A blind count of " : "A count of ") + lines.size() + (lines.size() == 1 ? " stock record." : " stock records."),
+                "count_plan", plan.getPlanId());
+        }
+        return view(saved, lines, owner(plan.getProjectId()));
+    }
+
     @Transactional
     public InventoryCountPlanResponse submit(String planId) {
         InventoryCountPlan plan = plans.findForUpdate(planId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
@@ -188,7 +217,8 @@ public class InventoryCountPlanService {
             plan.getCreatedBy(), plan.getCreatedAt(), plan.getSubmittedBy(), plan.getSubmittedAt(), plan.getCountId(),
             lines.stream().map(line -> new InventoryCountPlanResponse.Line(line.getLineId(), line.getInventoryId(), line.getItemId(), line.getLotId(),
                 line.getLocation(), owner ? line.getBaselineQuantity() : null, owner ? line.getCheckpointQuantity() : null,
-                line.getCountedQuantity(), line.isRequiresRecount(), line.getCountedBy(), line.getCountedAt(), line.getEntryVersion())).toList());
+                line.getCountedQuantity(), line.isRequiresRecount(), line.getCountedBy(), line.getCountedAt(), line.getEntryVersion())).toList(),
+            plan.getAssignedTo());
     }
     private static String required(String value, String field) {
         String normalized = text(value, field);

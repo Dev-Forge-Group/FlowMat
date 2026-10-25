@@ -3,21 +3,26 @@ import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import type { ApiEnvelope } from '../../../shared/types/api'
 
-/** Suggested planned start and end on the order's equipment (docs/domain/equipment-schedule.md "계획 기간 제안"). */
+/**
+ * Suggested planned start and end on the order's equipment (docs/domain/equipment-schedule.md "계획 기간 제안"), or without
+ * equipment in its crew's time by its step plan (docs/domain/worker-calendar.md LB25).
+ */
 export interface WorkOrderPlanSuggestionDto {
   workOrderId: string
-  equipmentId: string
+  /** Null when the crew's time decided (LB25). */
+  equipmentId: string | null
   /** Where the search began. */
   from: string
   plannedStartAt: string
   plannedEndAt: string
-  remainingQuantity: number
-  capacityPerHour: number
+  remainingQuantity: number | null
+  capacityPerHour: number | null
   /** The equipment's efficiency, null for 100 (docs/domain/equipment.md E8); productionHours is at capacity times this. */
   efficiencyPercent?: number | null
-  productionHours: number
+  /** Null without equipment. */
+  productionHours: number | null
   changeoverHours: number
-  /** Production plus changeover: the available time between the start and the end. */
+  /** The longer of production and labor, plus changeover: the available time between the start and the end. */
   neededHours: number
   /** The order whose item this one changes over from; null without a changeover. */
   changeoverFrom: string | null
@@ -29,6 +34,9 @@ export interface WorkOrderPlanSuggestionDto {
   waitedForCrew?: string[]
   /** Approved or running orders holding some of the crew that the suggestion was moved after (WC25). */
   crewMovedPast?: { workOrderNumber: string; userIds: string[] }[]
+  /** What is left of the step plan in worker minutes, and that shared by the crew with shifts (LB25); null when not known. */
+  laborMinutes?: number | null
+  laborHours?: number | null
 }
 
 /** Suggestions for several orders, in the order asked (docs/domain/equipment-schedule.md P8-P11). Nothing is saved. */

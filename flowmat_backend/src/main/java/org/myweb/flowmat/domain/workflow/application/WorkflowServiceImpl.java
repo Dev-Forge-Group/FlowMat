@@ -4,7 +4,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
-import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowUpdateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowResponse;
@@ -44,11 +43,13 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     @Transactional
     public WorkflowResponse createWorkflow(WorkflowCreateRequest request) {
-        Project project = projectAccessService.requireProjectWriteAccess(request.projectId());
+        projectAccessService.requireProjectWriteAccess(request.projectId());
+        // The check found the project by this exact id (docs/architecture/adr/ADR-018-entity-boundary.md R2).
+        String projectId = request.projectId();
 
         Workflow workflow = new Workflow();
         workflow.setWorkflowId(idGenerator.generate());
-        workflow.setProjectId(project.getProjectId());
+        workflow.setProjectId(projectId);
         workflow.setWorkflowName(request.workflowName().trim());
         workflow.setWorkflowDesc(trimToNull(request.workflowDesc()));
         workflow.setWorkflowType(defaultIfBlank(request.workflowType(), "main"));
@@ -59,7 +60,7 @@ public class WorkflowServiceImpl implements WorkflowService {
         workflow.setDeletedYn(NOT_DELETED);
 
         Workflow savedWorkflow = workflowRepository.save(workflow);
-        projectWorkflows.workflowAdded(project.getProjectId(), savedWorkflow.getWorkflowId());
+        projectWorkflows.workflowAdded(projectId, savedWorkflow.getWorkflowId());
         return toResponse(savedWorkflow);
     }
 

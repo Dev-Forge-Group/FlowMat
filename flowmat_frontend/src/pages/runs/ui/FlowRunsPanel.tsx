@@ -5,6 +5,9 @@ import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { delayText, heldText } from '../model/delayText'
+import { pinnedHttpBinding } from '../../../entities/connector/model/httpExecutionState'
+import { rawRunInputBody } from '../../../entities/connector/model/connectorForms'
+import { FlowRunHttpExecutionPanel } from './FlowRunHttpExecutionPanel'
 import type { ApiEnvelope, WorkflowDto, WorkflowRevisionDetailDto, WorkflowRevisionDto } from '../../../shared/types/api'
 
 type FlowRun = {
@@ -289,10 +292,10 @@ export function FlowRunsPanel({
   }
 
   const startMutation = useMutation({
-    mutationFn: () => postData<FlowRun>(executionMode === 'graph' ? '/flow-runs/graph' : '/flow-runs', {
-      workflowId, workflowRevisionId: selectedRevisionId, runType,
-      inputPayload: parseJson(runInputJson),
-    }),
+    mutationFn: async () => unwrapApiResponse(await httpClient.postJson<ApiEnvelope<FlowRun>>(
+      executionMode === 'graph' ? '/flow-runs/graph' : '/flow-runs',
+      rawRunInputBody({ workflowId, workflowRevisionId: selectedRevisionId, runType }, runInputJson),
+    )),
     onSuccess: async (run) => {
       setRunId(run.flowRunId)
       setScheduleEditStepId('')
@@ -515,7 +518,10 @@ export function FlowRunsPanel({
           {stepsQuery.isLoading && <p>Loading steps...</p>}
           {stepsQuery.isError && <p role="alert">{errorMessage(stepsQuery.error, 'Could not load steps.')}</p>}
           {steps.length === 0 && !stepsQuery.isLoading && <p className="inspector-hint">No steps recorded.</p>}
-          {steps.map((step) => (
+          {steps.map((step) => {
+            const httpBinding = selectedRun.executionMode === 'graph' && selectedRun.runType === 'actual'
+              && !selectedRun.productionRunId ? pinnedHttpBinding(revisionQuery.data?.snapshot, step.nodeId) : null
+            return (
             <div key={step.stepId} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <strong>#{step.sequenceNo} {nodes.find((node) => node.processId === step.nodeId)?.processName ?? step.nodeId}</strong>
@@ -555,11 +561,11 @@ export function FlowRunsPanel({
                       {selectedRun.executionMode === 'graph' && <button type="button"
                         disabled={actionMutation.isPending || previewPending}
                         onClick={() => void previewStep(step.stepId)}>Preview routes</button>}
-                      <button type="button" disabled={actionMutation.isPending} onClick={() => void completeStep(step.stepId)}>Complete</button>
-                      <button type="button" disabled={actionMutation.isPending || !errorCodeForStep(step.stepId).trim()}
+                      {!httpBinding && <button type="button" disabled={actionMutation.isPending} onClick={() => void completeStep(step.stepId)}>Complete</button>}
+                      {!httpBinding && <button type="button" disabled={actionMutation.isPending || !errorCodeForStep(step.stepId).trim()}
                         onClick={() => void act(`${basePath}/steps/${encodeURIComponent(step.stepId)}/fail`,
                           { errorCode: errorCodeForStep(step.stepId),
-                            errorMessage: errorMessageForStep(step.stepId) || null })}>Fail</button>
+                            errorMessage: errorMessageForStep(step.stepId) || null })}>Fail</button>}
                     </>}
                   </>
                 )}
@@ -579,7 +585,7 @@ export function FlowRunsPanel({
                   {errorMessage(scheduleMutation.error, 'Could not save the schedule.')}
                 </p>}
               </div>}
-              {selectedRun.status === 'running' && !selectedRun.productionRunId && step.status === 'running' && <div
+              {selectedRun.status === 'running' && !selectedRun.productionRunId && step.status === 'running' && !httpBinding && <div
                 style={{ display: 'grid', gap: 6, maxWidth: 560, marginTop: 8 }}>
                 <label>Output snapshot for step #{step.sequenceNo} (JSON)
                   <textarea value={outputForStep(step.stepId)} onChange={(event) => {
@@ -616,6 +622,9 @@ export function FlowRunsPanel({
                       ?? decision.targetNodeId}
                   </div>)}
                 </div>}
+              {httpBinding && <FlowRunHttpExecutionPanel key={`${selectedRunId}:${step.stepId}`}
+                projectId={projectId} runId={selectedRunId} stepId={step.stepId} sequenceNo={step.sequenceNo}
+                runStatus={selectedRun.status} stepStatus={step.status} binding={httpBinding} />}
               {expandedStepId === step.stepId && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
                   <div>Input snapshot</div>
@@ -658,7 +667,7 @@ export function FlowRunsPanel({
                 </div>
               )}
             </div>
-          ))}
+          )})}
           {selectedRun.status === 'running' && !selectedRun.productionRunId && (
             <div style={{ display: 'grid', gap: 8, maxWidth: 560 }}>
               <label>Final run output (JSON)

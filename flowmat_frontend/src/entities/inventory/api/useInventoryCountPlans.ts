@@ -12,12 +12,15 @@ export interface CountPlan {
   planId: string; projectId: string; blind: boolean; status: 'open' | 'recount_required' | 'submitted'
   note: string | null; createdBy: string; createdAt: string; submittedBy: string | null
   submittedAt: string | null; countId: string | null; lines: CountPlanLine[]
+  /** Who should count it (docs/domain/stock-count.md P9). */
+  assignedTo?: string | null
 }
 export type CountPlanCommand =
   | { kind: 'create'; input: { projectId: string; requestId: string; blind: boolean; note: string; inventoryIds: string[] } }
   | { kind: 'record'; planId: string; lineId: string; input: { countedQuantity: number; expectedEntryVersion: number } }
   | { kind: 'recount'; planId: string; lineId: string }
   | { kind: 'submit'; planId: string }
+  | { kind: 'assign'; planId: string; input: { assignedTo: string | null } }
 
 export const countPlansKey = (projectId: string) => ['count-plans', projectId]
 export function useInventoryCountPlans(projectId: string) {
@@ -34,7 +37,9 @@ export function useCountPlanCommand(projectId: string) {
         ? await httpClient.post<ApiEnvelope<CountPlan>>(path, command.input)
         : command.kind === 'record'
           ? await httpClient.put<ApiEnvelope<CountPlan>>(`${path}/${command.planId}/lines/${command.lineId}`, command.input)
-          : await httpClient.post<ApiEnvelope<CountPlan>>(`${path}/${command.planId}/${command.kind === 'submit' ? 'submit' : `lines/${command.lineId}/recount`}`, {})
+          : command.kind === 'assign'
+            ? await httpClient.post<ApiEnvelope<CountPlan>>(`${path}/${command.planId}/assignee`, command.input)
+            : await httpClient.post<ApiEnvelope<CountPlan>>(`${path}/${command.planId}/${command.kind === 'submit' ? 'submit' : `lines/${command.lineId}/recount`}`, {})
       return unwrapApiResponse(response)
     },
     onSuccess: (plan) => {

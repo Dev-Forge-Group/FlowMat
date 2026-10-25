@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.inventory.api.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
@@ -10,7 +11,8 @@ import java.util.List;
  * @param dryRun only check and say what would happen
  * @param note written on every receipt into an existing record
  */
-public record StockImportRequest(@NotBlank String projectId, boolean dryRun, String note, List<Row> rows) {
+public record StockImportRequest(@NotBlank String projectId, boolean dryRun, String note,
+                                 List<@NotNull(message = "rows must not contain null entries.") Row> rows) {
 
     /**
      * @param location blank means a record without a location; matched exactly, as stock records are

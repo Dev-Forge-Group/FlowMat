@@ -1,5 +1,6 @@
 import type { RunLabor, RunLaborPerson, RunLaborStep } from '../../../entities/production/api/useRunLabor'
 import type { WorkOrderLaborComparisonDto } from '../../../entities/production/api/useWorkOrderLaborComparison'
+import type { ProcessDto } from '../../../shared/types/api'
 
 /**
  * Who can be picked as having worked on a run (docs/domain/worker-calendar.md LB2, LB7): the work order's crew first with
@@ -96,11 +97,54 @@ export function comparisonTotal(value: Pick<WorkOrderLaborComparisonDto, 'planne
   return `All: ${planned} · ${actual}`
 }
 
-/** "By step: Mix 300, Bake 120, whole run 20" when any actual time names a step (LB18); empty otherwise. */
+/**
+ * "By step: Mix 300 of 240 planned, Bake 0 of 180 planned, whole run 20" when any step has actual time or a plan (LB18, LB23);
+ * empty otherwise.
+ */
 export function comparisonSteps(value: Pick<WorkOrderLaborComparisonDto, 'steps' | 'wholeRunMinutes'>): string {
-  const steps = (value.steps ?? []).filter((step) => step.actualMinutes > 0)
+  const steps = (value.steps ?? []).filter((step) => step.actualMinutes > 0 || step.plannedMinutes != null)
   if (steps.length === 0) return ''
   const whole = value.wholeRunMinutes ?? 0
-  return `By step: ${[...steps.map((step) => `${step.nodeName ?? step.nodeId} ${step.actualMinutes}`),
-    ...(whole > 0 ? [`whole run ${whole}`] : [])].join(', ')}`
+  return `By step: ${[...steps.map((step) => `${step.nodeName ?? step.nodeId} ${step.actualMinutes}`
+    + `${step.plannedMinutes != null ? ` of ${step.plannedMinutes} planned` : ''}`),
+  ...(whole > 0 ? [`whole run ${whole}`] : [])].join(', ')}`
+}
+
+/** "Planned by step: 420 min" once a step plan is set (LB23); empty otherwise. */
+export function stepPlanTotal(value: Pick<WorkOrderLaborComparisonDto, 'stepPlannedMinutes'>): string {
+  return value.stepPlannedMinutes == null ? '' : `Planned by step: ${value.stepPlannedMinutes} min`
+}
+
+/** The nodes a run passes itself; nobody works on them (docs/architecture/adr/ADR-011-production-steps.md). */
+const GATEWAYS = new Set(['exclusive', 'join', 'split'])
+
+/** A process of the workflow in the step plan form, with its minutes as typed (LB24). */
+export interface StepPlanRow {
+  nodeId: string
+  nodeName: string
+  minutes: string
+}
+
+/** A row for every process of the workflow but its gateways, in the workflow's order, starting at what is planned (LB24). */
+export function stepPlanRows(processes: Pick<ProcessDto, 'processId' | 'processName' | 'nodeType'>[],
+  value: Pick<WorkOrderLaborComparisonDto, 'steps'> | undefined): StepPlanRow[] {
+  const planned = new Map((value?.steps ?? []).flatMap((step) => (step.plannedMinutes == null ? [] : [[step.nodeId, step.plannedMinutes] as const])))
+  return processes.filter((one) => !GATEWAYS.has((one.nodeType ?? '').toLowerCase()))
+    .map((one) => ({ nodeId: one.processId, nodeName: one.processName, minutes: planned.has(one.processId) ? String(planned.get(one.processId)) : '' }))
+}
+
+/** The step plan to send, a process left empty not planned, or what is wrong (LB23); the server checks again. */
+export function stepPlanPayload(rows: StepPlanRow[]):
+  { steps: { nodeId: string; plannedMinutes: number }[]; error: null } | { steps: null; error: string } {
+  const steps: { nodeId: string; plannedMinutes: number }[] = []
+  for (const row of rows) {
+    const typed = row.minutes.trim()
+    if (!typed) continue
+    const minutes = Number(typed)
+    if (!/^\d+$/.test(typed) || minutes < 1 || minutes > 100000) {
+      return { steps: null, error: `${row.nodeName}: enter whole minutes from 1 to 100000, or leave it empty.` }
+    }
+    steps.push({ nodeId: row.nodeId, plannedMinutes: minutes })
+  }
+  return { steps, error: null }
 }

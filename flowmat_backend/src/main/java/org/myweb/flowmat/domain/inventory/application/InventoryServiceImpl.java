@@ -8,7 +8,7 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.InventoryResponse;
 import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
@@ -59,42 +59,42 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public InventoryResponse createInventory(InventoryAdjustRequest request) {
         projectAccessService.requireProjectWriteAccess(request.projectId());
-        Item item = findActiveItem(request.itemId());
-        validateSameProject(request.projectId(), item.getProjectId());
-        ItemStatusRule.requireActive(item, "receive stock");
+        CatalogItemView item = findActiveItem(request.itemId());
+        validateSameProject(request.projectId(), item.projectId());
+        ItemStatusRule.requireActive(item.itemCode(), item.itemStatus(), "receive stock");
         evaluateRules(
             request.projectId(),
             List.of(
                 new RuleTarget("project", request.projectId()),
-                new RuleTarget("item", item.getItemId())
+                new RuleTarget("item", item.itemId())
             ),
             Map.of(
                 "operation", "inventory_create",
                 "request", request,
-                "item", item
+                "item", itemRuleFacts(item)
             )
         );
 
         // A project with a location list takes new stock only at an active listed place (docs/domain/storage-location.md).
         String location = trimToNull(request.location());
         if (location != null) {
-            location = storageLocationService.resolveForStock(item.getProjectId(), location);
+            location = storageLocationService.resolveForStock(item.projectId(), location);
         }
 
         // LOT-tracked items hold stock per LOT; everything else never names one.
         String lotId = trimToNull(request.lotId());
         boolean awaitingChecks = false;
-        if ("Y".equals(item.getLotManageYn())) {
+        if ("Y".equals(item.lotManageYn())) {
             if (lotId == null) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    item.getItemCode() + " is LOT-tracked; choose a LOT for this stock record.");
+                    item.itemCode() + " is LOT-tracked; choose a LOT for this stock record.");
             }
-            LotMaster lot = lotService.requireLotForStock(lotId, item.getProjectId(), item.getItemId());
+            LotMaster lot = lotService.requireLotForStock(lotId, item.projectId(), item.itemId());
             awaitingChecks = LotStatus.INSPECTION_PENDING.code().equals(lot.getLotStatus());
             // One stock record per item + location + LOT (V17 unique index); say so instead of a bare conflict. Taking turns
             // with anything else creating that record (another Add Stock, a transfer) makes the check hold until commit.
-            inventoryRepository.lockStockPlace(item.getProjectId(), item.getItemId(), lotId, location);
-            if (inventoryRepository.existsLotStockAt(item.getProjectId(), item.getItemId(), lotId, location)) {
+            inventoryRepository.lockStockPlace(item.projectId(), item.itemId(), lotId, location);
+            if (inventoryRepository.existsLotStockAt(item.projectId(), item.itemId(), lotId, location)) {
                 throw new BusinessException(ErrorCode.CONFLICT,
                     "LOT " + lot.getLotNo() + " already has a stock record"
                         + (location != null ? " at " + location : " without a location")
@@ -102,13 +102,13 @@ public class InventoryServiceImpl implements InventoryService {
             }
         } else if (lotId != null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
-                item.getItemCode() + " is not LOT-tracked; its stock records cannot name a LOT.");
+                item.itemCode() + " is not LOT-tracked; its stock records cannot name a LOT.");
         }
 
         Inventory inventory = new Inventory();
         inventory.setInventoryId(idGenerator.generate());
         inventory.setProjectId(request.projectId().trim());
-        inventory.setItemId(item.getItemId());
+        inventory.setItemId(item.itemId());
         inventory.setLotId(lotId);
         applyQuantities(inventory, request);
         inventory.setLocation(location);
@@ -152,28 +152,28 @@ public class InventoryServiceImpl implements InventoryService {
                 "This stock record changed since you opened it (now " + inventory.getQuantity().stripTrailingZeros().toPlainString()
                     + " on hand). Reload and try again.");
         }
-        Item item = findActiveItem(request.itemId());
+        CatalogItemView item = findActiveItem(request.itemId());
         validateSameProject(inventory.getProjectId(), request.projectId());
-        validateSameProject(inventory.getProjectId(), item.getProjectId());
+        validateSameProject(inventory.getProjectId(), item.projectId());
         evaluateRules(
             inventory.getProjectId(),
             List.of(
                 new RuleTarget("project", inventory.getProjectId()),
-                new RuleTarget("item", item.getItemId()),
+                new RuleTarget("item", item.itemId()),
                 new RuleTarget("inventory", inventory.getInventoryId())
             ),
             Map.of(
                 "operation", "inventory_update",
                 "request", request,
                 "inventory", inventory,
-                "item", item
+                "item", itemRuleFacts(item)
             )
         );
 
         BigDecimal quantityBefore = inventory.getQuantity();
         BigDecimal reservedBefore = inventory.getReservedQuantity();
 
-        if (!item.getItemId().equals(inventory.getItemId())) {
+        if (!item.itemId().equals(inventory.getItemId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
                 "A stock record keeps its item. Issue this stock and receive the other item instead.");
         }
@@ -279,8 +279,14 @@ public class InventoryServiceImpl implements InventoryService {
         inventoryCommandService.refreshAlerts(inventory);
     }
 
-    private Item findActiveItem(String itemId) {
+    private CatalogItemView findActiveItem(String itemId) {
         return catalogReferences.item(itemId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    /** The item as flow rules read it, with all its catalog properties (ADR-018 decision 5). */
+    private Map<String, Object> itemRuleFacts(CatalogItemView item) {
+        return catalogReferences.itemRuleFacts(item.itemId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 

@@ -38,6 +38,15 @@ describe('crew in a suggestion', () => {
     expect(planSummary(plan({ waitedForCrew: ['lee'], crewMovedPast: [{ workOrderNumber: 'WO-7', userIds: ['lee'] }] })))
       .toBe('Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 10 h · waits for lee to be on shift · after WO-7 (lee)')
   })
+
+  it('says the labor the step plan leaves for the crew', () => {
+    // Labor longer than production decides; without equipment it is all there is (LB25).
+    expect(planSummary(plan({ laborMinutes: 420, laborHours: 7, neededHours: 10 })))
+      .toBe('Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 10 h · labor 7 h for 420 worker min')
+    expect(planSummary(plan({ equipmentId: null, capacityPerHour: null, productionHours: null, laborMinutes: 280, laborHours: 4.67,
+      neededHours: 4.67 }))).toBe('Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 4.67 h · labor 4.67 h for 280 worker min')
+    expect(planSummary(plan({ laborMinutes: null, laborHours: null }))).toBe('Mon 2030-01-07 09:00 → Tue 2030-01-08 11:00 · needs 10 h')
+  })
 })
 
 describe('several orders', () => {

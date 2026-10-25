@@ -44,7 +44,8 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 |---|---|---|---|
 | ERP 기준정보 | `catalog` | 품목 상세·상태·CSV, 단위 환산, 설비 정보 | 거래처, 사업장(ADR-001 보류) |
 | ERP 재고 회계 | `inventory`, `bom` | 재료비·재고 금액, 원가 누적 | 단가 이력, 통화, 총계정원장 |
-| MRP / SCM 계획 | `bom`, `production` | 다단계 전개, 간이 MRP, 만들 수 있는 양, 재주문 목록 | 구매·발주, 리드타임, 공급 계획 |
+| MRP / SCM 계획 | `bom`, `production` | 다단계 전개, 간이 MRP, 만들 수 있는 양, 재주문 목록 | ~~구매·발주~~ → 아래 구매(2026-10-24), 리드타임, 공급 계획 |
+| 구매 | `purchasing` | 발주서(초안 → 주문 → 줄마다 입고, 닫기·취소), 입고는 inventory 공개 명령([ADR-027](adr/ADR-027-purchasing.md), 2fm) | 공급처 목록, 단가·금액, 승인, 반품, 자재 소요 예정 공급 |
 | MES 실행 | `production`, `flowrun` | 작업지시, 실행 기록, revision 고정, 보정, 작업 지침, 준비 점검 | 노드 자동 실행, 작업자 배정 |
 | APS / 용량 | `catalog`, `production` | 설비 달력(교대 여러 개)·정지·휴일, 전환 시간, 부하표, 작업지시 계획 기간 제안 | 순서 최적화, 여러 작업지시 한꺼번에 배치 |
 | WMS | `inventory` | 위치 목록, 이동, 할당, Putaway·Pick, 실사 | 모바일 스캔 작업, 위치 용량 |
@@ -54,6 +55,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 ## 4. 의존 규칙과 지금의 위반
 
 - 다른 context의 repository를 직접 쓰지 않는다. 새 위반은 [`ModuleBoundaryTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleBoundaryTest.java)가 막는다.
+- 다른 context의 `domain.entity`도 새로 쓰지 않는다. 2026-10-19의 39줄은 동결돼 있고 줄이기만 한다([ADR-018](adr/ADR-018-entity-boundary.md)).
 - 위반은 2026-10-03에 84건이었고 동결해 두었다. 그때 많은 방향은 다음과 같았다.
   - inventory → catalog 20
   - production → catalog 16

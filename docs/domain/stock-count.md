@@ -164,7 +164,7 @@ Count 탭 위 **Count sheet** 묶음:
 
 ## 이후
 
-- 실사 계획(대상 위치·품목, 담당자, 블라인드 실사: 현재 수량을 숨김)은 새 테이블이 필요합니다.
+- ~~실사 계획(대상 위치·품목, 블라인드 실사: 현재 수량을 숨김)은 새 테이블이 필요합니다.~~ → 아래 "서버 실사 계획"(2bk, V53). 담당자 배정은 2026-10-24 2ge(아래 P9–P10, V114).
 - ~~차이 금액을 실사 당시 단가로 보기~~ → 아래 "실사 당시 단가 금액" CH1–CH4(2dp). 오늘 단가 금액도 그대로 보인다.
 
 ### 중복 CSV 열 회귀 (2026-10-05, §2 2be)
@@ -184,6 +184,8 @@ V53 `inventory_count_plan`/`inventory_count_plan_line`. 격리 psql BEGIN/ROLLBA
 | P6 저장 | 모든 측정이 있고 모든 checkpoint가 유효해야 기존 재고 명령으로 일괄 적용. 예약보다 적은 수량은 전체 409. 조정과 submitted/countId 기록을 한 트랜잭션에 저장한다. |
 | P7 재송신 | 생성 키를 잠가 서로 다른 대상의 동시 UUID 재사용도 409. 제출은 계획 행 잠금으로 직렬화, submitted는 조정을 재실행하지 않는다. 거래 없는 실사도 계획에는 제출 결과가 남는다. |
 | P8 화면 | Inventory → Count plans. 블라인드 계획은 수량 미표시, 일반 계획도 owner만 기준 표시. 측정 저장 뒤 변경한 미저장 값은 제출을 막는다. 실패 결과 미확인 시 입력을 잠그고 원래 생성 키/측정 version/제출을 그대로 재시도한다. |
+| P9 담당자 | (2026-10-24, 2ge, V114, 사용자 위임 "의사결정도 recommend 로 계속 알아서 밀고나가"로 창고 작업 W7과 같게) `POST /inventory-count-plans/{id}/assignee {assignedTo}`: 쓰기 권한, 제출 전 계획만(409), 프로젝트 소유자나 활성 구성원만(400), 비우면 아무도 아님. 응답의 `assignedTo`. 담당자라고 기준 수량을 보지 않는다(P2 그대로, 소유자만) |
+| P10 알림 | 새 담당자에게 앱 안 `count_plan`(`Count plan Aisle 3 is yours`, 본문 `A blind count of 1 stock record.`, ref `count_plan` → 재고 → Count plans). 스스로 맡거나 같은 사람에게 다시 주면 알리지 않는다([알림](notification.md) NT2). 화면: 고른 계획의 **Assigned to**(No one·활성 구성원, 내 것은 `(me)`), 목록의 내 계획은 ` · yours` |
 
 API: `GET/POST /inventory-count-plans`, `GET /inventory-count-plans/{id}`, `PUT /{id}/lines/{lineId}`, `POST /{id}/lines/{lineId}/recount`, `POST /{id}/submit`. 목록은 최신 50개; 이전 계획은 ID 조회 가능. 모든 경로 프로젝트 접근을 재검증한다. 다른 계획의 lineId는 404, 잘못된 JSON·UUID·수량·중복 대상은 400, 충돌·재계수·submitted 수정은 409.
 

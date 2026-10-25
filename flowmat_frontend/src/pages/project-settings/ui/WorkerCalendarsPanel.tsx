@@ -4,7 +4,7 @@ import { useProjectTimeZone } from '../../../entities/project/api/useProjectTime
 import {
   fetchWorkerSchedule, useAddWorkerDayOffMutation, useCopyWorkerDaysMutation, useCopyWorkerShiftsMutation, useRemoveWorkerDayMutation,
   useRemoveWorkerDayOffMutation, useRemoveWorkerScheduleMutation, useSetWorkerDayMutation,
-  useSetWorkerShiftsMutation, useWorkerCalendarsQuery, useWorkerScheduleHistoryQuery,
+  useSetWorkerShiftsMutation, useWorkerCalendarsQuery, useWorkerDayHistoryQuery, useWorkerScheduleHistoryQuery,
   type WorkerCalendarDto, type WorkerScheduleLineDto, type WorkerShiftInput,
 } from '../../../entities/workforce/api/useWorkerCalendars'
 import { errorMessage } from '../../../shared/lib/errorMessage'
@@ -14,7 +14,12 @@ import {
 } from '../model/workerCalendarModel'
 import { dateInputValue, weekStart } from '../../inventory/model/equipmentLoadModel'
 import { EMPTY_DAY_FORM, copyableDays, dayPayload, nextDayShift, type DayForm } from '../../inventory/model/equipmentScheduleModel'
-import { workerHistoryText } from '../../inventory/model/versionHistoryModel'
+import { workerDayHistoryText, workerHistoryText } from '../../inventory/model/versionHistoryModel'
+import { HistoryComparison } from '../../../features/schedule-history/ui/HistoryComparison'
+import { OlderHistoryButton } from '../../../features/schedule-history/ui/OlderHistoryButton'
+import { useOlderHistory } from '../../../features/schedule-history/model/useOlderHistory'
+import { WorkerAttendance } from './WorkerAttendance'
+import { WorkerLaborRates } from './WorkerLaborRates'
 import { WorkerLoadBoard } from './WorkerLoadBoard'
 
 /**
@@ -49,7 +54,8 @@ export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
             {worker.daysOff.length > 0 && ` · ${worker.daysOff.length} day${worker.daysOff.length === 1 ? '' : 's'} off listed`}
           </summary>
           <WorkerCalendarEditor projectId={projectId} worker={worker} today={today} editable={iAmOwner || worker.userId === me}
-            copyTargets={iAmOwner ? workers.filter((one) => one.userId !== worker.userId).map((one) => one.userId) : []} />
+            copyTargets={iAmOwner ? workers.filter((one) => one.userId !== worker.userId).map((one) => one.userId) : []}
+            ratesVisible={iAmOwner} />
         </details>
       ))}
       <details style={{ marginTop: 12 }} onToggle={(event) => setLoadOpen(event.currentTarget.open)}>
@@ -62,9 +68,12 @@ export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
 
 type ShiftRow = { shiftStart: string; shiftEnd: string; workDays: number[]; rotaWeek: number }
 
-/** {@code copyTargets}: the other workers this one's day changes may be copied to (the owner's view only, WC42). */
-function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets }: {
-  projectId: string; worker: WorkerCalendarDto; today: string; editable: boolean; copyTargets: string[]
+/**
+ * {@code copyTargets}: the other workers this one's day changes may be copied to (the owner's view only, WC42).
+ * {@code ratesVisible}: the project owner sees and sets the worker's labor rate (ADR-025).
+ */
+function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets, ratesVisible = false }: {
+  projectId: string; worker: WorkerCalendarDto; today: string; editable: boolean; copyTargets: string[]; ratesVisible?: boolean
 }) {
   const setShifts = useSetWorkerShiftsMutation(projectId)
   const addDayOff = useAddWorkerDayOffMutation(projectId)
@@ -139,6 +148,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
         {worker.rota && <p>{rotaText(worker.rota)}</p>}
         <ScheduleVersions projectId={projectId} worker={worker} today={today} />
         <ScheduleHistory projectId={projectId} userId={worker.userId} />
+        <DayHistory projectId={projectId} userId={worker.userId} />
         {worker.daysOff.length > 0 && <ul>{worker.daysOff.map((off) => <li key={off.dayOffId}>Off {dayOffText(off)}</li>)}</ul>}
         {(worker.days ?? []).length > 0 && <ul>{(worker.days ?? []).map((day) => <li key={day.date}>{workerDayText(day)}</li>)}</ul>}
         <p className="inspector-hint">Only the project owner or {worker.userId} can change this calendar.</p>
@@ -195,6 +205,9 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets 
         : `Shifts saved: ${weeklyText(setShifts.data)}.`}</p>}
       <ScheduleVersions projectId={projectId} worker={worker} today={today} onEdit={edit} />
       <ScheduleHistory projectId={projectId} userId={worker.userId} />
+      <DayHistory projectId={projectId} userId={worker.userId} />
+      {ratesVisible && <WorkerLaborRates projectId={projectId} userId={worker.userId} />}
+      <WorkerAttendance projectId={projectId} userId={worker.userId} />
 
       <div>
         <strong>Days off</strong>
@@ -329,17 +342,46 @@ function ScheduleVersions({ projectId, worker, today, onEdit }: {
 function ScheduleHistory({ projectId, userId }: { projectId: string; userId: string }) {
   const [open, setOpen] = useState(false)
   const history = useWorkerScheduleHistoryQuery(projectId, userId, open)
-  const entries = Array.isArray(history.data) ? history.data : []
+  const latest = !history.isError && Array.isArray(history.data) ? history.data : []
+  const older = useOlderHistory(`/projects/${encodeURIComponent(projectId)}/workers/${encodeURIComponent(userId)}/schedule-history/search`, latest)
+  const entries = latest.length > 0 ? [...latest, ...older.older] : latest
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Version history</summary>
       {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load the version history.')}</p>}
       {open && history.isSuccess && entries.length === 0 && <p className="inspector-hint">No saves recorded yet.</p>}
+      {entries.length > 1 && <HistoryComparison kind="worker" entries={entries} />}
       {entries.length > 0 && (
         <ul aria-label="Version history" style={{ margin: '4px 0', paddingLeft: 18 }}>
           {entries.map((entry) => <li key={entry.historyId}>{workerHistoryText(entry)}</li>)}
         </ul>
       )}
+      <OlderHistoryButton canLoad={older.canLoad} pending={older.pending} error={older.error} onLoad={() => void older.load()} />
+    </details>
+  )
+}
+
+/**
+ * Every change of the worker's own dates and days off with what they held (docs/domain/worker-calendar.md WC66), loaded when
+ * opened.
+ */
+function DayHistory({ projectId, userId }: { projectId: string; userId: string }) {
+  const [open, setOpen] = useState(false)
+  const history = useWorkerDayHistoryQuery(projectId, userId, open)
+  const latest = !history.isError && Array.isArray(history.data) ? history.data : []
+  const older = useOlderHistory(`/projects/${encodeURIComponent(projectId)}/workers/${encodeURIComponent(userId)}/day-history/search`, latest)
+  const entries = latest.length > 0 ? [...latest, ...older.older] : latest
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>Date and day-off history</summary>
+      {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load the date history.')}</p>}
+      {open && history.isSuccess && entries.length === 0 && <p className="inspector-hint">No changes recorded yet.</p>}
+      {entries.length > 0 && (
+        <ul aria-label="Date and day-off history" style={{ margin: '4px 0', paddingLeft: 18 }}>
+          {entries.map((entry) => <li key={entry.historyId}>{workerDayHistoryText(entry)}</li>)}
+        </ul>
+      )}
+      <OlderHistoryButton canLoad={older.canLoad} pending={older.pending} error={older.error} onLoad={() => void older.load()} />
     </details>
   )
 }

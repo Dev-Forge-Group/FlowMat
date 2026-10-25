@@ -31,7 +31,10 @@
 - 제목 줄: "N open work orders: K materials short"(빨강) 또는 "all M materials covered"
 - 부족한 자재가 있으면 표가 펼쳐져 있고, 없으면 "Show all materials"로 펼칩니다. 열: 자재, 필요, 쓸 수 있는 양, 부족(자재에 [구매 단위](item-details.md)가 있으면 아래에 올림한 구매 단위 수, 예 `2 bag`), 필요로 하는 작업지시(제목과 양)
 - 계산하지 못한 작업지시는 "Not counted: …"로 알려 줍니다.
-- **Download CSV**(2026-09-26): 구매 목록 `work-order-needs-YYYY-MM-DD.csv`, 열 `item_code,item_name,unit,needed,usable,short,purchase_unit,packs,item_status,work_orders,being_made,made_here,left_after,safety_stock,under_safety`(뒤의 둘은 [다단계 BOM](multi-level-bom.md), 마지막 셋은 아래 "주문 뒤 남는 양"). 모든 자재(부족 큰 순), 부족분을 구매 단위로 올린 수(`packs`, 부족이 없거나 구매 단위가 없으면 빈 칸), 품목 상태(active가 아니면 재주문하지 않음), 필요로 하는 작업지시(`Bread 30; Buns 10`). `stockAlertModel.test.ts`의 `needsCsv`. 실 화면(2026-09-26): 열린 작업지시 15건에서 받은 파일 BOM 포함, 헤더와 15줄, 첫 줄 `FLR-…,…,kg,50,30,20,,,active,Readiness … 50`, 콘솔 오류 0
+- **Download CSV**(2026-09-26): 구매 목록 `work-order-needs-YYYY-MM-DD.csv`, 열 `item_code,item_name,unit,needed,usable,short,purchase_unit,packs,item_status,work_orders,being_made,made_here,left_after,safety_stock,under_safety,on_order`(`being_made`·`made_here`는 [다단계 BOM](multi-level-bom.md), `left_after`·`safety_stock`·`under_safety`는 아래 "주문 뒤 남는 양", 마지막 `on_order`는 [구매 발주](purchasing.md) PO17). 모든 자재(부족 큰 순), 부족분을 구매 단위로 올린 수(`packs`, 부족이 없거나 구매 단위가 없으면 빈 칸), 품목 상태(active가 아니면 재주문하지 않음), 필요로 하는 작업지시(`Bread 30; Buns 10`). `stockAlertModel.test.ts`의 `needsCsv`. 실 화면(2026-09-26): 열린 작업지시 15건에서 받은 파일 BOM 포함, 헤더와 15줄, 첫 줄 `FLR-…,…,kg,50,30,20,,,active,Readiness … 50`, 콘솔 오류 0
+- **Draft a purchase order for N short material(s)**(2026-10-24, 2fp): 부족한 사 오는 자재(자기 BOM 없음, 활성)를 구매 단위로 올린 양으로 초안 발주서 하나에([구매 발주](purchasing.md) PO12). 반제품은 위 **Draft N work orders for short sub-assemblies**
+  - 2026-10-24 2ga부터 품목의 평소 공급처마다 초안 하나(예정일은 납기로), 평소 공급처가 없는 줄은 물어본 공급처로([구매 발주](purchasing.md) PO30)
+- **Runs short** 열(2026-10-24, 2fy, 맨 끝): 작업지시를 계획 시작일 순으로, 반제품 작업지시가 만드는 양은 그 계획 종료일에(2gi, 응답 줄의 `supplies[]`: 작업지시·남은 양), 주문 중인 발주를 예정일에 넣어 처음 모자라는 날·작업지시·양. 합계로는 덮여도 발주가 늦게 오면 주황으로 보이고 제목 끝에 ` · N short before … arrive`([구매 발주](purchasing.md) PO25)
 - 열린 작업지시가 없으면 숨깁니다. 재고가 움직이면 새로 고쳐지고, 탭을 열 때마다 새로 받아 작업지시 변경도 반영됩니다.
 - 반제품이 부족하면 **Draft N work orders for short sub-assemblies**(2026-10-03): 모든 단계의 부족한 반제품을 초안 작업지시로 한 번에([다단계 BOM](multi-level-bom.md) "모든 단계 한 번에")
 
@@ -94,4 +97,4 @@ BOM 하나를 두고 "지금 재고로 제품을 얼마나 만들 수 있나"와
 
 ## 이후
 
-- 발주(구매) 연계는 구매 도메인이 생긴 뒤
+- 발주(구매) 연계: 구매 도메인은 2026-10-24 [구매 발주](purchasing.md)(2fm)로 생겼다. 주문한 발주의 남은 양은 줄의 `onOrder`로 부족에서 빠지고 화면 **On order** 열(Left after 뒤)에 보인다([구매 발주](purchasing.md) PO8, 2fn). CSV에는 2026-10-24 2fu부터 마지막 열 `on_order`로 나오고(PO17) `left_after`에도 들어간다

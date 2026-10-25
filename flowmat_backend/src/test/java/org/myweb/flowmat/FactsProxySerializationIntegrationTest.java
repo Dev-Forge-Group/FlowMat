@@ -6,17 +6,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
-import java.util.List;
 import java.util.UUID;
 import org.hibernate.Hibernate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemFactsQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemRuleFactsQuery;
 import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.inventory.application.publicapi.StockFactsQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockRuleFactsQuery;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
 import org.myweb.flowmat.domain.workflow.domain.entity.Process;
 import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
@@ -25,11 +24,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Internal Facts must serialize the same data when the caller already holds an entity proxy. */
+/**
+ * Rule facts (docs/architecture/adr/ADR-018-entity-boundary.md decision 5) must hold the same data when the caller already
+ * holds an entity proxy; they were internal Facts JSON before.
+ */
 class FactsProxySerializationIntegrationTest extends IntegrationTestSupport {
-    @Autowired private CatalogItemFactsQuery items;
-    @Autowired private StockFactsQuery stocks;
-    @Autowired private WorkflowProductionQuery workflows;
+    @Autowired private CatalogItemRuleFactsQuery itemRules;
+    @Autowired private StockRuleFactsQuery stockRules;
+    @Autowired private WorkflowRunQuery workflowRuns;
     @Autowired private EntityManager entities;
     @Autowired private ObjectMapper json;
     @Autowired private JdbcTemplate jdbc;
@@ -43,12 +45,11 @@ class FactsProxySerializationIntegrationTest extends IntegrationTestSupport {
             Object reference = entities.getReference(kind.type, kind.id);
             assertFalse(Hibernate.isInitialized(reference), "The fixture must start as a real lazy proxy");
             String serialized = switch (kind) {
-                case ITEM -> items.findActiveItem(kind.id).orElseThrow().json();
-                case ITEM_BATCH -> items.findItems(List.of(kind.id)).getFirst().json();
-                case WORKFLOW -> workflows.findWorkflow(kind.id).orElseThrow().json();
-                case WORKFLOW_LOCK -> workflows.lockWorkflow(kind.id).json();
-                case PROCESS -> workflows.findProcess(kind.id).orElseThrow().json();
-                case PORT -> workflows.findProcessIo(kind.id).orElseThrow().json();
+                case ITEM -> write(itemRules.findActiveItem(kind.id).orElseThrow());
+                case WORKFLOW -> write(workflowRuns.findWorkflow(kind.id).orElseThrow().ruleFacts());
+                case WORKFLOW_LOCK -> write(workflowRuns.lockWorkflow(kind.id).ruleFacts());
+                case PROCESS -> write(workflowRuns.findProcess(kind.id).orElseThrow().ruleFacts());
+                case PORT -> write(workflowRuns.findProcessIo(kind.id).orElseThrow().ruleFacts());
             };
             JsonNode tree = read(serialized);
             assertNotNull(tree.get(kind.idField));
@@ -58,7 +59,7 @@ class FactsProxySerializationIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void stockFactsKeepTheExistingProxySafeSerializationBehavior() {
+    void stockRuleFactsKeepTheExistingProxySafeSerializationBehavior() {
         String id = UUID.randomUUID().toString();
         jdbc.update("insert into inventory(inventory_id,project_id,item_id,quantity,reserved_quantity,available_quantity,inventory_status) "
             + "values(?,?,?,10,0,10,'available')", id, DEMO_PROJECT, "itm_demo_mix_output");
@@ -66,10 +67,18 @@ class FactsProxySerializationIntegrationTest extends IntegrationTestSupport {
             entities.clear();
             Object reference = entities.getReference(Inventory.class, id);
             assertFalse(Hibernate.isInitialized(reference));
-            JsonNode tree = read(stocks.findActiveStock(id).orElseThrow().json());
+            JsonNode tree = read(write(stockRules.findActiveStock(id).orElseThrow()));
             org.junit.jupiter.api.Assertions.assertEquals(id, tree.path("inventoryId").asText());
             assertFalse(tree.has("hibernateLazyInitializer"));
         });
+    }
+
+    private String write(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (Exception error) {
+            throw new AssertionError("Rule facts must serialize", error);
+        }
     }
 
     private JsonNode read(String value) {
@@ -82,7 +91,6 @@ class FactsProxySerializationIntegrationTest extends IntegrationTestSupport {
 
     private enum Kind {
         ITEM(Item.class, "itm_demo_mix_output", "itemId"),
-        ITEM_BATCH(Item.class, "itm_demo_mix_output", "itemId"),
         WORKFLOW(Workflow.class, DEMO_WORKFLOW, "workflowId"),
         WORKFLOW_LOCK(Workflow.class, DEMO_WORKFLOW, "workflowId"),
         PROCESS(Process.class, "prc_demo_mix", "processId"),

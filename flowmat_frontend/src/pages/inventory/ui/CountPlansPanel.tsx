@@ -15,6 +15,7 @@ export function CountPlansPanel({ projectId, items }: { projectId: string; items
   const members = useProjectMembersQuery(projectId)
   const role = members.data?.find((member) => member.userId === me && member.memberStatus === 'active')?.projectRole
   const canWrite = role === 'owner' || role === 'editor'
+  const counters = (members.data ?? []).filter((member) => member.memberStatus === 'active')
   const command = useCountPlanCommand(projectId)
   const [selected, setSelected] = useState<string[]>([])
   const [blind, setBlind] = useState(true)
@@ -84,11 +85,21 @@ export function CountPlansPanel({ projectId, items }: { projectId: string; items
     </form>}
     <label>Open count plan<select value={active ?? ''} disabled={locked || dirty} onChange={(event) => { setActive(event.target.value || null); setMessage(null); setDrafts({}); setReviewBaseline(false) }}>
       <option value="">Choose a plan</option>
-      {(plans.data ?? []).map((entry) => <option key={entry.planId} value={entry.planId}>{entry.note || entry.planId} · {entry.status}</option>)}
+      {(plans.data ?? []).map((entry) => <option key={entry.planId} value={entry.planId}>
+        {entry.note || entry.planId} · {entry.status}{entry.assignedTo && entry.assignedTo === me ? ' · yours' : ''}
+      </option>)}
     </select></label>
     {plan && <div role="region" aria-label="Selected count plan">
       <h3>{plan.note || plan.planId}</h3>
       <p>Status: {plan.status}. {plan.blind ? 'Blind count: baseline quantities are hidden.' : 'Only the project owner may view baseline quantities.'}</p>
+      {/* Who should count it (P9); they hear of it in the app. */}
+      {canWrite && plan.status !== 'submitted'
+        ? <label>Assigned to<select value={plan.assignedTo ?? ''} disabled={locked}
+          onChange={(event) => void run({ kind: 'assign', planId: plan.planId, input: { assignedTo: event.target.value || null } })}>
+          <option value="">No one</option>
+          {counters.map((member) => <option key={member.userId} value={member.userId}>{member.userId}{member.userId === me ? ' (me)' : ''}</option>)}
+        </select></label>
+        : <p>Assigned to {plan.assignedTo ?? 'no one'}.</p>}
       {plan.blind && role === 'owner' && <label><input type="checkbox" checked={reviewBaseline} onChange={(event) => setReviewBaseline(event.target.checked)} />Review baseline quantities (owner)</label>}
       {dirty && <p>Save each changed measurement before submitting. <button disabled={locked} onClick={() => setDrafts({})}>Discard unsaved measurements</button></p>}
       {plan.lines.map((line) => <CountPlanRow key={`${plan.planId}:${line.lineId}:${line.entryVersion}`} line={line}

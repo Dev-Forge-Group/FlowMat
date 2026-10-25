@@ -26,4 +26,6 @@ public class InventoryCountPlan {
     private String submittedBy;
     private OffsetDateTime submittedAt;
     private String countId;
+    /** Who should count it (P9); null when no one is. */
+    private String assignedTo;
 }

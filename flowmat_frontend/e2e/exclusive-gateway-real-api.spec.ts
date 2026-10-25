@@ -203,6 +203,7 @@ test('Exclusive gateway: the real editor saves a default, graph runs choose one 
         if (completed) expect(response.ok(), `Project cleanup returned ${response.status()}`).toBe(true)
         else if (!response.ok()) test.info().annotations.push({ type: 'cleanup', description: `Project cleanup returned ${response.status()}` })
       } catch (error) {
+        // eslint-disable-next-line no-unsafe-finally -- The primary test succeeded before completed became true.
         if (completed) throw error
         test.info().annotations.push({ type: 'cleanup', description: 'Project cleanup request failed after the primary failure' })
       }

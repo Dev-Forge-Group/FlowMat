@@ -36,13 +36,13 @@ class WorkOrderBomSelection {
         if (requestedBomId != null) {
             var bom = references.bom(requestedBomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "bomId does not exist."));
-            if (!order.getProjectId().equals(bom.getProjectId()) || !Objects.equals(order.getTargetItemId(), bom.getTargetItemId())) {
+            if (!order.getProjectId().equals(bom.projectId()) || !Objects.equals(order.getTargetItemId(), bom.targetItemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "bomId must produce targetItemId in this project.");
             }
-            if (!BomStatus.APPROVED.code().equals(bom.getBomStatus())) {
+            if (!BomStatus.APPROVED.code().equals(bom.bomStatus())) {
                 if (approving) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST,
-                        "BOM " + bom.getBomName() + " v" + bom.getBomVersion() + " is " + bom.getBomStatus()
+                        "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is " + bom.bomStatus()
                             + "; approve it or pick an approved revision before approving the work order.");
                 }
                 // A draft order may name a revision still under review; approving the order needs it approved.

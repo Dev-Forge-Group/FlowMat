@@ -152,6 +152,7 @@ test('real efficiency and concurrent settings refresh an open load board while c
         if (completed) expect(removed.ok(), `Project cleanup returned ${removed.status()}`).toBe(true)
         else if (!removed.ok()) test.info().annotations.push({ type: 'cleanup', description: `Project cleanup returned ${removed.status()}` })
       } catch (error) {
+        // eslint-disable-next-line no-unsafe-finally -- The primary test succeeded before completed became true.
         if (completed) throw error
         test.info().annotations.push({ type: 'cleanup', description: 'Owned fixture cleanup failed after the primary failure' })
       }

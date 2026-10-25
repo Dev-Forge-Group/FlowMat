@@ -24,9 +24,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.RunInputAllocationRequest;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
@@ -51,7 +51,7 @@ class RunInputAllocationServiceTest {
     @InjectMocks private RunInputAllocationService service;
 
     private ProductionRun run;
-    private LotMaster soon;
+    private LotView soon;
     private StockAllocation ownSoon;
     private StockAllocation ownLate;
 
@@ -63,14 +63,9 @@ class RunInputAllocationServiceTest {
         run.setWorkOrderId("order");
         run.setRunType("actual");
         run.setRunStatus("running");
-        Item item = new Item();
-        item.setItemId("item");
-        item.setProjectId("project");
-        item.setItemCode("FLOUR");
-        item.setUnitId("unit_kg");
-        item.setLotManageYn("Y");
+        CatalogItemView item = new CatalogItemView("item", "project", "FLOUR", null, "unit_kg", null, null, null, null, null, "Y", null, null, null, "N");
         soon = lot("soon", 5);
-        LotMaster late = lot("late", 30);
+        LotView late = lot("late", 30);
         ownSoon = allocation("soon_stock", "5");
         ownLate = allocation("late_stock", "3");
         lenient().when(productionRunRepository.findForUpdate("run")).thenReturn(Optional.of(run));
@@ -97,7 +92,7 @@ class RunInputAllocationServiceTest {
 
     @Test
     void anExpiredLotDoesNotBecomeUsableBecauseItWasReservedForTheOrder() {
-        soon.setExpiryDate(LocalDate.now().minusDays(1));
+        lenient().when(references.lots(any())).thenReturn(List.of(lot("late", 30), lot("soon", -1)));
         BusinessException exception = assertThrows(BusinessException.class, () -> service.allocate("run", request("8")));
         assertTrue(exception.getMessage().contains("Only 3 kg"));
         verifyNoInteractions(productionRunService);
@@ -160,24 +155,12 @@ class RunInputAllocationServiceTest {
         return new RunInputAllocationRequest("item", new BigDecimal(quantity), "kg", null);
     }
 
-    private LotMaster lot(String id, int expiresInDays) {
-        LotMaster lot = new LotMaster();
-        lot.setLotId(id);
-        lot.setLotNo(id);
-        lot.setLotStatus("reserved");
-        lot.setExpiryDate(LocalDate.now().plusDays(expiresInDays));
-        return lot;
+    private LotView lot(String id, int expiresInDays) {
+        return new LotView(id, null, null, id, "reserved", null, LocalDate.now().plusDays(expiresInDays), null);
     }
 
-    private Inventory stock(String id, String lotId) {
-        Inventory stock = new Inventory();
-        stock.setInventoryId(id);
-        stock.setLotId(lotId);
-        stock.setQuantity(new BigDecimal("5"));
-        stock.setReservedQuantity(new BigDecimal("5"));
-        stock.setAvailableQuantity(BigDecimal.ZERO);
-        stock.setInventoryStatus("available");
-        return stock;
+    private StockView stock(String id, String lotId) {
+        return new StockView(id, null, null, lotId, null, new BigDecimal("5"), new BigDecimal("5"), BigDecimal.ZERO, "available", null);
     }
 
     private StockAllocation allocation(String stockId, String quantity) {

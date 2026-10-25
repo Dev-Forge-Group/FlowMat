@@ -3,6 +3,7 @@ import {
   fetchEquipmentCalendarVersion,
   useEquipmentAvailabilityQuery,
   useEquipmentCalendarHistoryQuery,
+  useEquipmentDayHistoryQuery,
   useEquipmentScheduleMutations,
   useEquipmentScheduleQuery,
   type DowntimeType,
@@ -44,7 +45,10 @@ import {
   type DayForm,
   type ShiftForm,
 } from '../model/equipmentScheduleModel'
-import { calendarHistoryText } from '../model/versionHistoryModel'
+import { calendarHistoryText, equipmentDayHistoryText } from '../model/versionHistoryModel'
+import { HistoryComparison } from '../../../features/schedule-history/ui/HistoryComparison'
+import { OlderHistoryButton } from '../../../features/schedule-history/ui/OlderHistoryButton'
+import { useOlderHistory } from '../../../features/schedule-history/model/useOlderHistory'
 import { EquipmentChangeovers } from './EquipmentChangeovers'
 import { EquipmentSetupPreviewPanel } from './EquipmentSetupPreviewPanel'
 import { EquipmentSetupChangeoversPanel } from './EquipmentSetupChangeoversPanel'
@@ -234,6 +238,7 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
         <CalendarVersions versions={versions} today={today} pending={removeCalendarVersion.isPending}
           onEdit={editVersion} onDelete={(line) => removeCalendarVersion.mutate(line.scheduleId)} />
         <CalendarHistory equipmentId={equipment.equipmentId} />
+        <DayHistory equipmentId={equipment.equipmentId} others={others} />
 
         {hasShifts && <>
           <form aria-label="Change a day" onSubmit={saveDay} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
@@ -360,17 +365,50 @@ export function EquipmentSchedulePanel({ equipment, others = [], onClose }: {
 function CalendarHistory({ equipmentId }: { equipmentId: string }) {
   const [open, setOpen] = useState(false)
   const history = useEquipmentCalendarHistoryQuery(equipmentId, open)
-  const entries = Array.isArray(history.data) ? history.data : []
+  const latest = !history.isError && Array.isArray(history.data) ? history.data : []
+  const older = useOlderHistory(`/equipments/${encodeURIComponent(equipmentId)}/calendar/history/search`, latest)
+  const entries = latest.length > 0 ? [...latest, ...older.older] : latest
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Calendar history</summary>
       {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load the calendar history.')}</p>}
       {open && history.isSuccess && entries.length === 0 && <p className="inspector-hint">No saves recorded yet.</p>}
+      {entries.length > 1 && <HistoryComparison kind="equipment" entries={entries} />}
       {entries.length > 0 && (
         <ul aria-label="Calendar history" style={{ margin: '4px 0', paddingLeft: 18 }}>
           {entries.map((entry) => <li key={entry.historyId}>{calendarHistoryText(entry)}</li>)}
         </ul>
       )}
+      <OlderHistoryButton canLoad={older.canLoad} pending={older.pending} error={older.error} onLoad={() => void older.load()} />
+    </details>
+  )
+}
+
+/**
+ * Every change of the equipment's own dates and downtimes with what they held (docs/domain/equipment-schedule.md CV13),
+ * loaded when opened. A copy names the equipment it came from.
+ */
+function DayHistory({ equipmentId, others }: { equipmentId: string; others: EquipmentDto[] }) {
+  const [open, setOpen] = useState(false)
+  const history = useEquipmentDayHistoryQuery(equipmentId, open)
+  const latest = !history.isError && Array.isArray(history.data) ? history.data : []
+  const older = useOlderHistory(`/equipments/${encodeURIComponent(equipmentId)}/day-history/search`, latest)
+  const entries = latest.length > 0 ? [...latest, ...older.older] : latest
+  const label = (id: string) => {
+    const found = others.find((one) => one.equipmentId === id)
+    return found ? found.equipmentCode || found.equipmentName : 'another equipment'
+  }
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>Date and downtime history</summary>
+      {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load the date history.')}</p>}
+      {open && history.isSuccess && entries.length === 0 && <p className="inspector-hint">No changes recorded yet.</p>}
+      {entries.length > 0 && (
+        <ul aria-label="Date and downtime history" style={{ margin: '4px 0', paddingLeft: 18 }}>
+          {entries.map((entry) => <li key={entry.historyId}>{equipmentDayHistoryText(entry, label)}</li>)}
+        </ul>
+      )}
+      <OlderHistoryButton canLoad={older.canLoad} pending={older.pending} error={older.error} onLoad={() => void older.load()} />
     </details>
   )
 }

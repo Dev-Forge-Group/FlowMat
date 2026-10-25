@@ -101,14 +101,15 @@ describe('payloads', () => {
   it('trims the form and names what is missing', () => {
     expect(createPayload('p', { ...EMPTY_LOCATION_FORM, locationCode: '  ' })).toEqual({ input: null, error: 'Enter a code.' })
     expect(createPayload('p', { ...EMPTY_LOCATION_FORM, locationCode: ' A-01 ', locationType: 'bin', parentLocationId: 'z1' })).toEqual({
-      input: { projectId: 'p', locationCode: 'A-01', locationName: null, locationType: 'bin', parentLocationId: 'z1', note: null },
+      input: { projectId: 'p', locationCode: 'A-01', locationName: null, locationType: 'bin', parentLocationId: 'z1', note: null,
+        storageCondition: null },
       error: null,
     })
   })
 
   it('sends the parent only when it changed and clears emptied text', () => {
     expect(updatePayload({ ...locationForm(zone), locationName: '' }, zone).input).toEqual({
-      locationCode: 'Z1', locationName: '', locationType: 'zone', note: '',
+      locationCode: 'Z1', locationName: '', locationType: 'zone', note: '', storageCondition: '',
     })
     expect(updatePayload({ ...locationForm(zone), parentLocationId: '' }, zone).input).toMatchObject({ clearParent: true })
     expect(updatePayload({ ...locationForm(zone), parentLocationId: 's1' }, zone).input).toMatchObject({ parentLocationId: 's1' })

@@ -4,33 +4,45 @@ import { useBomsQuery } from '../../../entities/bom/api/useBoms'
 import { useItemsQuery } from '../../../entities/catalog/api/useItemsQuery'
 import { useMaterialRequirementsQuery } from '../../../entities/production/api/useMaterialRequirements'
 import { useSaveWorkOrderMutation, useWorkOrdersQuery } from '../../../entities/production/api/useWorkOrders'
+import { usePurchaseOrdersQuery } from '../../../entities/purchasing/api/usePurchaseOrders'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
 import { isActiveItem } from '../model/itemStatusModel'
+import { arrivalsByItem, endDays, firstShort, startDays, type Arrival, type ShortFrom } from '../model/needsTimingModel'
+import { needsDraftLines } from '../model/purchaseOrderModel'
 import { leftAfterOrders, needLabel, needsCsv, packsFor, subAssemblyDrafts } from '../model/stockAlertModel'
 import { zoneDay } from '../model/bomModel'
 import { useProjectTimeZone } from '../../../entities/project/api/useProjectTimeZone'
+import { useUsualSupplierDrafts } from './useUsualSupplierDrafts'
 
 const cell = { padding: '4px 6px' } as const
 const num = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' } as const
 
 /**
  * What open work orders still need (docs/domain/material-requirements.md): the materials short against usable stock
- * first, with the orders that need them, and what each has left after them against its safety stock. Hidden when no open
- * order has a BOM.
+ * first, with the orders that need them, and what each has left after them against its safety stock. Short sub-assemblies
+ * become draft work orders and short bought materials a draft purchase order (docs/domain/purchasing.md PO12). When each
+ * material first runs short is told with the orders in planned start order and arrivals on their dates (PO25). Hidden when no
+ * open order has a BOM.
  */
 export function OpenOrderNeeds({ projectId }: { projectId: string }) {
   const needsQuery = useMaterialRequirementsQuery(projectId)
   const needs = needsQuery.data
   const itemById = new Map((useItemsQuery(projectId).data ?? []).map((item) => [item.itemId, item]))
-  // BOMs and work orders are only fetched when a sub-assembly is short, to draft its orders (docs/domain/multi-level-bom.md).
+  // BOMs are only fetched when a sub-assembly is short, to draft its orders (docs/domain/multi-level-bom.md); work orders also
+  // when something is short or on order, and purchase orders when something is on order, to tell when it runs short (PO25).
   const shortMadeHere = (needs?.lines ?? []).some((line) => line.madeHere && line.shortage > 0)
+  const anyOnOrder = (needs?.lines ?? []).some((line) => (line.onOrder ?? 0) > 0)
+  const timing = anyOnOrder || (needs?.lines ?? []).some((line) => line.shortage > 0)
   const bomsQuery = useBomsQuery(shortMadeHere ? projectId : '')
-  const ordersQuery = useWorkOrdersQuery(shortMadeHere ? projectId : '')
+  const ordersQuery = useWorkOrdersQuery(shortMadeHere || timing ? projectId : '')
+  const purchasesQuery = usePurchaseOrdersQuery(anyOnOrder ? projectId : '')
   const timeZone = useProjectTimeZone(projectId).query.data?.timeZone
   const saveOrder = useSaveWorkOrderMutation(projectId)
   const [drafted, setDrafted] = useState<{ error: boolean; text: string } | null>(null)
   const [drafting, setDrafting] = useState(false)
+  const drafts = useUsualSupplierDrafts(projectId)
+  const [bought, setBought] = useState<{ error: boolean; text: string } | null>(null)
   if (needsQuery.isError) {
     return <p style={{ color: '#dc2626', fontSize: 12 }}>{errorMessage(needsQuery.error, 'Failed to add up open work orders.')}</p>
   }
@@ -42,6 +54,24 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
   const after = new Map(needs.lines.map((line) => [line.itemId, leftAfterOrders(line, itemById.get(line.itemId)?.safetyStockQty)]))
   // Covered materials the orders take under their safety stock; the short ones are counted as short.
   const underSafety = needs.lines.filter((line) => line.shortage === 0 && (after.get(line.itemId)?.underSafety ?? 0) > 0)
+  const buy = needsDraftLines(needs.lines, itemById)
+  // Only once the orders, and what is on order, are in: a missing arrival is not to be taken for a late one.
+  const timed = ordersQuery.isSuccess && (!anyOnOrder || purchasesQuery.isSuccess)
+  const starts = timed ? startDays(ordersQuery.data, timeZone) : new Map<string, string | null>()
+  const ends = timed ? endDays(ordersQuery.data, timeZone) : new Map<string, string | null>()
+  const arrivals = timed && purchasesQuery.data ? arrivalsByItem(purchasesQuery.data) : new Map<string, Arrival[]>()
+  const runsShort = new Map<string, ShortFrom | null>(timed
+    ? needs.lines.map((line) => [line.itemId, firstShort(line, starts, arrivals.get(line.itemId) ?? [], ends)])
+    : [])
+  // Covered once everything on order is in, but short before it arrives.
+  const tooLate = needs.lines.filter((line) => line.shortage === 0 && runsShort.get(line.itemId))
+
+  /** The short bought materials as draft purchase orders, one per usual supplier, the rest for a supplier asked for (PO12, PO30). */
+  function draftPurchaseOrder() {
+    void drafts.draft(buy, 'For open work orders').then((result) => {
+      if (result) setBought(result)
+    })
+  }
 
   /** Every short sub-assembly as a draft work order, one after another; stops at the first refusal. */
   async function draftAll() {
@@ -77,11 +107,12 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
   return (
     <section aria-label="Open work order needs" style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <strong style={{ fontSize: 13, color: short.length ? '#b91c1c' : underSafety.length ? '#b45309' : undefined }}>
+        <strong style={{ fontSize: 13, color: short.length ? '#b91c1c' : underSafety.length || tooLate.length ? '#b45309' : undefined }}>
           {short.length === 0
             ? `${needs.orders} open work order${needs.orders === 1 ? '' : 's'}: all ${needs.lines.length} materials covered`
             : `${needs.orders} open work order${needs.orders === 1 ? '' : 's'}: ${short.length} material${short.length === 1 ? '' : 's'} short`}
           {underSafety.length > 0 && ` · ${underSafety.length} left under safety stock`}
+          {tooLate.length > 0 && ` · ${tooLate.length} short before ${tooLate.length === 1 ? 'its order arrives' : 'their orders arrive'}`}
         </strong>
         {needs.lines.length > 0 && (
           <button type="button" style={{ fontSize: 11, marginLeft: 'auto' }} onClick={download}>
@@ -94,7 +125,7 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
           Not counted: {needs.problems.join('; ')}
         </p>
       )}
-      {(planned.drafts.length > 0 || planned.skipped.length > 0) && (
+      {(planned.drafts.length > 0 || planned.skipped.length > 0 || buy.length > 0) && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 12, marginTop: 4 }}>
           {planned.drafts.length > 0 && (
             <button type="button" style={{ fontSize: 11 }} disabled={drafting} onClick={() => void draftAll()}>
@@ -104,6 +135,11 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
             </button>
           )}
           {planned.skipped.length > 0 && <span className="inspector-hint">Not drafted: {planned.skipped.join('; ')}</span>}
+          {buy.length > 0 && (
+            <button type="button" style={{ fontSize: 11 }} disabled={drafts.busy} onClick={draftPurchaseOrder}>
+              {`Draft a purchase order for ${buy.length} short material${buy.length === 1 ? '' : 's'}`}
+            </button>
+          )}
         </div>
       )}
       {drafted && (
@@ -112,9 +148,15 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
           {!drafted.error && <Link to={`/projects/${encodeURIComponent(projectId)}/runs?view=work-orders`}>Open Work Orders</Link>}
         </p>
       )}
-      <details open={short.length > 0 || underSafety.length > 0} style={{ marginTop: 6 }}>
+      {bought && (
+        <p role={bought.error ? 'alert' : 'status'} style={{ fontSize: 12, margin: '4px 0 0', color: bought.error ? '#b91c1c' : '#047857' }}>
+          {bought.text}{' '}
+          {!bought.error && <Link to={`/projects/${encodeURIComponent(projectId)}/inventory?tab=purchasing`}>Open Purchasing</Link>}
+        </p>
+      )}
+      <details open={short.length > 0 || underSafety.length > 0 || tooLate.length > 0} style={{ marginTop: 6 }}>
         <summary style={{ cursor: 'pointer', fontSize: 12 }}>
-          {short.length > 0 || underSafety.length > 0 ? 'Materials' : 'Show all materials'}
+          {short.length > 0 || underSafety.length > 0 || tooLate.length > 0 ? 'Materials' : 'Show all materials'}
         </summary>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 6 }}>
           <thead>
@@ -124,8 +166,10 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
               <th style={num}>Usable</th>
               <th style={num}>Being made</th>
               <th style={num}>Short</th>
-              <th style={num} title="Usable and being made, less what the open orders need">Left after</th>
+              <th style={num} title="Usable, being made and on order, less what the open orders need">Left after</th>
+              <th style={num} title="Ordered from suppliers and not received yet">On order</th>
               <th style={cell}>For</th>
+              <th style={cell} title="When the open orders, in planned start order, first need more than there is by then">Runs short</th>
             </tr>
           </thead>
           <tbody>
@@ -182,9 +226,24 @@ export function OpenOrderNeeds({ projectId }: { projectId: string }) {
                     </td>
                   )
                 })()}
+                <td style={num}>{line.onOrder ? formatQty(line.onOrder) : '-'}</td>
                 <td style={{ ...cell, opacity: 0.8 }}>
                   {line.orders.map((order) => needLabel(order, formatQty(order.required))).join(', ')}
                 </td>
+                {(() => {
+                  // Red when short in total; orange when covered in total but short before an order arrives (PO25).
+                  const from = runsShort.get(line.itemId)
+                  return (
+                    <td style={{ ...cell, color: from ? (line.shortage ? '#b91c1c' : '#b45309') : undefined }}>
+                      {from ? (
+                        <>
+                          {from.date ?? 'no date'} · {from.label}
+                          <div style={{ fontSize: 11 }}>{formatQty(from.short)} short</div>
+                        </>
+                      ) : '-'}
+                    </td>
+                  )
+                })()}
               </tr>
             ))}
           </tbody>

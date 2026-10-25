@@ -39,7 +39,7 @@ test('workflow check, inline condition error, and port deletion stay in sync', a
     })
     const output = await port(source.processId, 'output')
     const input = await port(target.processId, 'input')
-    const connection = await create('/process-connections', {
+    await create('/process-connections', {
       workflowId, fromProcessId: source.processId, toProcessId: target.processId,
       fromIoId: output.processIoId, toIoId: input.processIoId,
     })

@@ -1,4 +1,4 @@
-import type { ProductionRunItemDto } from '../../../shared/types/api'
+import type { ProductionRunDto, ProductionRunItemDto } from '../../../shared/types/api'
 
 /**
  * How much of a BOM-planned input has been recorded by hand: the sum of manual input rows for the same item in the
@@ -26,6 +26,15 @@ export function cancelSummary(
   if (!item.cancelled) return null
   const when = item.cancelledAt ? ` on ${formatTime(item.cancelledAt)}` : ''
   return `Cancelled by ${item.cancelledBy ?? '?'}${when}: ${item.cancelReason ?? ''}`
+}
+
+/**
+ * Whether cancelling a recording can give its stock back to the run's work order (docs/domain/stock-allocation.md R4): an
+ * input taken from a stock record by a run of an order that moves real stock.
+ */
+export function canAllocateAgain(item: ProductionRunItemDto, run: Pick<ProductionRunDto, 'workOrderId' | 'runType'>): boolean {
+  const physical = !['simulation', 'test', 'dry_run'].includes((run.runType ?? '').toLowerCase())
+  return item.direction === 'input' && Boolean(item.inventoryId) && Boolean(run.workOrderId) && physical
 }
 
 /** What is still to record for a planned line; never negative. */

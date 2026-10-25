@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -9,10 +10,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +62,7 @@ public class FlowRunStepService {
     private final FlowRunRouter router;
     private final FlowRunStepSourceRepository sourceRepository;
     private final JdbcTemplate jdbc;
+    private final FlowRunStepAttemptLifecycle attemptLifecycle;
 
     @Transactional
     public FlowRunStepResponse create(String runId, FlowRunStepCreateRequest request) {
@@ -126,7 +125,7 @@ public class FlowRunStepService {
         }
         String actor = accessService.requireCurrentUserId();
         if (!"graph".equals(run.getExecutionMode())) {
-            beginAttempt(step, "step_started", null, actor);
+            attemptLifecycle.beginAttempt(step, "step_started", null, actor);
             return response(step);
         }
         OffsetDateTime retryAt = pendingRetryAt(step);
@@ -146,7 +145,7 @@ public class FlowRunStepService {
                     "Node " + step.getNodeId() + " already has " + running + " running steps (limit " + limit + ").");
             }
         }
-        beginAttempt(step, "step_started", policy.timeoutSeconds(), actor);
+        attemptLifecycle.beginAttempt(step, "step_started", policy.timeoutSeconds(), actor);
         return response(step);
     }
 
@@ -190,7 +189,7 @@ public class FlowRunStepService {
         if (!"failed".equals(step.getStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Only a failed step can be retried.");
         }
-        beginAttempt(step, "step_retried", null, accessService.requireCurrentUserId());
+        attemptLifecycle.beginAttempt(step, "step_retried", null, accessService.requireCurrentUserId());
         return response(step);
     }
 
@@ -202,9 +201,19 @@ public class FlowRunStepService {
     /** As {@link #complete(String, String, FlowRunStepCompleteRequest)} on a run the caller has locked and may change (ADR-011). */
     @Transactional
     public FlowRunStepResponse complete(FlowRun run, String stepId, FlowRunStepCompleteRequest request) {
+        return completeReport(run, stepId, request, null);
+    }
+
+    /** Internal claimed executor path; callers cannot supply this token through the public step API. */
+    FlowRunStepResponse completeHttp(FlowRun run, String stepId, FlowRunStepCompleteRequest request, String claimToken) {
+        return completeReport(run, stepId, request, claimToken);
+    }
+
+    private FlowRunStepResponse completeReport(FlowRun run, String stepId, FlowRunStepCompleteRequest request, String claimToken) {
         String runId = run.getFlowRunId();
         FlowRunStep step = requireStep(runId, stepId);
-        FlowRunStepAttempt attempt = runningAttempt(step, request == null ? null : request.attemptNo());
+        FlowRunStepAttempt attempt = attemptLifecycle.runningAttempt(step, request == null ? null : request.attemptNo());
+        requireReportOwner(run, step, attempt.getAttemptId(), claimToken);
         JsonNode output = request != null && request.outputSnapshot() != null
             ? request.outputSnapshot() : objectMapper.createObjectNode();
         FlowRunGraph graph = "graph".equals(run.getExecutionMode()) ? graph(run) : null;
@@ -241,7 +250,7 @@ public class FlowRunStepService {
             throw new BusinessException(ErrorCode.CONFLICT, "Only a running graph step can be previewed.");
         }
         FlowRunStep step = requireStep(runId, stepId);
-        runningAttempt(step, request == null ? null : request.attemptNo());
+        attemptLifecycle.runningAttempt(step, request == null ? null : request.attemptNo());
         JsonNode output = request != null && request.outputSnapshot() != null
             ? request.outputSnapshot() : objectMapper.createObjectNode();
         return graph(run).preview(step.getNodeId(), output).stream()
@@ -258,9 +267,19 @@ public class FlowRunStepService {
     /** As {@link #fail(String, String, FlowRunStepFailRequest)} on a run the caller has locked and may change (ADR-011). */
     @Transactional
     public FlowRunStepResponse fail(FlowRun run, String stepId, FlowRunStepFailRequest request) {
+        return failReport(run, stepId, request, null);
+    }
+
+    /** Internal claimed executor path, with the exact durable attempt claim checked below. */
+    FlowRunStepResponse failHttp(FlowRun run, String stepId, FlowRunStepFailRequest request, String claimToken) {
+        return failReport(run, stepId, request, claimToken);
+    }
+
+    private FlowRunStepResponse failReport(FlowRun run, String stepId, FlowRunStepFailRequest request, String claimToken) {
         String runId = run.getFlowRunId();
         FlowRunStep step = requireStep(runId, stepId);
-        FlowRunStepAttempt attempt = runningAttempt(step, request.attemptNo());
+        FlowRunStepAttempt attempt = attemptLifecycle.runningAttempt(step, request.attemptNo());
+        requireReportOwner(run, step, attempt.getAttemptId(), claimToken);
         recordFailure(run, step, attempt, request.errorCode().trim(), request.errorMessage(),
             accessService.requireCurrentUserId());
         return response(step);
@@ -332,64 +351,11 @@ public class FlowRunStepService {
     public FlowRunStepLineageResponse lineage(String runId, String stepId) {
         readableRun(runId);
         List<FlowRunStep> steps = stepRepository.findAllByFlowRunIdOrderBySequenceNoAsc(runId);
-        // A Join step has a parent for each arrival (ADR-007 decision 8); any other step has its one source.
-        Map<String, List<String>> joined = new HashMap<>();
-        for (FlowRunStepSource source : sourceRepository.findAllByFlowRunIdOrderByStepIdAscArrivalNoAsc(runId)) {
-            joined.computeIfAbsent(source.getStepId(), ignored -> new ArrayList<>()).add(source.getSourceStepId());
-        }
-        Map<String, FlowRunStep> byId = new HashMap<>();
-        Map<String, List<FlowRunStep>> children = new HashMap<>();
-        for (FlowRunStep step : steps) {
-            byId.put(step.getStepId(), step);
-        }
-        for (FlowRunStep step : steps) {
-            for (String parent : parents(step, joined)) {
-                children.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(step);
-            }
-        }
-        FlowRunStep selected = byId.get(stepId);
-        if (selected == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND);
-        }
-        Set<String> ancestorIds = new HashSet<>();
-        ArrayDeque<String> up = new ArrayDeque<>(parents(selected, joined));
-        while (!up.isEmpty()) {
-            String parentId = up.removeFirst();
-            FlowRunStep parent = byId.get(parentId);
-            if (parent == null || parentId.equals(stepId)) {
-                throw new BusinessException(ErrorCode.CONFLICT, "Flow run step lineage is invalid.");
-            }
-            if (ancestorIds.add(parentId)) {
-                up.addAll(parents(parent, joined));
-            }
-        }
-        // Earliest first; a chain reads from the start step to the parent, as before.
-        List<FlowRunStepResponse> ancestors = steps.stream()
-            .filter(step -> ancestorIds.contains(step.getStepId())).map(this::response).toList();
-
-        Set<String> descendantIds = new HashSet<>();
-        ArrayDeque<FlowRunStep> queue = new ArrayDeque<>(children.getOrDefault(stepId, List.of()));
-        while (!queue.isEmpty()) {
-            FlowRunStep child = queue.removeFirst();
-            if (child.getStepId().equals(stepId)) {
-                throw new BusinessException(ErrorCode.CONFLICT, "Flow run step lineage is invalid.");
-            }
-            // Branches that meet again at a Join reach it more than once.
-            if (descendantIds.add(child.getStepId())) {
-                queue.addAll(children.getOrDefault(child.getStepId(), List.of()));
-            }
-        }
-        List<FlowRunStepResponse> descendants = steps.stream()
-            .filter(step -> descendantIds.contains(step.getStepId())).map(this::response).toList();
-        return new FlowRunStepLineageResponse(response(selected), ancestors, descendants);
-    }
-
-    private static List<String> parents(FlowRunStep step, Map<String, List<String>> joined) {
-        List<String> arrivals = joined.get(step.getStepId());
-        if (arrivals != null) {
-            return arrivals;
-        }
-        return step.getSourceStepId() == null ? List.of() : List.of(step.getSourceStepId());
+        var lineage = new FlowRunStepLineageResolver(stepId, steps,
+            sourceRepository.findAllByFlowRunIdOrderByStepIdAscArrivalNoAsc(runId));
+        List<FlowRunStepResponse> ancestors = lineage.ancestors().stream().map(this::response).toList();
+        List<FlowRunStepResponse> descendants = lineage.descendants().stream().map(this::response).toList();
+        return new FlowRunStepLineageResponse(response(lineage.selected()), ancestors, descendants);
     }
 
     public List<FlowRunStepAttemptResponse> attempts(String runId, String stepId) {
@@ -456,7 +422,7 @@ public class FlowRunStepService {
             } else if (node.concurrencyLimit() != null && runningOnNode(run, step.getNodeId()) >= node.concurrencyLimit()) {
                 waitToRetry(step, attempt, null, "concurrency_limit", actorId);
             } else {
-                beginAttempt(step, "step_retried", node.timeoutSeconds(), actorId);
+                attemptLifecycle.beginAttempt(step, "step_retried", node.timeoutSeconds(), actorId);
             }
         } else {
             runService.failLocked(run, code, message, actorId);
@@ -491,6 +457,34 @@ public class FlowRunStepService {
         jdbc.queryForObject("select pg_advisory_xact_lock(hashtextextended(?, 0))", Object.class,
             "flow-run-node|" + run.getWorkflowRevisionId() + "|" + nodeId);
         return stepRepository.countRunningGraphSteps(run.getWorkflowRevisionId(), nodeId);
+    }
+
+    private void requireReportOwner(FlowRun run, FlowRunStep step, String attemptId, String claimToken) {
+        if (claimToken == null) {
+            if ("actual".equals(run.getRunType()) && "graph".equals(run.getExecutionMode()) && run.getProductionRunId() == null) {
+                JsonNode published = snapshot(run);
+                if (published.path("schemaVersion").asInt() == 4 && published.path("nodeBindings").isArray()) {
+                    for (JsonNode binding : published.path("nodeBindings")) {
+                        if (step.getNodeId().equals(binding.path("processId").asText())) {
+                            throw new BusinessException(ErrorCode.CONFLICT, "An actual HTTP-bound step must report through HTTP execution evidence.");
+                        }
+                    }
+                }
+            }
+            Boolean claimed = jdbc.queryForObject("select exists(select 1 from flow_run_http_execution where attempt_id = ?"
+                + " or (step_id = ? and (transport_status in ('PENDING','OUTCOME_UNKNOWN')"
+                + " or (transport_status in ('SUCCEEDED','HTTP_REJECTED','RESPONSE_REJECTED') and apply_status <> 'APPLIED'))))",
+                Boolean.class, attemptId, step.getStepId());
+            if (Boolean.TRUE.equals(claimed)) {
+                throw new BusinessException(ErrorCode.CONFLICT, "This attempt is owned by its HTTP execution; use HTTP execution evidence and local apply.");
+            }
+        } else {
+            Boolean owned = jdbc.queryForObject("select exists(select 1 from flow_run_http_execution"
+                + " where attempt_id = ? and claim_token = ? and apply_status = 'PENDING'"
+                + " and transport_status in ('SUCCEEDED','HTTP_REJECTED','RESPONSE_REJECTED','TRANSPORT_FAILED'))",
+                Boolean.class, attemptId, claimToken);
+            if (!Boolean.TRUE.equals(owned)) throw new BusinessException(ErrorCode.CONFLICT, "HTTP execution claim is no longer current.");
+        }
     }
 
     private FlowRun writableRun(String runId) {
@@ -528,52 +522,6 @@ public class FlowRunStepService {
     private FlowRunStep requireStep(String runId, String stepId) {
         return stepRepository.findByStepIdAndFlowRunId(stepId, runId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-    }
-
-    /** {@code timeoutSeconds}: the node's time limit in a graph run (EP7); null for none. */
-    private void beginAttempt(FlowRunStep step, String eventType, Integer timeoutSeconds, String actorId) {
-        int nextNumber = attemptRepository.findTopByStepIdOrderByAttemptNoDesc(step.getStepId())
-            .map(previous -> previous.getAttemptNo() + 1).orElse(1);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        FlowRunStepAttempt attempt = new FlowRunStepAttempt();
-        attempt.setAttemptId(idGenerator.generate());
-        attempt.setStepId(step.getStepId());
-        attempt.setAttemptNo(nextNumber);
-        attempt.setStatus("running");
-        attempt.setStartedAt(now);
-        attempt.setTimeoutAt(timeoutSeconds == null ? null : now.plusSeconds(timeoutSeconds));
-        attemptRepository.save(attempt);
-        step.setStatus("running");
-        if (step.getStartedAt() == null) {
-            step.setStartedAt(now);
-        }
-        step.setEndedAt(null);
-        step.setErrorCode(null);
-        step.setErrorMessage(null);
-        stepRepository.save(step);
-        eventRecorder.record(step.getFlowRunId(), step.getStepId(), eventType,
-            objectMapper.createObjectNode().put("attemptNo", nextNumber), actorId);
-    }
-
-    private FlowRunStepAttempt runningAttempt(FlowRunStep step) {
-        if (!"running".equals(step.getStatus())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Only a running step can end.");
-        }
-        FlowRunStepAttempt attempt = attemptRepository.findTopByStepIdOrderByAttemptNoDesc(step.getStepId())
-            .orElseThrow(() -> new IllegalStateException("Running step has no attempt."));
-        if (!"running".equals(attempt.getStatus())) {
-            throw new IllegalStateException("Running step's latest attempt is not running.");
-        }
-        return attempt;
-    }
-
-    /** A report naming an attempt that is no longer running is late, after a timeout or retry (EP8). */
-    private FlowRunStepAttempt runningAttempt(FlowRunStep step, Integer attemptNo) {
-        FlowRunStepAttempt attempt = runningAttempt(step);
-        if (attemptNo != null && attemptNo.intValue() != attempt.getAttemptNo()) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Attempt " + attemptNo + " is no longer running.");
-        }
-        return attempt;
     }
 
     private void appendEvent(String runId, String stepId, String type, JsonNode payload) {
@@ -627,7 +575,7 @@ public class FlowRunStepService {
         }
         try {
             // Decimals stay exact, as conditions and totals compare them.
-            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
+            return objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).without(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored flow run step JSON is invalid.", exception);
         }

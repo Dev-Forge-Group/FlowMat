@@ -41,7 +41,7 @@ test('real rotating shifts survive reload and drive overnight availability and d
     const rota = calendar.getByRole('group', { name: 'Rota', exact: true })
     const openCalendar = async () => {
       await page.goto(`/projects/${projectId}/settings`)
-      await calendar.locator('summary').click()
+      await calendar.locator(':scope > summary').click()
       await expect(calendar.getByRole('button', { name: 'Add shift', exact: true })).toBeVisible()
     }
     const hours = async (monday: string) => {
@@ -153,6 +153,7 @@ test('real rotating shifts survive reload and drive overnight availability and d
         if (completed) expect(removed.ok(), `Project cleanup returned ${removed.status()}`).toBe(true)
         else if (!removed.ok()) test.info().annotations.push({ type: 'cleanup', description: `Project cleanup returned ${removed.status()}` })
       } catch (error) {
+        // eslint-disable-next-line no-unsafe-finally -- The primary test succeeded before completed became true.
         if (completed) throw error
         test.info().annotations.push({ type: 'cleanup', description: 'Project cleanup request failed after the primary failure' })
       }

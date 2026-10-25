@@ -17,8 +17,12 @@ function buildHeaders(): Record<string, string> {
   return headers
 }
 
-async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
-  return requestInternal<T>(method, path, body, false)
+async function request<T>(method: HttpMethod, path: string, body?: unknown, rawJson = false): Promise<T> {
+  if (rawJson) {
+    try { if (typeof body !== 'string') throw new Error(); JSON.parse(body) }
+    catch { throw new Error('Enter valid JSON.') }
+  }
+  return requestInternal<T>(method, path, body, false, rawJson)
 }
 
 async function readResponseBody(res: Response): Promise<unknown> {
@@ -32,12 +36,12 @@ async function readResponseBody(res: Response): Promise<unknown> {
   }
 }
 
-async function requestInternal<T>(method: HttpMethod, path: string, body: unknown, retried: boolean): Promise<T> {
+async function requestInternal<T>(method: HttpMethod, path: string, body: unknown, retried: boolean, rawJson = false): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: buildHeaders(),
     credentials: 'same-origin',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: rawJson ? body as string : body !== undefined ? JSON.stringify(body) : undefined,
   })
 
   const payload = await readResponseBody(res)
@@ -45,7 +49,7 @@ async function requestInternal<T>(method: HttpMethod, path: string, body: unknow
   if (!retried && res.status === 401 && !path.startsWith('/auth/')) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
-      return requestInternal<T>(method, path, body, true)
+      return requestInternal<T>(method, path, body, true, rawJson)
     }
   }
 
@@ -65,7 +69,9 @@ async function requestInternal<T>(method: HttpMethod, path: string, body: unknow
 export const httpClient = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body: unknown) => request<T>('POST', path, body),
+  postJson: <T>(path: string, json: string) => request<T>('POST', path, json, true),
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
+  putJson: <T>(path: string, json: string) => request<T>('PUT', path, json, true),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
 }

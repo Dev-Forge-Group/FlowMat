@@ -15,6 +15,9 @@ public interface ProjectMemberQuery {
     /** Whether the user can read the project: it is not deleted, and they own it or are an active member. */
     boolean canRead(String projectId, String userId);
 
+    /** Whether the user can change the project: it is not deleted, and they own it or are an active owner or editor member. */
+    boolean canWrite(String projectId, String userId);
+
     /** The owner of a project that is not deleted; null otherwise. */
     String ownerOf(String projectId);
 

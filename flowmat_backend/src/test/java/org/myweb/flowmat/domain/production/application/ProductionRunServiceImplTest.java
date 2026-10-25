@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,13 +26,15 @@ import org.junit.jupiter.api.BeforeEach;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
-import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemFactsQuery;
-import org.myweb.flowmat.domain.inventory.application.publicapi.StockFactsQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemRuleFactsQuery;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockRuleFactsQuery;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockViewQuery;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.myweb.flowmat.domain.bom.application.BomService;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
@@ -44,11 +47,13 @@ import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunStartRequest;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
-import org.myweb.flowmat.domain.workflow.domain.entity.Process;
-import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
+import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessIoRunView;
+import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessRunView;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
+import org.myweb.flowmat.domain.rule.application.RuleEvaluationContext;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -72,14 +77,17 @@ class ProductionRunServiceImplTest {
     @Mock private RunInstructionService runInstructionService;
 
     @Mock private WorkflowProductionQuery workflowReferences;
-    @Mock private CatalogItemFactsQuery itemFacts;
-    @Mock private StockFactsQuery stockFacts;
+    @Mock private WorkflowRunQuery workflowRuns;
+    @Mock private CatalogQuery catalogQuery;
+    @Mock private CatalogItemRuleFactsQuery ruleFacts;
+    @Mock private StockViewQuery stockViews;
+    @Mock private StockRuleFactsQuery stockRuleFacts;
     @Spy private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @BeforeEach
     void setupReferences() {
-        lenient().when(workflowReferences.lockWorkflow(any(String.class)))
-            .thenAnswer(call -> workflowReferences.findWorkflow(call.getArgument(0)).orElseThrow());
+        lenient().when(workflowRuns.lockWorkflow(any(String.class)))
+            .thenAnswer(call -> workflowRuns.findWorkflow(call.getArgument(0)).orElseThrow());
     }
     private String facts(Object row) {
         try { return new ObjectMapper().findAndRegisterModules().writeValueAsString(row); }
@@ -93,7 +101,7 @@ class ProductionRunServiceImplTest {
     void stockMovesByTheQuantityConvertedToTheItemsUnit() {
         givenRun("running");
         givenItem();
-        Inventory inventory = givenInventory("item-1", "10");
+        StockView inventory = givenInventory("item-1", "10");
         when(unitConverter.toItemUnit(new BigDecimal("500"), "g", "unit_kg"))
             .thenReturn(new UnitConverter.Conversion(new BigDecimal("0.5"), "g", "kg", true));
         when(idGenerator.generate()).thenReturn("run-item-1");
@@ -104,13 +112,55 @@ class ProductionRunServiceImplTest {
             new ProductionRunItemRecordRequest(null, null, "inv-1", "item-1", "input", new BigDecimal("500"), null, "g"));
 
         // Stock moves only through the inventory command (conditional atomic UPDATE + history), never a direct save.
-        verify(stockFacts).findActiveStock("inv-1");
+        verify(stockViews).findActiveStock("inv-1");
         verify(inventoryCommandService).apply(argThat(movement ->
-            movement.inventoryId().equals(inventory.getInventoryId())
+            movement.inventoryId().equals(inventory.inventoryId())
                 && movement.type() == InventoryTransactionType.PRODUCTION_INPUT
                 && movement.quantityDelta().compareTo(new BigDecimal("-0.5")) == 0
                 && movement.note().contains("500 g = 0.5 kg")
                 && movement.actorUserId().equals("user-1")));
+    }
+
+    @Test
+    void rulesReadTheItemAsTheCatalogGivesItToRules() {
+        givenRun("running");
+        givenItem();
+        Map<String, Object> asRulesReadIt = Map.of("storageCondition", "Frozen");
+        when(ruleFacts.findActiveItem("item-1")).thenReturn(Optional.of(asRulesReadIt));
+        lenient().when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit_kg"))
+            .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
+        lenient().when(idGenerator.generate()).thenReturn("run-item-1");
+        lenient().when(productionRunItemRepository.save(any(ProductionRunItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
+
+        productionRunService.recordRunItem("run-1",
+            new ProductionRunItemRecordRequest(null, null, null, "item-1", "output", BigDecimal.ONE, null, "kg"));
+
+        ArgumentCaptor<RuleEvaluationContext> context = ArgumentCaptor.forClass(RuleEvaluationContext.class);
+        verify(flowRuleEngineService).validateRules(context.capture());
+        assertEquals(asRulesReadIt, context.getValue().facts().get("item"));
+    }
+
+    @Test
+    void rulesReadTheStockRecordAsInventoryGivesItToRules() {
+        ProductionRun run = givenRun("running");
+        run.setRunType("simulation");
+        givenItem();
+        givenInventory("item-1", "10");
+        Map<String, Object> asRulesReadIt = Map.of("location", "COLD");
+        when(stockRuleFacts.findActiveStock("inv-1")).thenReturn(Optional.of(asRulesReadIt));
+        lenient().when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit_kg"))
+            .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
+        lenient().when(idGenerator.generate()).thenReturn("run-item-1");
+        lenient().when(productionRunItemRepository.save(any(ProductionRunItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(projectAccessService.requireCurrentUserId()).thenReturn("user-1");
+
+        productionRunService.recordRunItem("run-1",
+            new ProductionRunItemRecordRequest(null, null, "inv-1", "item-1", "output", BigDecimal.ONE, null, "kg"));
+
+        ArgumentCaptor<RuleEvaluationContext> context = ArgumentCaptor.forClass(RuleEvaluationContext.class);
+        verify(flowRuleEngineService).validateRules(context.capture());
+        assertEquals(asRulesReadIt, context.getValue().facts().get("inventory"));
     }
 
     @Test
@@ -134,10 +184,8 @@ class ProductionRunServiceImplTest {
     void simulationOutputDoesNotMarkARealLotAsProduced() {
         ProductionRun run = givenRun("running");
         run.setRunType("simulation");
-        Item item = givenItem();
-        item.setLotManageYn("Y");
-        Inventory inventory = givenInventory("item-1", "0");
-        inventory.setLotId("lot-1");
+        givenItem("Y");
+        givenInventory("item-1", "0", "lot-1");
         when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit_kg"))
             .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
         when(idGenerator.generate()).thenReturn("simulation-output-1");
@@ -184,11 +232,7 @@ class ProductionRunServiceImplTest {
 
     @Test
     void unknownRunTypeIsRejectedEvenWithoutAPublishedWorkflowRevision() {
-        Workflow workflow = new Workflow();
-        workflow.setWorkflowId("workflow-1");
-        workflow.setProjectId("project-1");
-        lenient().when(workflowReferences.findWorkflow("workflow-1"))
-            .thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(workflow))));
+        lenient().when(workflowRuns.findWorkflow("workflow-1")).thenReturn(Optional.of(workflow()));
         lenient().when(idGenerator.generate()).thenReturn("virtual-run-1");
         lenient().when(productionRunRepository.save(any(ProductionRun.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
@@ -218,14 +262,10 @@ class ProductionRunServiceImplTest {
     void legacyRunRejectsAnIoFromAnotherWorkflowWhenProcessIdIsOmitted() {
         givenRun("running");
         givenItem();
-        ProcessIo io = new ProcessIo();
-        io.setProcessIoId("foreign-io");
-        io.setProcessId("foreign-process");
-        Process process = new Process();
-        process.setProcessId("foreign-process");
-        process.setWorkflowId("foreign-workflow");
-        when(workflowReferences.findProcessIo("foreign-io")).thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(io))));
-        when(workflowReferences.findProcess("foreign-process")).thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(process))));
+        when(workflowRuns.findProcessIo("foreign-io"))
+            .thenReturn(Optional.of(new ProcessIoRunView("foreign-io", "foreign-process", null, null, Map.of())));
+        when(workflowRuns.findProcess("foreign-process"))
+            .thenReturn(Optional.of(new ProcessRunView("foreign-process", null, "foreign-workflow", null, Map.of())));
 
         assertThrows(BusinessException.class, () -> productionRunService.recordRunItem("run-1",
             new ProductionRunItemRecordRequest(null, "foreign-io", null, "item-1", "input", BigDecimal.ONE, null, "kg")));
@@ -243,16 +283,9 @@ class ProductionRunServiceImplTest {
         String portDirection, String field) {
         givenRun("running").setRunType(runType);
         givenItem();
-        Process process = new Process();
-        process.setProcessId("process-1");
-        process.setWorkflowId("workflow-1");
-        ProcessIo io = new ProcessIo();
-        io.setProcessIoId("io-1");
-        io.setProcessId("process-1");
-        io.setItemId(portItemId);
-        io.setDirection(portDirection);
-        when(workflowReferences.findProcessIo("io-1")).thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(io))));
-        when(workflowReferences.findProcess("process-1")).thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(process))));
+        when(workflowRuns.findProcessIo("io-1"))
+            .thenReturn(Optional.of(new ProcessIoRunView("io-1", "process-1", portItemId, portDirection, Map.of())));
+        when(workflowRuns.findProcess("process-1")).thenReturn(Optional.of(new ProcessRunView("process-1", null, "workflow-1", null, Map.of())));
         lenient().when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit_kg"))
             .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
         lenient().when(idGenerator.generate()).thenReturn("mismatched-item");
@@ -268,23 +301,28 @@ class ProductionRunServiceImplTest {
         verifyNoInteractions(inventoryCommandService, stockAllocationService, lotService);
     }
 
-    private Item givenItem() {
-        Item item = new Item();
-        item.setItemId("item-1");
-        item.setProjectId("project-1");
-        item.setUnitId("unit_kg");
-        when(itemFacts.findActiveItem("item-1")).thenReturn(Optional.of(new CatalogItemFactsQuery.Facts(facts(item))));
-        return item;
+    private void givenItem() {
+        givenItem(null);
     }
 
-    private Inventory givenInventory(String itemId, String quantity) {
-        Inventory inventory = new Inventory();
-        inventory.setInventoryId("inv-1");
-        inventory.setProjectId("project-1");
-        inventory.setItemId(itemId);
-        inventory.setQuantity(new BigDecimal(quantity));
-        inventory.setAvailableQuantity(new BigDecimal(quantity));
-        when(stockFacts.findActiveStock("inv-1")).thenReturn(Optional.of(new StockFactsQuery.Facts(facts(inventory))));
+    private void givenItem(String lotManageYn) {
+        when(catalogQuery.findActiveItem("item-1")).thenReturn(Optional.of(item(lotManageYn)));
+        lenient().when(ruleFacts.findActiveItem("item-1")).thenReturn(Optional.of(Map.of()));
+    }
+
+    private static CatalogItemView item(String lotManageYn) {
+        return new CatalogItemView("item-1", "project-1", null, null, "unit_kg", null, null, null, null, null, lotManageYn, null, null, null, "N");
+    }
+
+    private StockView givenInventory(String itemId, String quantity) {
+        return givenInventory(itemId, quantity, null);
+    }
+
+    private StockView givenInventory(String itemId, String quantity, String lotId) {
+        StockView inventory = new StockView("inv-1", "project-1", itemId, lotId, null, new BigDecimal(quantity), null,
+            new BigDecimal(quantity), null, null);
+        when(stockViews.findActiveStock("inv-1")).thenReturn(Optional.of(inventory));
+        lenient().when(stockRuleFacts.findActiveStock("inv-1")).thenReturn(Optional.of(Map.of()));
         return inventory;
     }
 
@@ -299,7 +337,7 @@ class ProductionRunServiceImplTest {
 
         assertEquals("wo-1", run.workOrderId());
         assertEquals("in_progress", order.getWorkOrderStatus());
-        verify(workflowReferences).lockWorkflow("workflow-1");
+        verify(workflowRuns).lockWorkflow("workflow-1");
         verify(workOrderRepository).save(order);
     }
 
@@ -326,10 +364,11 @@ class ProductionRunServiceImplTest {
     }
 
     private void givenWorkflow() {
-        Workflow workflow = new Workflow();
-        workflow.setWorkflowId("workflow-1");
-        workflow.setProjectId("project-1");
-        when(workflowReferences.findWorkflow("workflow-1")).thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(workflow))));
+        when(workflowRuns.findWorkflow("workflow-1")).thenReturn(Optional.of(workflow()));
+    }
+
+    private static WorkflowRunView workflow() {
+        return new WorkflowRunView("workflow-1", "project-1", Map.of());
     }
 
     private WorkOrder givenWorkOrder(String status, String workflowId) {
@@ -422,11 +461,7 @@ class ProductionRunServiceImplTest {
         lenient().when(idGenerator.generate()).thenReturn("negative-run");
         lenient().when(productionRunRepository.save(any(ProductionRun.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        Workflow workflow = new Workflow();
-        workflow.setWorkflowId("workflow-1");
-        workflow.setProjectId("project-1");
-        lenient().when(workflowReferences.findWorkflow("workflow-1"))
-            .thenReturn(Optional.of(new WorkflowProductionQuery.Facts(facts(workflow))));
+        lenient().when(workflowRuns.findWorkflow("workflow-1")).thenReturn(Optional.of(workflow()));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> productionRunService.startRun(
             new ProductionRunStartRequest("project-1", "workflow-1", null, new BigDecimal("-1"), null, null, null, null, null)));
@@ -440,11 +475,7 @@ class ProductionRunServiceImplTest {
     @Test
     void positiveActualQuantityCannotHideANegativePlannedQuantity() {
         givenRun("running");
-        Item item = new Item();
-        item.setItemId("item-1");
-        item.setProjectId("project-1");
-        item.setUnitId("unit_kg");
-        lenient().when(itemFacts.findActiveItem("item-1")).thenReturn(Optional.of(new CatalogItemFactsQuery.Facts(facts(item))));
+        lenient().when(catalogQuery.findActiveItem("item-1")).thenReturn(Optional.of(item(null)));
         lenient().when(unitConverter.toItemUnit(BigDecimal.ONE, "kg", "unit_kg"))
             .thenReturn(new UnitConverter.Conversion(BigDecimal.ONE, "kg", "kg", false));
         lenient().when(productionRunItemRepository.save(any(ProductionRunItem.class)))
@@ -479,7 +510,7 @@ class ProductionRunServiceImplTest {
             () -> productionRunService.recordRunItem("run-1", recordRequest("input"))
         );
 
-        verifyNoInteractions(itemFacts, stockFacts, productionRunItemRepository);
+        verifyNoInteractions(catalogQuery, stockViews, productionRunItemRepository);
     }
 
     @Test
@@ -492,7 +523,7 @@ class ProductionRunServiceImplTest {
         );
 
         assertEquals("direction must be 'input' or 'output'.", exception.getMessage());
-        verifyNoInteractions(itemFacts, productionRunItemRepository);
+        verifyNoInteractions(catalogQuery, productionRunItemRepository);
     }
 
     private ProductionRun givenRun(String status) {

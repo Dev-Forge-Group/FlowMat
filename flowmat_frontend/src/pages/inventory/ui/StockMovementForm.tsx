@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useStockMovementMutation, useStockTransferMutation } from '../../../entities/inventory/api/useStockMovements'
+import { useStorageLocationsQuery } from '../../../entities/inventory/api/useStorageLocations'
 import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
 import type { InventoryDto } from '../../../shared/types/api'
 import type { LotRecord } from '../model/fefoModel'
 import { fromPacks } from '../model/stockAlertModel'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, type MovementType } from '../model/stockModel'
+import { conditionWarning } from '../model/storageConditionModel'
 import { LOCATION_OPTIONS_ID } from './LocationOptions'
 
 type Action = MovementType | 'move'
@@ -23,6 +25,8 @@ export function StockMovementForm({
   onUseEarlier,
   packUnit,
   packQty,
+  itemCode,
+  itemCondition,
 }: {
   projectId: string
   inventory: InventoryDto
@@ -31,6 +35,9 @@ export function StockMovementForm({
   /** What the item is bought in and how many stock units one holds; a receipt can then be typed in those units. */
   packUnit?: string | null
   packQty?: number | null
+  /** The item and its storage condition, to point out a place kept differently (docs/domain/storage-location.md SL3). */
+  itemCode?: string
+  itemCondition?: string | null
 }) {
   const movement = useStockMovementMutation(projectId)
   const transfer = useStockTransferMutation(projectId)
@@ -44,6 +51,8 @@ export function StockMovementForm({
   const pending = movement.isPending || transfer.isPending
   const failure = moving ? transfer : movement
   const failureStatus = errorStatus(failure.error)
+  const places = useStorageLocationsQuery(projectId).data ?? []
+  const conditionNote = moving ? conditionWarning(places, toLocation, itemCode, itemCondition) : null
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -180,6 +189,11 @@ export function StockMovementForm({
               Use that LOT
             </button>
           )}
+        </p>
+      )}
+      {conditionNote && (
+        <p role="note" aria-label="Storage condition" style={{ gridColumn: '1 / -1', fontSize: 12, margin: 0, color: '#b45309' }}>
+          {conditionNote}
         </p>
       )}
       {failure.isError && (

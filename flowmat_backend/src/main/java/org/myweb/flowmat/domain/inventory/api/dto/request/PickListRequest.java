@@ -20,7 +20,7 @@ public record PickListRequest(
     @NotBlank @Size(max = 100) String stagingLocation,
     String workOrderId,
     @Positive BigDecimal quantity,
-    @Valid List<Line> lines,
+    @Valid List<@NotNull(message = "lines must not contain null entries.") Line> lines,
     @Size(max = 500) String note
 ) {
 

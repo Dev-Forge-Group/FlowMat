@@ -10,11 +10,14 @@ export function notificationLink(
   if (notification.refType === 'warehouse_task') return `${project}/inventory?tab=tasks`
   if (notification.refType === 'work_order') return `${project}/runs?view=work-orders`
   if (notification.refType === 'stock_alert') return `${project}/inventory?tab=stock`
+  if (notification.refType === 'count_plan') return `${project}/inventory?tab=count-plans`
   // Approvals (NT8): a correction opens its run, a BOM revision the BOM tab.
   if (notification.refType === 'production_run' && notification.refId) {
     return `${project}/runs/${encodeURIComponent(notification.refId)}`
   }
   if (notification.refType === 'bom') return `${project}/inventory?tab=boms`
+  // A purchase order waiting for approval, or approved (docs/domain/purchasing.md PO36).
+  if (notification.refType === 'purchase_order') return `${project}/inventory?tab=purchasing`
   return null
 }
 

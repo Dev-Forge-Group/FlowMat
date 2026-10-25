@@ -29,7 +29,8 @@
 | C2 | 다른 작업지시(또는 작업지시 없는 실행)는 할당된 재고를 쓸 수 없음(가용에서 빠져 있음) | 409 `Not enough available stock …` |
 | R1 | 반환: 한 건(`…/{allocationId}/release`) 또는 모두(`…/release`). 닫힌 할당 반환은 409. 완료·취소된 작업지시도 반환 가능 | |
 | R3 | 작업지시를 **완료하거나 취소하면** 열린 할당의 남은 양을 같은 트랜잭션에서 자동으로 반환 | |
-| R2 | 실행 투입을 취소하면 재고는 돌아오지만 **다시 할당되지는 않음**(자유 재고) | |
+| R2 | 실행 투입을 취소하면 재고는 돌아오고, 묻지 않으면 **다시 할당되지 않음**(자유 재고). 물으면 R4 | |
+| R4 | **다시 할당**(2026-10-24, 2fk): `POST /production-runs/{id}/items/{itemId}/cancel` `{reason, reallocate: true}`. 작업지시의 물리 실행이 재고 행에서 집은 투입만. 그 투입이 집은 양 전부(품목 단위로 바꾼 소수 4자리)를 같은 재고 행에 그 작업지시의 **새 할당**으로 잡는다(이동 원장 `reserve`, 메모 `Allocated to work order WO-… again: run item … was cancelled`). A4처럼 재고 상태 available, LOT 사용 가능·만료 전이어야 한다. 취소·재고 되돌림·할당이 한 트랜잭션이라 다시 할당할 수 없으면 취소도 하지 않는다. 작업지시·할당 잠금을 재고보다 먼저 건다(C1과 같은 순서) | 400 산출·재고 행 없는 투입·작업지시 없는 실행·시뮬레이션 실행 / 409 작업지시가 승인·진행 중이 아님, 재고 행을 쓸 수 없음 |
 
 준비 점검과 간이 MRP는 할당을 반영합니다.
 - **준비 점검**: 그 작업지시에 할당된 재고는 그 작업지시의 가용량에 셈(재고 행 단위로 가용 + 자기 할당).
@@ -50,6 +51,7 @@
 - BOM이 있는 승인·진행 중 작업지시면 **Allocate materials**(BOM 기준). 결과 `Allocated FLOUR 8. Short: FLOUR 2.`
 - 표: 자재 · LOT · 위치, 할당, 사용, 반환, 남음, 상태, 열린 할당의 **Release**. 열린 것이 있으면 **Release all**
 - 바꾸면 재고·준비 점검을 다시 불러옴
+- 실행 상세의 투입 **Cancel**(R4): 사유를 물은 뒤, 작업지시의 물리 실행이 재고 행에서 집은 투입이면 `Allocate the returned stock to the work order again?`(OK는 다시 할당, Cancel은 자유 재고). 다시 할당하면 `Cancelled. The returned stock is allocated to the work order again.`, 할당·준비 점검을 다시 불러옴
 
 ## 검증
 
@@ -98,7 +100,19 @@
 - ~~작업지시 완료·취소 때 열린 할당 자동 반환~~ → R3로 구현(2026-09-27). `StockAllocationIntegrationTest` 셋째 건: 3 할당 후 취소 → 예약 0·반환 3, 5 할당·2 사용 후 실행 마감·완료 → 예약 0·사용 2·반환 3
 - ~~피킹 목록이 자기 할당 재고를 먼저 집기~~ → 2bm으로 구현(2026-10-05). 예약 유지·부분 이동·해제 후 거절.
 - ~~LOT 나눠 투입(`RunInputAllocationService`)이 자기 할당 재고를 후보로 보기~~ → 구현됨(2026-10-02 문서 반영). 실행 작업지시의 열린 할당 수량을 그 재고 행의 쓸 수 있는 양에 더해 유효기한 순으로 나눈다. 만료 LOT는 할당돼 있어도 쓰지 않는다. 검증: `RunInputAllocationServiceTest`(`anActualRunCanTakeItsOwnReservedStockInExpiryOrder`, `anExpiredLotDoesNotBecomeUsableBecauseItWasReservedForTheOrder`)
-- 투입 취소·보정 시 재할당 선택
+- ~~투입 취소 시 재할당 선택~~ → R4(2026-10-24, 2fk). 끝난 실행 보정의 재할당은 아직(작업지시가 완료되면 R3로 모두 반환되므로 진행 중 작업지시의 보정만 해당)
+
+## 투입 취소 때 다시 할당 (2026-10-24, 2fk)
+
+사용자 위임(2026-10-24, "의사결정도 recommend 로 계속 알아서 밀고나가")에 따라 리드가 고른 권장안이다. 마이그레이션 없음.
+
+1. 기본은 지금처럼 자유 재고(R2)다. 다시 할당은 취소할 때 요청한 경우만(기존 동작과 화면 흐름을 깨지 않는다).
+2. 양은 그 투입이 집은 양 전부다. 할당에서 몇을 집었는지는 투입 줄에 남지 않아(C1은 할당 쪽 `consumed`만 늘린다) 따로 알 수 없고, 그 작업지시의 실행이 쓰려고 집은 재고이므로 작업지시에 돌려준다.
+3. 원래 할당을 되살리지 않고 새 할당을 만든다. 원래 할당의 사용·반환 이력과 닫힌 상태는 그대로 남는다.
+4. 다 잡을 수 없으면 일부만 잡지 않고 거절하며, 취소도 하지 않는다(409). 그때는 다시 할당 없이 취소한다.
+5. 화면은 사유를 묻는 창 다음에 확인 창 하나. 작업지시 없는 실행·시뮬레이션·산출에는 묻지 않는다.
+
+- 검증: `RunInputReallocationIntegrationTest` — 10 kg 행에 작업지시 6 할당 → 실행이 4 투입(보유 6·예약 2) → 산출 줄 다시 할당 400(취소 안 됨), 작업지시 없는 실행의 투입 400(보유 5 그대로), 다시 할당 없이 취소 → 보유 6 → 4 kg 투입을 다시 할당하며 취소 → 보유 10·예약 6, 할당 둘(처음 것 사용 4·남음 2, 새 것 4 open, 같은 행) → 같은 실행이 2 투입(보유 8·예약 4) → 다시 할당 없이 취소하면 예약 4 그대로(R2) → 이미 취소한 줄 409, 외부인 403. `runPlan.test.ts`(`canAllocateAgain`), 모의 e2e `run-input-reallocate.spec.ts`(확인하면 `reallocate: true`와 안내, 거절하면 `{reason}`만, 작업지시 없는 실행은 사유만 물음). 관련 백엔드 51건/7클래스(새 `RunInputReallocationIntegrationTest` 1, `StockAllocationIntegrationTest` 3, `ProductionRunServiceImplTest` 25, 예약 이동·창고 작업 20, `ModuleBoundaryTest` 2), 프런트 typecheck·lint·Vitest 709건(`runPlan.test.ts` +2), 모의 e2e `run-input-reallocate.spec.ts` 3건과 실행 상세 근처 6건 통과(격리본). 전체 백엔드 2,127건(300클래스) 실패·오류·제외 0(커버리지 검사 생략).
 
 ## 예약을 유지하는 위치 이동 (2026-10-05, §2 2bl)
 

@@ -42,7 +42,6 @@ import org.myweb.flowmat.domain.production.application.publicapi.AllocationTrans
 import org.myweb.flowmat.domain.production.application.publicapi.WorkOrderView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
-import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -305,8 +304,8 @@ public class WarehouseTaskService {
         WarehouseTask task = lockOpen(taskId);
         String userId = trimToNull(assignedTo);
         if (userId != null) {
-            Project project = projectAccessService.requireProjectReadAccess(task.getProjectId());
-            if (!userId.equals(project.getOwnerId()) && !projectMemberQuery.isActiveMember(task.getProjectId(), userId)) {
+            projectAccessService.requireProjectReadAccess(task.getProjectId());
+            if (!userId.equals(projectMemberQuery.ownerOf(task.getProjectId())) && !projectMemberQuery.isActiveMember(task.getProjectId(), userId)) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, userId + " is not a member of this project.");
             }
         }

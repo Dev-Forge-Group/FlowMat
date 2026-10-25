@@ -17,7 +17,7 @@ public record InventoryCountRequest(
     @NotBlank String projectId,
     @NotBlank @Size(max = 60) String requestId,
     @Size(max = 500) String note,
-    @NotEmpty @Size(max = 500) List<@Valid Line> lines
+    @NotEmpty @Size(max = 500) List<@NotNull(message = "lines must not contain null entries.") @Valid Line> lines
 ) {
 
     /**

@@ -22,6 +22,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest
 import org.myweb.flowmat.domain.inventory.api.dto.request.LotCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.StockImportRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockImportResponse;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockReceiptCommand;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
@@ -33,6 +34,7 @@ import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.util.CsvDecimalParser;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -44,7 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
-public class StockImportService {
+public class StockImportService implements StockReceiptCommand {
 
     public static final int MAX_ROWS = 1000;
     public static final String REFERENCE_TYPE = "stock_import";
@@ -58,6 +60,8 @@ public class StockImportService {
     private final InventoryCommandService inventoryCommandService;
     private final ProjectAccessService projectAccessService;
     private final StorageLocationService storageLocationService;
+
+    private record StockKey(String itemId, String location, String lotNo) { }
 
     /** A checked row. {@code lotNo} with a null {@code lotId} is a LOT the import registers. */
     private record Plan(CatalogItemView item, String location, String lotNo, String lotId, LocalDate expiry, BigDecimal quantity, String inventoryId) {
@@ -82,7 +86,7 @@ public class StockImportService {
             .collect(Collectors.toMap(lot -> key(lot.getLotNo()), Function.identity(), (first, second) -> first));
         // LOT numbers the file registers, with the plan of the first row that names each.
         Map<String, Plan> newLots = new HashMap<>();
-        Set<String> places = new HashSet<>();
+        Set<StockKey> places = new HashSet<>();
         StorageLocationService.LocationCheck locations = storageLocationService.locationCheck(projectId);
 
         List<StockImportResponse.RowResult> results = new ArrayList<>();
@@ -118,6 +122,38 @@ public class StockImportService {
         return new StockImportResponse(request.dryRun(), apply, created, received, newLots.size(), errors, results);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String receive(StockReceipt receipt) {
+        String projectId = receipt.projectId();
+        CatalogItemView view = catalogQuery.findProjectItem(projectId, receipt.itemId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The item is not in this project."));
+        Map<String, LotMaster> lots = lotMasterRepository.findAllByProjectIdOrderByCreatedAtDesc(projectId).stream()
+            .collect(Collectors.toMap(lot -> key(lot.getLotNo()), Function.identity(), (first, second) -> first));
+        List<String> problems = new ArrayList<>();
+        StockImportRequest.Row row = new StockImportRequest.Row(view.itemCode(), receipt.location(), receipt.lotNo(),
+            receipt.quantity() == null ? null : receipt.quantity().toPlainString(),
+            receipt.expiryDate() == null ? null : receipt.expiryDate().toString(), null);
+        Plan plan = check(projectId, row, view.itemCode(), Map.of(view.itemCode(), List.of(view)), lots, new HashMap<>(), new HashSet<>(),
+            storageLocationService.locationCheck(projectId), problems);
+        if (plan == null || !problems.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, (problems.isEmpty() ? "The receipt cannot be stored" : String.join("; ", problems)) + ".");
+        }
+        String lotId = plan.lotId();
+        if (lotId == null && plan.lotNo() != null) {
+            lotId = lotService.createLot(new LotCreateRequest(projectId, view.itemId(), plan.lotNo(), null, null, plan.expiry())).lotId();
+        }
+        String inventoryId = plan.inventoryId();
+        if (inventoryId == null) {
+            // The record starts empty, so the receipt itself carries the caller's reference in the ledger.
+            inventoryId = inventoryService.createInventory(new InventoryAdjustRequest(projectId, view.itemId(), BigDecimal.ZERO,
+                null, null, plan.location(), null, null, null, null, lotId)).inventoryId();
+        }
+        inventoryCommandService.apply(new InventoryMovement(inventoryId, InventoryTransactionType.RECEIPT, plan.quantity(), BigDecimal.ZERO,
+            receipt.referenceType(), receipt.referenceId(), receipt.note(), null, projectAccessService.requireCurrentUserId()));
+        return inventoryId;
+    }
+
     private void save(String projectId, List<Plan> plans, String note) {
         String importId = UUID.randomUUID().toString();
         String actor = projectAccessService.requireCurrentUserId();
@@ -145,7 +181,7 @@ public class StockImportService {
         Map<String, List<CatalogItemView>> items,
         Map<String, LotMaster> lots,
         Map<String, Plan> newLots,
-        Set<String> places,
+        Set<StockKey> places,
         StorageLocationService.LocationCheck locations,
         List<String> problems
     ) {
@@ -236,7 +272,7 @@ public class StockImportService {
                 }
             }
         }
-        String place = item.itemId() + "|" + (location == null ? "" : location) + "|" + (lotNo == null ? "" : key(lotNo));
+        StockKey place = new StockKey(item.itemId(), location == null ? "" : location, lotNo == null ? "" : key(lotNo));
         if (!places.add(place)) {
             problems.add("The same item, location and LOT appear more than once; combine the lines");
         }

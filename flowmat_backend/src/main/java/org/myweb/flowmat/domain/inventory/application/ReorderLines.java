@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.response.ReorderLineResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
@@ -42,14 +42,14 @@ final class ReorderLines {
     }
 
     /** The watched items short of their safety stock, the biggest share short first, then by code. */
-    static List<ReorderLineResponse> shortLines(List<Item> watched, Map<String, BigDecimal> safetyStock, Map<String, BigDecimal> usable,
+    static List<ReorderLineResponse> shortLines(List<CatalogItemView> watched, Map<String, BigDecimal> safetyStock, Map<String, BigDecimal> usable,
                                                 Map<String, String> units, String location) {
         return watched.stream()
             .map(item -> {
-                BigDecimal safety = safetyStock.get(item.getItemId());
-                BigDecimal available = usable.getOrDefault(item.getItemId(), BigDecimal.ZERO);
-                return new ReorderLineResponse(item.getItemId(), item.getItemCode(), item.getItemName(), units.get(item.getUnitId()),
-                    safety, available, safety.subtract(available), item.getLeadTimeDays(), location);
+                BigDecimal safety = safetyStock.get(item.itemId());
+                BigDecimal available = usable.getOrDefault(item.itemId(), BigDecimal.ZERO);
+                return new ReorderLineResponse(item.itemId(), item.itemCode(), item.itemName(), units.get(item.unitId()),
+                    safety, available, safety.subtract(available), item.leadTimeDays(), location);
             })
             .filter(line -> line.shortageQuantity().signum() > 0)
             .sorted(Comparator.comparing(

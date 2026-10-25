@@ -37,7 +37,7 @@
 4. 기존 위반은 한 번에 고치지 않는다.
    - **Stage A**: ArchUnit 테스트로 새 cross-domain repository import를 막는다. 기존 위반은 목록으로 동결한다. 목록은 줄어들기만 해야 한다. ArchUnit의 freeze 기능(`FreezingArchRule`)을 우선 검토한다.
    - **Stage B**: 기존 코드를 고칠 때 그 파일의 위반을 공개 API로 바꾼다. 일괄 수정은 하지 않는다.
-   - **Stage C**: 다른 도메인 Entity import 금지. 별도 결정이다.
+   - **Stage C**: 다른 도메인 Entity import 금지. 별도 결정이다. [ADR-018](ADR-018-entity-boundary.md)에서 정했다(2026-10-19 기준선 39줄 동결, 2026-10-25 0줄이 되어 동결을 풀었다).
 5. 첫 기준 구현은 다음 두 곳이며, 이것을 앞으로 cross-domain 호출의 표준 예제로 삼는다. 둘 다 2026-10-02에 구현했다.
    - bom → catalog 4줄(2026-10-02 신규): 동결하지 않고 [`CatalogQuery`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/catalog/application/publicapi/CatalogQuery.java)로 바꾼다.
    - `ProductionFlowRunAdapter`: [`FlowRunCommand`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/flowrun/application/publicapi/FlowRunCommand.java)로 바꿔 production이 Flow Run 저장 구현을 모르게 한다.
@@ -45,7 +45,7 @@
 
 ## 결정하지 않은 것
 
-- Stage C(Entity import 금지)의 시점과 범위
+- Stage C(Entity import 금지)의 시점과 범위. [ADR-018](ADR-018-entity-boundary.md)에서 정했다(2026-10-19)
 - 다른 도메인의 `application` 클래스를 직접 쓰는 것(예: bom·inventory·production이 쓰는 catalog의 `UnitConverter`, 여러 도메인이 쓰는 project의 `ProjectAccessService`)을 `publicapi`로 옮길지 여부. Stage A·B는 repository만 다룬다.
 - `global`(보안·설정)과 `batch`의 repository 사용을 규칙에 넣을지 여부. 이 둘은 bounded context가 아니다. 지금 `global`→user 7줄, `batch`→inventory 2줄이 있다. Stage A 규칙은 `domain.<context>` 사이만 본다.
 - Domain Event의 표준 형식과 발행 위치
@@ -65,7 +65,7 @@
 Stage A는 2026-10-02에 [`ModuleBoundaryTest`](../../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleBoundaryTest.java)로 적용했다.
 
 - 위반 하나는 "클래스 X가 다른 도메인의 repository R을 쓴다"이다. 시그니처와 줄 번호를 넣지 않아, 생성자 인자나 메서드 위치가 바뀌어도 동결된 위반과 계속 맞는다.
-- 동결 목록은 `flowmat_backend/src/test/resources/archunit_store/`에 있다. 고친 위반은 자동으로 빠진다. 손으로 고치거나 지우지 않는다. 지우면 `allowStoreCreation=false` 때문에 테스트가 실패한다.
+- 동결 목록은 `flowmat_backend/src/test/resources/archunit_store/`에 있었다. 고친 위반은 자동으로 빠졌고, 저장소가 없으면 `allowStoreCreation=false` 때문에 테스트가 실패했다. Stage A 목록은 2026-10-18([ADR-012](ADR-012-workflow-access-boundary.md)), Stage C 목록은 2026-10-25([ADR-018](ADR-018-entity-boundary.md))에 0줄이 되어 파일을 지웠다. 이제 두 규칙 모두 위반이 생기면 바로 실패한다.
 - 새 cross-domain repository import를 넣으면 ArchUnit 테스트가 실패해야 한다. 2026-10-02에 임시 클래스로 실패를 확인했다.
 - 동결 목록에 없는 위반은 0이어야 한다.
 - 기준 구현 뒤 bom→catalog repository 4줄과 production→flowrun repository 1줄이 사라지고, 기존 테스트가 모두 통과해야 한다.

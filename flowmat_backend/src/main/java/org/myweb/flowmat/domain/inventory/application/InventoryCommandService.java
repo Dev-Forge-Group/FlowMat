@@ -51,6 +51,7 @@ public class InventoryCommandService {
     private final IdGenerator idGenerator;
     private final LotStatusResync lotStatusResync;
     private final StockAlertService stockAlertService;
+    private final StorageConditionGuard storageConditionGuard;
 
     /** Applies the movement if it keeps every stock invariant, and records it. */
     @Transactional
@@ -114,6 +115,11 @@ public class InventoryCommandService {
     ) {
         BigDecimal quantity = zeroIfNull(quantityDelta);
         BigDecimal reserved = zeroIfNull(reservedDelta);
+        // Stock coming into a place: a project may refuse a place kept otherwise than the item (storage-location.md SL5).
+        if (quantity.signum() > 0 && (type == InventoryTransactionType.RECEIPT || type == InventoryTransactionType.TRANSFER_IN
+            || type == InventoryTransactionType.PRODUCTION_OUTPUT)) {
+            storageConditionGuard.check(inventory.getProjectId(), inventory.getItemId(), inventory.getLocation());
+        }
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setInventoryTransactionId(idGenerator.generate());
         transaction.setInventoryId(inventory.getInventoryId());

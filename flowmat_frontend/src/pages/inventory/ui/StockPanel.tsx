@@ -9,6 +9,8 @@ import { useReverseTransactionMutation } from '../../../entities/inventory/api/u
 import { canReverse, reversedIds, stockValue } from '../model/stockModel'
 import { StockMovementForm } from './StockMovementForm'
 import { LOCATION_OPTIONS_ID, LocationOptions } from './LocationOptions'
+import { useStorageLocationsQuery } from '../../../entities/inventory/api/useStorageLocations'
+import { conditionWarning } from '../model/storageConditionModel'
 import { StockAlerts } from './StockAlerts'
 import { ReorderList } from './ReorderList'
 import { StockImportPanel } from './StockImportPanel'
@@ -147,6 +149,9 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
   const reverseMutation = useReverseTransactionMutation(projectId)
   const reversed = reversedIds(transactionsQuery.data ?? [])
   const formItem = items.find((item) => item.itemId === form.itemId)
+  // Pointed out, not refused (docs/domain/storage-location.md SL3).
+  const places = useStorageLocationsQuery(projectId).data ?? []
+  const addConditionNote = conditionWarning(places, form.location, formItem?.itemCode, formItem?.details?.storageCondition)
   const lotTracked = formItem?.lotManageYn === 'Y'
   const selectableLots = lots.filter(
     (lot) => lot.itemId === form.itemId && lot.lotStatus !== 'closed' && lot.lotStatus !== 'quarantined',
@@ -316,6 +321,8 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                   onUseEarlier={earlier ? () => setHistoryFor(earlier.inventory.inventoryId) : undefined}
                   packUnit={historyItem?.purchaseUnit}
                   packQty={historyItem?.purchaseUnitQty}
+                  itemCode={historyItem?.itemCode}
+                  itemCondition={historyItem?.details?.storageCondition}
                 />
               )
             })()}
@@ -488,6 +495,9 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
               placeholder="e.g. WH-A / Rack 3"
             />
           </label>
+          {addConditionNote && (
+            <p role="note" aria-label="Storage condition" style={{ margin: 0, fontSize: 12, color: '#b45309' }}>{addConditionNote}</p>
+          )}
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Status</span>
             <select value={form.inventoryStatus} onChange={(e) => setForm((f) => ({ ...f, inventoryStatus: e.target.value }))}>

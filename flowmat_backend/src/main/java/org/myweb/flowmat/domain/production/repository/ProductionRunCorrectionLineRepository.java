@@ -10,4 +10,7 @@ public interface ProductionRunCorrectionLineRepository extends JpaRepository<Pro
     List<ProductionRunCorrectionLine> findAllByProductionRunCorrectionIdOrderByLineNoAsc(String productionRunCorrectionId);
 
     List<ProductionRunCorrectionLine> findAllByProductionRunCorrectionIdInOrderByLineNoAsc(Collection<String> correctionIds);
+
+    /** The lines that added these worked-time records (ADR-025: they are priced at the original end of the run). */
+    List<ProductionRunCorrectionLine> findAllByCreatedRunLaborIdIn(Collection<String> runLaborIds);
 }

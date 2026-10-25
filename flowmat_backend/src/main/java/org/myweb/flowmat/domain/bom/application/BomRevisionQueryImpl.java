@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionQuery;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
 import org.myweb.flowmat.domain.bom.application.publicapi.EffectiveBomView;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
@@ -50,5 +51,11 @@ public class BomRevisionQueryImpl implements BomRevisionQuery {
         if(effective.size()>1)throw new BusinessException(ErrorCode.CONFLICT,"effectiveFrom/effectiveTo overlap for this item on "+on+"; explicitly adjust the approved periods.");
         return effective.stream().findFirst().map(header->new EffectiveBomView(header.getBomId(),header.getTargetItemId(),
             header.getBomVersion(),header.getEffectiveFrom(),header.getEffectiveTo()));
+    }
+
+    @Override
+    public Optional<BomRevisionView> findActive(String bomId) {
+        return headers.findByBomIdAndDeletedYn(bomId, "N").map(header -> new BomRevisionView(header.getBomId(), header.getProjectId(),
+            header.getTargetItemId(), header.getBomName(), header.getBomVersion(), header.getBomStatus()));
     }
 }

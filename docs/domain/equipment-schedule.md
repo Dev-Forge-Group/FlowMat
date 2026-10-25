@@ -69,6 +69,9 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | CV9 | 판 사유(2026-10-18, 2ev, V95, [ADR-017](../architecture/adr/ADR-017-version-reasons.md)): 달력 저장(`reason`)과 지우기(`?reason=`)에 선택 사유(앞뒤 공백 제거, 비면 없음, 200자, 날짜별 교대와 같음). 같은 날짜로 다시 저장하면 사유도 새로 보낸 것으로 바뀐다. `versions[]`와 판 조회에 `reason`, `updatedBy`, `updatedAt`. 저장할 수 없는 문자(NUL, 깨진 UTF-16)는 거절한다 | 400 `reason can be at most 200 characters.` / 400 `reason contains a character PostgreSQL cannot store.` |
 | CV10 | **판 저장 이력**(2026-10-19, 2fc, V101, [ADR-024](../architecture/adr/ADR-024-version-save-history.md)): 달력 저장, 날짜부터 달력 지우기(교대 없는 저장, 그날부터 종일), 시작 전 판 지우기마다 한 줄: `scheduleId`, `effectiveFrom`, `action`(`saved`·`removed`), `reason`, 그때의 `shifts[]`(`shiftStart`, `shiftEnd`, `workDays`), `savedBy`, `savedAt`. 지운 판의 줄도 남는다 | |
 | CV11 | `GET /equipments/{equipmentId}/calendar/history`(프로젝트 읽기, 최신 순 100줄까지). 화면 설비 일정의 **Calendar history**(접어 두고 열 때 불러옴): `2041-09-01 09:30 · demo-owner saved the version from 2041-09-16: around the clock` | 403 / 404 |
+| CV12 | **날짜와 정지 이력**(2026-10-23, 2fe, V102, [ADR-024](../architecture/adr/ADR-024-version-save-history.md) 결정 7–12): 날짜별 교대 저장(D1·D6, 범위는 한 줄), 지우기(지우기 전에 가졌던 것), 다른 설비로 복사(D7, 받는 설비의 저장 한 줄, `copiedFrom`), 정지 추가·지우기마다 한 줄: `kind`(`day`·`downtime`), `action`(`saved`·`removed`), `firstDate`·`lastDate`(정지는 없음), `days[]`(`date`, `shifts[]`, 없으면 닫음, `reason`), `downtimeId`·`downtimeType`·`startsAt`·`endsAt`, `reason`, `copiedFrom`, `savedBy`, `savedAt` | |
+| CV13 | `GET /equipments/{equipmentId}/day-history`(프로젝트 읽기, 최신 순 100줄까지). 화면 설비 일정의 **Date and downtime history**(접어 두고 열 때 불러옴, 조회가 거절되면 앞서 받은 줄을 숨김): `2041-09-01 11:00 · demo-owner removed maintenance 2041-09-05 08:00–2041-09-05 12:00 · Oil change`, `… saved 2041-09-03, copied from DRILL: no work` | 403 / 404 |
+| CV14 | **이전 이력 보기**(2026-10-23, 2fg): `GET /equipments/{equipmentId}/day-history/search`(판 이력 검색 `…/calendar/history/search`와 같은 필터, `kind` `day`·`downtime`). 화면의 **Calendar history**·**Date and downtime history**도 최신 100줄 뒤 **Show older** | 400 / 403 / 404 |
 
 예: 오늘 08:00–16:00 월–금을 저장하고, 2041-09-09부터 06:00–17:00, 2041-09-16부터 달력 지우기 → 2041-09-02 주 40시간, 09-09 주 55시간, 09-16 주 168시간. 2041-09-16 판을 지우면 그 주도 55시간입니다. 2041-09-17 날짜별 교대는 409, 2041-09-10 닫음은 저장되어 09-09 주가 44시간이 됩니다.
 
@@ -135,7 +138,7 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | P3 | `from`을 안 주면 계획 시작이 아직 앞이면 그 시각, 아니면 지금(다음 분) | 시각대 없는 값 400 |
 | P4 | 같은 설비에 **승인·진행 중** 작업지시의 계획 기간과 겹치면 그 작업지시가 끝나는 시각부터 다시 찾음(`movedPast`). 초안은 아직 계획이 아니라 비켜 가지 않음(준비 점검의 `schedule`과 같은 기준). 동시 작업 설비는 비켜 가지 않음([설비](equipment.md) E13) | |
 | P5 | 전환 시간은 제안된 시작 직전에 시작하는 작업지시(승인·진행·완료) 기준. 비켜 간 뒤 앞 작업지시가 바뀌면 그 전환 시간으로 다시 계산 | |
-| P6 | 설비가 없거나 삭제·비활성이면, 또는 완료·취소된 작업지시면 제안하지 않음. 정비 중인 설비는 제안함(준비 점검이 실패로 보임) | 409 |
+| P6 | 설비가 없거나(공정 계획과 인력이 있으면 P21) 삭제·비활성이면, 또는 완료·취소된 작업지시면 제안하지 않음. 정비 중인 설비는 제안함(준비 점검이 실패로 보임) | 409 |
 | P7 | 프로젝트 읽기 권한 | 403 |
 | P8 | **여러 작업지시 한꺼번에**(2026-10-12, 2do): `POST /work-orders/plan-suggestions` `{projectId, workOrderIds(1–50, 각 한 번), from?}`. 준 **순서대로** 하나씩 P1–P6처럼 놓는다. `from`이 있으면 모두 그 시각부터, 없으면 각자 P3 | 400 `projectId is required.`·`Choose 1 to 50 work orders.`·`Name each work order once.`·`from` 형식 / 404 프로젝트 밖·없는 작업지시 / 403 |
 | P9 | 앞에서 놓인 작업지시는 뒤의 것에 **승인된 계획처럼** 보인다(같은 설비의 겹침을 비켜 가고 `movedPast`에 번호, P5 전환 시간의 앞 작업지시). 요청에 든 작업지시의 **지금 계획 기간은 세지 않는다**(다시 계획하는 중이므로). 요청 밖의 승인·진행 중 작업지시는 P4 그대로 | |
@@ -150,6 +153,7 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 | P18 | **인력**(2026-10-14, 2dx): 작업지시에 인력이 있으면 그 사람들이 모두 일하는 시간에만 생산 시간을 세고, 인력을 이미 잡은 다른 승인·진행 중 작업지시를 비킨다. 응답 `waitedForCrew`·`crewMovedPast`. [작업자 달력](worker-calendar.md) WC24–WC28 | 409 `… and the crew do not have N h available together …` |
 | P19 | **효율**(2026-10-17, 2ea): 생산 시간은 시간당 산출 × 효율로 센다. 전환 시간은 효율로 늘리거나 줄이지 않는다. 응답 `efficiencyPercent`(100이면 null), `capacityPerHour`는 정격. [설비](equipment.md) E8–E11 | |
 | P20 | **동시 작업**(2026-10-17, 2ec): 여러 작업지시를 함께 하는 설비는 P4·P9에서 겹치는 작업지시를 비켜 가지 않는다(`movedPast` 없음). 인력은 그대로 비켜 간다. 전환 시간은 그대로. [설비](equipment.md) E12–E15. 최대 N개(2ek)면 N개가 함께 도는 순간에만 비켜 가고, 그중 가장 먼저 끝나는 시각부터 다시 찾는다(E17) | |
+| P21 | **공정 계획의 노동 시간**(2026-10-25, 2hf): 작업지시에 공정 계획이 있으면 남은 작업자 분을 인력의 몫으로 나눈 노동 시간을 세어, 필요 시간은 생산 시간과 노동 시간 중 긴 쪽 + 전환 시간이다. 설비가 없으면 인력의 시간에서만 놓는다. 응답 `laborMinutes`·`laborHours`. [작업자 달력](worker-calendar.md) LB25–LB26 | LB25의 409 |
 
 예: 09:00–17:00 월–금, 시간당 10, 100개 → 10시간. 2030-01-07(월) 0시부터 → 월 09:00 → 화 11:00. 화 09–10시 정비 → 화 12:00. 월 13–15시에 승인된 작업지시가 있으면 15:00부터 → 수 10:00.
 
@@ -234,6 +238,8 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 - V94 리허설: 일회용 postgres:16(`flowmat-v94-check`, 리드가 만들고 지움)에 V43 뒤 모양의 표와 합성 교대 4행(설비 2개, 달력 없는 설비 1개)을 넣고 V94를 한 트랜잭션으로 적용 → 교대 4행 그대로, 판 2개, 4행 모두 같은 설비의 판, 달력 없는 설비는 판 없음. 같은 날 판 중복과 판 없는 교대는 거절됩니다.
 - 판 사유(2026-10-18, 2ev, V95) `VersionReasonIntegrationTest` 설비 쪽: 저장 사유와 `updatedBy`, 미래 날짜부터 지우기의 사유와 판 조회, 201자 400, 저장의 NUL·지우기의 반쪽 서로게이트 400(판 수 그대로). 모의 E2E `equipment-calendar-versions.spec.ts`: 판 줄 ` · New press`, Edit 뒤 Note, 저장 본문 `reason`. 전체 백엔드 1,544건(260클래스) 통과(실패 0, 오류 담당의 새 회귀 27건과 장기 탐색 2건 포함), 프런트 Vitest 677건·typecheck·빌드, 모의 e2e 185건 통과(실패·flaky 0, 실제 API용 38건 조건부 제외).
 - 판 저장 이력(2026-10-19, 2fc, V101) `ScheduleVersionHistoryIntegrationTest` 둘째: 오늘 판 저장(Day) → 2041-09-09부터 두 교대(Two shifts) → 2041-09-16부터 달력 지우기(Overhaul) → 2041-09-09 판 지움 → 이력 4줄(removed 두 교대, saved 교대 없음 Overhaul, saved Two shifts, saved Day), 외부인 403. 모의 e2e `equipment-calendar-versions.spec.ts`에 **Calendar history** 두 줄. 전체 백엔드 1,724건(276클래스, 실패 0).
+- 날짜와 정지 이력(2026-10-23, 2fe, V102) `DayChangeHistoryIntegrationTest` 둘째: 짧은 날 저장(Short day) → 지움 → 닫는 날(Closed) → 다른 설비로 복사 → 정지 추가·지움 → 이력 5줄(removed·saved downtime의 종류·시각·사유, saved 09-03 닫음, removed 09-02와 그때의 06:00–10:00, saved 09-02), 받은 설비 1줄(`copiedFrom`), 외부인 403. 모의 e2e `day-change-history.spec.ts` 둘째. 전체 백엔드 관련 179건/16클래스 통과(전체 실행은 커버리지 없이 따로).
+- 이전 이력 보기(2026-10-23, 2fg) `DayHistorySearchIntegrationTest` 둘째: 닫는 날·정지 → `limit=1` 두 장, `kind=day`, 잘못된 `kind` 400, 외부인 403. 관련 백엔드 70건/4클래스, 프런트 typecheck·lint, 관련 모의 e2e 12건 통과(격리본).
 - 프런트 `equipmentScheduleModel.test.ts` +3(판 줄 `now`·`upcoming`·`earlier`·`around the clock`, 시작일 확인과 판 불러오기, 프로젝트 날짜 `projectToday`). 모의 E2E `e2e/equipment-calendar-versions.spec.ts`: 판 목록 → 과거 날짜는 보내기 전에 거절 → 미래 판 **Edit** 후 그 날짜로 다시 저장 → 미래 날짜부터 **Remove calendar** → 판 삭제.
 
 ## 2026-10-05 확정: 승인 작업지시 일정
@@ -270,9 +276,9 @@ DB 제약: 요일 형식 CHECK, 정지 종류 CHECK, `ends_at > starts_at`, 삭�
 - ~~설비 부하표(설비별 기간 안 작업지시 필요 시간 합계와 가용 시간 비교, FM-PLAN-002 `constrained`)~~ → [설비 부하표](equipment-load.md)(2026-09-27)
 - 전환 시간 → [설비 전환 시간](equipment-changeover.md)(2026-09-27, V33)
 - ~~작업지시 계획 기간 자동 제안(가용 시간을 채우는 가장 이른 끝 시각)~~ → 위 "계획 기간 제안"(2026-10-03)
-- 승인된 작업지시의 날짜 바꾸기(지금은 초안만 계획 날짜를 고칠 수 있음), 여러 작업지시를 한꺼번에 배치하는 순서 최적화
-- 실행 시작 시 설비 기록과 실제 가동 시간 집계([설비 정보](equipment.md) 남은 범위)
-- 작업자 교대(설비가 아닌 사람 자원)
+- ~~승인된 작업지시의 날짜 바꾸기, 여러 작업지시를 한꺼번에 배치하는 순서 최적화~~ → 아래 "승인 일정 변경 구현"(2026-10-05), P8–P17(2do·2dq·2ds), 부하표의 **Move**([설비 부하표](equipment-load.md) M1–M4, 2026-10-23)
+- ~~실행 시작 시 설비 기록과 실제 가동 시간 집계~~ → 실행 설비 가동 시간([설비 원가](equipment-setup-cost.md) ER1–ER13)
+- ~~작업자 교대(설비가 아닌 사람 자원)~~ → [작업자 달력](worker-calendar.md)(2026-10-13~, 2du 이후)
 
 ### 승인 일정 변경 구현 (2026-10-05)
 

@@ -3,9 +3,12 @@ package org.myweb.flowmat.domain.workforce.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.domain.entity.WorkerRota;
@@ -13,7 +16,9 @@ import org.myweb.flowmat.domain.workforce.domain.entity.WorkerSchedule;
 import org.myweb.flowmat.domain.workforce.domain.entity.WorkerScheduleHistory;
 import org.myweb.flowmat.domain.workforce.domain.entity.WorkerShift;
 import org.myweb.flowmat.domain.workforce.repository.WorkerScheduleHistoryRepository;
+import org.myweb.flowmat.domain.workforce.repository.WorkerShiftRepository;
 import org.myweb.flowmat.global.id.IdGenerator;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,9 +34,12 @@ public class WorkerScheduleHistoryService {
     private final WorkerScheduleHistoryRepository repository;
     private final ObjectMapper mapper;
     private final IdGenerator ids;
+    private final WorkerShiftRepository shiftsRepository;
+    private final JdbcTemplate jdbc;
 
     /** Writes down that {@code schedule} was saved or removed with these shifts and rota (WC63). */
     void record(WorkerSchedule schedule, String action, List<WorkerShift> shifts, WorkerRota rota, String actor, OffsetDateTime at) {
+        Map<String, LocalTime[]> stored = storedTimes(schedule.getScheduleId(), shifts);
         WorkerScheduleHistory row = new WorkerScheduleHistory();
         row.setHistoryId(ids.generate());
         row.setProjectId(schedule.getProjectId());
@@ -41,14 +49,30 @@ public class WorkerScheduleHistoryService {
         row.setAction(action);
         row.setReason(schedule.getReason());
         row.setShiftsJson(write(shifts.stream()
-            .map(shift -> new WorkerScheduleHistoryResponse.Shift(shift.getShiftStart().toString(), shift.getShiftEnd().toString(),
-                days(shift.getWorkDays()), shift.getRotaWeek()))
+            .map(shift -> {
+                LocalTime[] times = stored.get(shift.getWorkerShiftId());
+                if (times == null) throw new IllegalStateException("The history shift has not been saved.");
+                return new WorkerScheduleHistoryResponse.Shift(times[0].toString(), times[1].toString(),
+                    days(shift.getWorkDays()), shift.getRotaWeek());
+            })
             .toList()));
         row.setRotaWeeks(rota == null ? null : rota.getCycleWeeks());
         row.setRotaStartsOn(rota == null ? null : rota.getStartsOn());
         row.setSavedBy(actor);
         row.setSavedAt(at);
         repository.save(row);
+    }
+
+    /** Read all stored times together; managed objects can still carry precision that their JDBC mapping did not store. */
+    private Map<String, LocalTime[]> storedTimes(String scheduleId, List<WorkerShift> shifts) {
+        if (shifts.isEmpty()) return Map.of();
+        shiftsRepository.flush();
+        return jdbc.query("select worker_shift_id,shift_start,shift_end from worker_shift where schedule_id=?", rows -> {
+            Map<String, LocalTime[]> times = new HashMap<>();
+            while (rows.next()) times.put(rows.getString(1),
+                new LocalTime[] { rows.getObject(2, LocalTime.class), rows.getObject(3, LocalTime.class) });
+            return times;
+        }, scheduleId);
     }
 
     /** The worker's saves and removals, newest first, at most 100 (WC63). */

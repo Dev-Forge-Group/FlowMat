@@ -126,6 +126,35 @@ export function useWorkerScheduleHistoryQuery(projectId: string, userId: string,
   })
 }
 
+/** One save or removal of a worker's own dates or day off, with what it held (docs/domain/worker-calendar.md WC65). */
+export interface WorkerDayHistoryDto {
+  historyId: string
+  kind: 'day' | 'day_off'
+  action: 'saved' | 'removed'
+  /** YYYY-MM-DD */
+  firstDate: string
+  lastDate: string
+  /** For a day change, each date with its shifts (none: no work) and reason; empty for a day off. */
+  days: { date: string; shifts: { shiftStart: string; shiftEnd: string }[]; reason: string | null }[]
+  dayOffId: string | null
+  reason: string | null
+  /** The worker the dates were copied from. */
+  copiedFrom: string | null
+  savedBy: string
+  savedAt: string
+}
+
+/** Loaded once asked for ({@code enabled}); every calendar change refreshes it with the calendars (same key prefix). */
+export function useWorkerDayHistoryQuery(projectId: string, userId: string, enabled: boolean) {
+  return useQuery<WorkerDayHistoryDto[]>({
+    queryKey: [...key(projectId), 'day-history', userId],
+    enabled: enabled && Boolean(projectId) && Boolean(userId),
+    retry: false,
+    queryFn: async () => unwrapApiResponse(await httpClient.get<ApiEnvelope<WorkerDayHistoryDto[]>>(
+      `${base(projectId)}/${encodeURIComponent(userId)}/day-history`)),
+  })
+}
+
 function useRefresh(projectId: string) {
   const client = useQueryClient()
   return () => {

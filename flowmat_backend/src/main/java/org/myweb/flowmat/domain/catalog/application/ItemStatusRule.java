@@ -56,6 +56,13 @@ public final class ItemStatusRule {
         }
     }
 
+    /** {@link #requireActive(Item, String)} for an item's code and status as read through a view. */
+    public static void requireActive(String itemCode, String itemStatus, String action) {
+        if (!isActive(itemStatus)) {
+            throw new BusinessException(ErrorCode.CONFLICT, refusal(itemCode, itemStatus, action));
+        }
+    }
+
     /** The refusal message, for checks that collect problems instead of throwing. */
     public static String refusal(Item item, String action) {
         return refusal(item.getItemCode(), item.getItemStatus(), action);

@@ -22,6 +22,7 @@ import { WorkOrderWasteEstimate } from './WorkOrderWasteEstimate'
 import { WorkOrderSetupComparison } from './WorkOrderSetupComparison'
 import { WorkOrderRunningComparison } from './WorkOrderRunningComparison'
 import { WorkOrderLaborComparison } from './WorkOrderLaborComparison'
+import { WorkOrderLaborCost } from './WorkOrderLaborCost'
 import { plannedSupply } from '../model/readinessModel'
 import { WorkOrderEquipmentPicker } from './WorkOrderEquipmentPicker'
 import { WorkOrderCrewPicker } from './WorkOrderCrewPicker'
@@ -405,7 +406,7 @@ export function WorkOrdersPanel({
                       <td colSpan={6} style={{ ...cell, background: 'var(--accent-bg)' }}>
                         <WorkOrderEquipmentPicker order={order} projectId={projectId} />
                         <WorkOrderCrewPicker order={order} projectId={projectId} />
-                        {order.equipmentId && <WorkOrderPlanSuggestion order={order} projectId={projectId} />}
+                        <WorkOrderPlanSuggestion order={order} projectId={projectId} />
                         <WorkOrderReadiness workOrderId={order.workOrderId} makeable={makeable}
                           planned={plannedSupply(orders, order.workOrderId)}
                           onMake={(material, quantity) => makeSubAssembly(order, material, quantity)} />
@@ -413,7 +414,9 @@ export function WorkOrdersPanel({
                         <WorkOrderWasteEstimate workOrderId={order.workOrderId} />
                         <WorkOrderSetupComparison workOrderId={order.workOrderId} />
                         <WorkOrderRunningComparison workOrderId={order.workOrderId} />
-                        <WorkOrderLaborComparison workOrderId={order.workOrderId} />
+                        <WorkOrderLaborComparison workOrderId={order.workOrderId} workflowId={order.workflowId ?? undefined}
+                          planOpen={order.workOrderStatus !== 'completed' && order.workOrderStatus !== 'cancelled'} />
+                        <WorkOrderLaborCost projectId={projectId} workOrderId={order.workOrderId} />
                       </td>
                     </tr>
                   )}

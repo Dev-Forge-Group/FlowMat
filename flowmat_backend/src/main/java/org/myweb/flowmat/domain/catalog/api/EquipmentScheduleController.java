@@ -10,6 +10,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDowntimeRequest
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentAvailabilityResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarHistoryResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarVersionResponse;
+import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentDayHistoryResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentScheduleResponse;
 import org.myweb.flowmat.domain.catalog.application.EquipmentScheduleService;
 import org.myweb.flowmat.global.response.ApiResponse;
@@ -70,6 +71,12 @@ public class EquipmentScheduleController {
     @GetMapping("/calendar/history")
     public ApiResponse<List<EquipmentCalendarHistoryResponse>> calendarHistory(@PathVariable("equipmentId") String equipmentId) {
         return ApiResponse.ok(equipmentScheduleService.calendarHistory(equipmentId));
+    }
+
+    /** Every change of the equipment's own dates and downtimes, newest first (ADR-024). */
+    @GetMapping("/day-history")
+    public ApiResponse<List<EquipmentDayHistoryResponse>> dayHistory(@PathVariable("equipmentId") String equipmentId) {
+        return ApiResponse.ok(equipmentScheduleService.dayHistory(equipmentId));
     }
 
     /** Deletes a calendar version that has not started yet (ADR-014). */

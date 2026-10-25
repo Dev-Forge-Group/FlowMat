@@ -11,7 +11,7 @@ import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
 import org.myweb.flowmat.domain.catalog.application.ItemUsageCheck;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.springframework.stereotype.Component;
 
 /** An item cannot be deleted while a BOM that is not retired makes it or uses it. */
@@ -25,18 +25,18 @@ public class BomItemUsageCheck implements ItemUsageCheck {
     private final BomLineRepository bomLineRepository;
 
     @Override
-    public Optional<String> whyInUse(Item item) {
+    public Optional<String> whyInUse(CatalogItemView item) {
         Set<String> names = new LinkedHashSet<>();
         bomHeaderRepository.findAllByProjectIdAndTargetItemIdAndDeletedYnOrderByBomVersionDesc(
-                item.getProjectId(), item.getItemId(), NOT_DELETED).stream()
+                item.projectId(), item.itemId(), NOT_DELETED).stream()
             .filter(BomItemUsageCheck::live)
             .forEach(header -> names.add(describe(header)));
-        List<String> usingBomIds = bomLineRepository.findAllByChildItemId(item.getItemId()).stream()
+        List<String> usingBomIds = bomLineRepository.findAllByChildItemId(item.itemId()).stream()
             .map(BomLine::getBomId)
             .distinct()
             .toList();
         bomHeaderRepository.findAllById(usingBomIds).stream()
-            .filter(header -> item.getProjectId().equals(header.getProjectId()) && NOT_DELETED.equals(header.getDeletedYn()))
+            .filter(header -> item.projectId().equals(header.getProjectId()) && NOT_DELETED.equals(header.getDeletedYn()))
             .filter(BomItemUsageCheck::live)
             .forEach(header -> names.add(describe(header)));
         if (names.isEmpty()) {

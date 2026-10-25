@@ -30,6 +30,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.request.EquipmentDowntimeRequest
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentAvailabilityResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarHistoryResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarVersionResponse;
+import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentDayHistoryResponse;
 import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentScheduleResponse;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentSlot;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWorkingTimeQuery;
@@ -84,6 +85,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
     private final EquipmentCalendarRepository calendarRepository;
     private final EquipmentScheduleRepository scheduleRepository;
     private final EquipmentScheduleHistoryService history;
+    private final EquipmentDayHistoryService dayChangeHistory;
     private final EquipmentDowntimeRepository downtimeRepository;
     private final EquipmentDayOverrideRepository dayOverrideRepository;
     private final ProjectHolidayRepository holidayRepository;
@@ -243,6 +245,13 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         Equipment equipment = findEquipment(equipmentId);
         projectAccessService.requireProjectReadAccess(equipment.getProjectId());
         return history.list(equipment.getEquipmentId());
+    }
+
+    /** Every change of the equipment's own dates and downtimes, newest first, at most 100 (ADR-024 decisions 7-12). */
+    public List<EquipmentDayHistoryResponse> dayHistory(String equipmentId) {
+        Equipment equipment = findEquipment(equipmentId);
+        projectAccessService.requireProjectReadAccess(equipment.getProjectId());
+        return dayChangeHistory.list(equipment.getEquipmentId());
     }
 
     /** Deletes a calendar version that has not started (ADR-014, as ADR-013 decision 4); one that has started stays. */
@@ -458,6 +467,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             }
         }
         requireNoDayOverlap(shifts);
+        StorableText.require(request == null ? null : request.reason(), "reason");
         String reason = request == null || request.reason() == null || request.reason().isBlank() ? null : request.reason().trim();
         if (reason != null && reason.length() > 200) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "reason can be at most 200 characters.");
@@ -465,7 +475,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         String text = shifts.stream()
             .map(shift -> HOUR_MINUTE.format(shift.start()) + "-" + HOUR_MINUTE.format(shift.end()))
             .collect(Collectors.joining(","));
-        saveDays(equipment, dates.stream().map(one -> new DayChange(one, text, reason)).toList());
+        saveDays(equipment, dates.stream().map(one -> new DayChange(one, text, reason)).toList(), reason, null);
         return toResponse(equipment);
     }
 
@@ -484,6 +494,9 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         if (found.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+        // The history keeps what each date had (ADR-024).
+        dayChangeHistory.recordDays(equipment.getEquipmentId(), "removed", found, null, null,
+            projectAccessService.requireCurrentUserId(), OffsetDateTime.now());
         dayOverrideRepository.deleteAll(found);
         return toResponse(equipment);
     }
@@ -522,7 +535,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         if (changes.isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "There are no day changes to copy.");
         }
-        saveDays(target, changes);
+        saveDays(target, changes, null, source.getEquipmentId());
         return toResponse(target);
     }
 
@@ -530,8 +543,11 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
     private record DayChange(LocalDate date, String shifts, String reason) {
     }
 
-    /** Writes each date's own shifts, replacing what the date had (D1); {@code changes} run from the earliest date. */
-    private void saveDays(Equipment equipment, List<DayChange> changes) {
+    /**
+     * Writes each date's own shifts, replacing what the date had (D1); {@code changes} run from the earliest date. The history
+     * keeps the save with the {@code reason} it was given, or the equipment it was {@code copiedFrom} (ADR-024).
+     */
+    private void saveDays(Equipment equipment, List<DayChange> changes, String reason, String copiedFrom) {
         Map<LocalDate, EquipmentDayOverride> existing = dayOverrideRepository
             .findAllByEquipmentIdAndOverrideDateBetween(equipment.getEquipmentId(), changes.get(0).date(),
                 changes.get(changes.size() - 1).date()).stream()
@@ -554,6 +570,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
             saved.add(override);
         }
         dayOverrideRepository.saveAll(saved);
+        dayChangeHistory.recordDays(equipment.getEquipmentId(), "saved", saved, reason, copiedFrom, actor, now);
     }
 
     private static String label(Equipment equipment) {
@@ -596,6 +613,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         if (Duration.between(startsAt, endsAt).compareTo(LONGEST_WINDOW) > 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "A downtime can be at most 366 days long.");
         }
+        StorableText.require(request.reason(), "reason");
         String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().trim();
         if (reason != null && reason.length() > 500) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "reason can be at most 500 characters.");
@@ -610,6 +628,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         downtime.setReason(reason);
         downtime.setCreatedBy(projectAccessService.requireCurrentUserId());
         downtimeRepository.save(downtime);
+        dayChangeHistory.recordDowntime(downtime, "saved", downtime.getCreatedBy(), OffsetDateTime.now());
         return toResponse(equipment);
     }
 
@@ -623,6 +642,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
         downtime.setDeletedYn("Y");
         downtime.setUpdatedBy(projectAccessService.requireCurrentUserId());
         downtimeRepository.save(downtime);
+        dayChangeHistory.recordDowntime(downtime, "removed", downtime.getUpdatedBy(), OffsetDateTime.now());
         return toResponse(equipment);
     }
 

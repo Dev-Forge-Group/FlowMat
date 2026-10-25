@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunStep;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps;
@@ -18,10 +20,12 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunLabor;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
+import org.myweb.flowmat.domain.production.domain.entity.WorkOrderStepPlan;
 import org.myweb.flowmat.domain.production.repository.ProductionRunLaborRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderCrewRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
+import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerHours;
@@ -30,7 +34,10 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** A work order's planned crew time beside the time its runs recorded for each person (docs/domain/worker-calendar.md LB6). */
+/**
+ * A work order's planned crew time beside the time its runs recorded for each person (docs/domain/worker-calendar.md LB6), and by
+ * process beside its step plan (LB18, LB23).
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -42,6 +49,7 @@ public class WorkOrderLaborComparisonService {
     private final WorkOrderCrewRepository crew;
     private final ProductionRunRepository runs;
     private final ProductionRunLaborRepository labor;
+    private final WorkOrderStepPlanRepository stepPlans;
     private final WorkerCalendarQuery workerCalendars;
     private final LinkedRunSteps linkedSteps;
     private final ProjectAccessService access;
@@ -84,16 +92,26 @@ public class WorkOrderLaborComparisonService {
                     wholeRun += row.getWorkedMinutes();
                 } else {
                     byProcess.merge(step.nodeId(), new WorkOrderLaborComparisonResponse.Step(step.nodeId(), step.nodeName(),
-                        step.sequenceNo(), row.getWorkedMinutes()), (one, other) -> new WorkOrderLaborComparisonResponse.Step(
+                        step.sequenceNo(), row.getWorkedMinutes(), null), (one, other) -> new WorkOrderLaborComparisonResponse.Step(
                         one.nodeId(), one.nodeName(), earlier(one.sequenceNo(), other.sequenceNo()),
-                        one.actualMinutes() + other.actualMinutes()));
+                        one.actualMinutes() + other.actualMinutes(), null));
                 }
             }
         }
-        List<WorkOrderLaborComparisonResponse.Step> steps = byProcess.values().stream()
+        // The step plan beside it (LB23): processes that ran carry their plan, then those planned but not run, in plan order.
+        List<WorkOrderStepPlan> plan = stepPlans.findAllByWorkOrderIdOrderBySortOrderAsc(workOrderId);
+        Map<String, WorkOrderStepPlan> stepPlan = plan.stream()
+            .collect(Collectors.toMap(WorkOrderStepPlan::getNodeId, Function.identity()));
+        List<WorkOrderLaborComparisonResponse.Step> steps = new ArrayList<>(byProcess.values().stream()
             .sorted(Comparator.comparing(WorkOrderLaborComparisonResponse.Step::sequenceNo,
                 Comparator.nullsLast(Comparator.naturalOrder())))
-            .toList();
+            .map(step -> new WorkOrderLaborComparisonResponse.Step(step.nodeId(), step.nodeName(), step.sequenceNo(),
+                step.actualMinutes(), stepPlan.containsKey(step.nodeId()) ? stepPlan.get(step.nodeId()).getPlannedMinutes() : null))
+            .toList());
+        plan.stream().filter(one -> !byProcess.containsKey(one.getNodeId()))
+            .forEach(one -> steps.add(new WorkOrderLaborComparisonResponse.Step(one.getNodeId(), one.getNodeName(), null, 0,
+                one.getPlannedMinutes())));
+        Integer stepPlannedMinutes = plan.isEmpty() ? null : plan.stream().mapToInt(WorkOrderStepPlan::getPlannedMinutes).sum();
 
         Integer plannedMinutes = null;
         boolean complete = true;
@@ -118,7 +136,7 @@ public class WorkOrderLaborComparisonService {
             }
         });
         return new WorkOrderLaborComparisonResponse(workOrderId, plannedMinutes, complete, runIds.size(), actualMinutes, people,
-            steps, wholeRun);
+            steps, wholeRun, stepPlannedMinutes);
     }
 
     private static Integer earlier(Integer one, Integer other) {

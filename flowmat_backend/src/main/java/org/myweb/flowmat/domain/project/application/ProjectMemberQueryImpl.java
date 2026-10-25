@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.project.application;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.project.repository.ProjectMemberRepository;
@@ -31,6 +32,20 @@ public class ProjectMemberQueryImpl implements ProjectMemberQuery {
         }
         return projectRepository.findByProjectIdAndDeletedYn(projectId, "N")
             .map(project -> userId.equals(project.getOwnerId()) || isActiveMember(projectId, userId))
+            .orElse(false);
+    }
+
+    @Override
+    public boolean canWrite(String projectId, String userId) {
+        if (projectId == null || userId == null) {
+            return false;
+        }
+        return projectRepository.findByProjectIdAndDeletedYn(projectId, "N")
+            .map(project -> userId.equals(project.getOwnerId())
+                || projectMemberRepository.findByProjectIdAndUserIdAndMemberStatus(projectId, userId, ACTIVE)
+                    .map(member -> member.getProjectRole() == null ? "" : member.getProjectRole().trim().toLowerCase(Locale.ROOT))
+                    .filter(role -> "owner".equals(role) || "editor".equals(role))
+                    .isPresent())
             .orElse(false);
     }
 

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useEquipmentLoadQuery } from '../../../entities/production/api/useEquipmentLoad'
+import { useWorkOrdersQuery } from '../../../entities/production/api/useWorkOrders'
+import { useProjectRole } from '../../../entities/project/api/useProjectRole'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
 import {
@@ -15,6 +17,7 @@ import {
   type LoadTone,
 } from '../model/equipmentLoadModel'
 import { formatHours } from '../model/equipmentScheduleModel'
+import { LoadOrderMove } from './LoadOrderMove'
 import { LoadTimeline } from './LoadTimeline'
 
 const cell = { padding: '4px 6px', verticalAlign: 'top' } as const
@@ -23,13 +26,17 @@ const TONE: Record<LoadTone, string> = { over: '#b91c1c', high: '#b45309', ok: '
 
 /**
  * A week of equipment load (docs/domain/equipment-load.md): each equipment's available hours against what its approved and
- * running orders need, with drafts shown apart. Orders that run past the week count in proportion.
+ * running orders need, with drafts shown apart. Orders that run past the week count in proportion. An order can be moved to
+ * a new start from here (M1-M4).
  */
 export function EquipmentLoadBoard({ projectId }: { projectId: string }) {
   const [start, setStart] = useState(() => weekStart(new Date()))
   const range = useMemo(() => weekRange(start), [start])
   const query = useEquipmentLoadQuery(projectId, range.from, range.to, true)
   const rows = query.data?.equipment ?? []
+  const role = useProjectRole(projectId)
+  const orders = useWorkOrdersQuery(projectId).data
+  const byId = new Map((Array.isArray(orders) ? orders : []).map((order) => [order.workOrderId, order]))
 
   return (
     <section aria-label="Equipment load" style={{ display: 'grid', gap: 8, fontSize: 12 }}>
@@ -72,6 +79,7 @@ export function EquipmentLoadBoard({ projectId }: { projectId: string }) {
             <td style={cell}>
               {row.orders.map((order) => <div key={order.workOrderId}>
                 {orderLine(order)}
+                {' '}<LoadOrderMove projectId={projectId} order={order} full={byId.get(order.workOrderId)} role={role} />
                 {'setupCostEstimate' in order && <div className="inspector-hint">
                   Setup estimate: {order.setupCostEstimate == null ? 'unknown' : formatQty(order.setupCostEstimate)}
                 </div>}

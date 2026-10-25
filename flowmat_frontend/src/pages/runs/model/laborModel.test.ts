@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLaborPerson } from '../../../entities/production/api/useRunLabor'
 import {
-  comparisonLine, comparisonSteps, comparisonTotal, firstWorker, laborChoices, laborSummary, stepHint, stepSuggestion, stepSummary, suggestionHint,
+  comparisonLine, comparisonSteps, comparisonTotal, stepPlanPayload, stepPlanRows, stepPlanTotal, firstWorker, laborChoices, laborSummary, stepHint, stepSuggestion, stepSummary, suggestionHint,
 } from './laborModel'
 
 const person = (userId: string, sharePercent: number | null, workedMinutes: number, suggestedMinutes: number | null,
@@ -93,5 +93,27 @@ describe('work order labor comparison', () => {
       .toBe('All: no planned time · no run yet')
     expect(comparisonTotal({ plannedMinutes: 60, plannedComplete: true, runs: 2, actualMinutes: 70 }))
       .toBe('All: planned 60 min · actual 70 min over 2 runs')
+  })
+
+  it('plans worker minutes by process beside the actual ones', () => {
+    const steps = [{ nodeId: 'p1', nodeName: 'Mix', sequenceNo: 1, actualMinutes: 300, plannedMinutes: 240 },
+      { nodeId: 'p2', nodeName: 'Bake', sequenceNo: null, actualMinutes: 0, plannedMinutes: 180 }]
+    // Planned but not run yet still shows (LB23).
+    expect(comparisonSteps({ steps, wholeRunMinutes: 20 })).toBe('By step: Mix 300 of 240 planned, Bake 0 of 180 planned, whole run 20')
+    expect(stepPlanTotal({ stepPlannedMinutes: 420 })).toBe('Planned by step: 420 min')
+    expect(stepPlanTotal({ stepPlannedMinutes: null })).toBe('')
+    expect(stepPlanTotal({})).toBe('')
+    // Every process but the gateways, starting at the plan (LB24).
+    const processes = [{ processId: 'p1', processName: 'Mix', nodeType: 'process' }, { processId: 'g1', processName: 'Which?', nodeType: 'exclusive' },
+      { processId: 'p2', processName: 'Bake', nodeType: 'process' }, { processId: 'p3', processName: 'Cool', nodeType: 'storage' }]
+    const rows = stepPlanRows(processes, { steps })
+    expect(rows).toEqual([{ nodeId: 'p1', nodeName: 'Mix', minutes: '240' }, { nodeId: 'p2', nodeName: 'Bake', minutes: '180' },
+      { nodeId: 'p3', nodeName: 'Cool', minutes: '' }])
+    expect(stepPlanRows(processes, undefined).map((row) => row.minutes)).toEqual(['', '', ''])
+    expect(stepPlanPayload(rows)).toEqual({ steps: [{ nodeId: 'p1', plannedMinutes: 240 }, { nodeId: 'p2', plannedMinutes: 180 }], error: null })
+    for (const minutes of ['2.5', '0', '100001', 'soon']) {
+      expect(stepPlanPayload([{ ...rows[0], minutes }]).error).toBe('Mix: enter whole minutes from 1 to 100000, or leave it empty.')
+    }
+    expect(stepPlanPayload([rows[2]])).toEqual({ steps: [], error: null })
   })
 })

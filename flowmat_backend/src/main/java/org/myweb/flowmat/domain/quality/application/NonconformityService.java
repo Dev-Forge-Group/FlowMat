@@ -25,7 +25,6 @@ import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunQu
 import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
-import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.domain.quality.api.dto.request.CorrectiveActionRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.NonconformityCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.NonconformityUpdateRequest;
@@ -392,8 +391,8 @@ public class NonconformityService {
 
     /** The owner or an active member; asked as a yes or no so a refusal does not pass through a transactional proxy. */
     private boolean isMember(String projectId, String userId) {
-        Project project = projectAccessService.requireProjectReadAccess(projectId);
-        return userId.equals(project.getOwnerId()) || projectMemberQuery.isActiveMember(projectId, userId);
+        projectAccessService.requireProjectReadAccess(projectId);
+        return userId.equals(projectMemberQuery.ownerOf(projectId)) || projectMemberQuery.isActiveMember(projectId, userId);
     }
 
     private List<NonconformityResponse> responses(List<Nonconformity> ncrs) {

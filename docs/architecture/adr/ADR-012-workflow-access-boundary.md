@@ -71,7 +71,7 @@
 
 ## 결정하지 않은 것
 
-- 단계 C(다른 도메인 엔티티 import 금지)의 시점과 범위
+- 단계 C(다른 도메인 엔티티 import 금지)의 시점과 범위. [ADR-018](ADR-018-entity-boundary.md)에서 정했다(2026-10-19, 기준선 동결)
 - `UnitConverter`처럼 다른 도메인의 응용 클래스를 직접 쓰는 것
 - `global`과 `batch`의 repository 사용(ADR-002)
 

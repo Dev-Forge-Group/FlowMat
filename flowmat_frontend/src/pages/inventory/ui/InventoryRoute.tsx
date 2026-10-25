@@ -20,6 +20,8 @@ import { BomPanel } from './BomPanel'
 import { EquipmentPanel } from './EquipmentPanel'
 import { LocationsPanel } from './LocationsPanel'
 import { WarehouseTasksPanel } from './WarehouseTasksPanel'
+import { PurchaseOrdersPanel } from './PurchaseOrdersPanel'
+import { SuppliersPanel } from './SuppliersPanel'
 import { QualityPanel } from './QualityPanel'
 import { ItemCsvPanel } from './ItemCsvPanel'
 import { ItemDetail } from './ItemDetail'
@@ -32,13 +34,14 @@ import { StockValueTrend } from './StockValueTrend'
 import { StockWastePanel } from './StockWastePanel'
 import { WorkInstructionsPanel } from './WorkInstructionsPanel'
 
-const TABS = ['items', 'stock', 'tasks', 'count', 'count-plans', 'movements', 'analysis', 'lots', 'quality', 'boms', 'instructions', 'units', 'equipment',
+const TABS = ['items', 'stock', 'tasks', 'purchasing', 'count', 'count-plans', 'movements', 'analysis', 'lots', 'quality', 'boms', 'instructions', 'units', 'equipment',
   'locations'] as const
 type Tab = (typeof TABS)[number]
 const TAB_LABELS: Record<Tab, string> = {
   items: 'Items',
   stock: 'Stock',
   tasks: 'Tasks',
+  purchasing: 'Purchasing',
   count: 'Count',
   'count-plans': 'Count plans',
   movements: 'Movements',
@@ -222,6 +225,10 @@ export function InventoryRoute() {
 
       {tab === 'stock' && <StockPanel projectId={projectId} items={items} />}
       {tab === 'tasks' && <WarehouseTasksPanel projectId={projectId} items={items} />}
+      {tab === 'purchasing' && <>
+        <PurchaseOrdersPanel projectId={projectId} items={items} />
+        <SuppliersPanel projectId={projectId} items={items} />
+      </>}
       {tab === 'count' && (
         <>
           <CountPanel projectId={projectId} items={items} />

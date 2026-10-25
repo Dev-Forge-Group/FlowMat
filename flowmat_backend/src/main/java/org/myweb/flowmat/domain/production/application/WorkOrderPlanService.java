@@ -26,6 +26,7 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentSlot;
 import org.myweb.flowmat.domain.production.api.dto.request.WorkOrderBatchPlanRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderBatchPlanResponse;
+import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderLaborComparisonResponse;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderPlanSuggestionResponse;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
@@ -48,7 +49,8 @@ import org.springframework.stereotype.Service;
  * "계획 기간 제안"): the earliest stretch from a given time that holds what is still to produce at the equipment's
  * capacity per hour, plus the changeover from the order before it, and does not overlap an approved or running order
  * planned on the same equipment, unless the equipment runs work orders side by side (docs/domain/equipment.md E12). Read only, like readiness; the order is not changed. Several orders can be planned in
- * one go, each after the ones before it (P8-P12).
+ * one go, each after the ones before it (P8-P12). What is left of the order's step plan, shared by its crew, takes the place of
+ * production when it takes longer, and places an order without equipment in its crew's time (docs/domain/worker-calendar.md LB25).
  */
 @Service
 @RequiredArgsConstructor
@@ -67,6 +69,7 @@ public class WorkOrderPlanService {
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
     private final ProjectCalendarQuery projectCalendar;
+    private final WorkOrderLaborComparisonService laborComparison;
 
     public WorkOrderPlanSuggestionResponse suggest(String workOrderId, String from) {
         WorkOrder order = workOrderRepository.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)
@@ -143,7 +146,8 @@ public class WorkOrderPlanService {
             throw conflict(order.getWorkOrderNumber() + " is " + order.getWorkOrderStatus() + "; it is not planned any more.");
         }
         if (order.getEquipmentId() == null) {
-            throw conflict("Assign equipment first; the dates follow its calendar.");
+            // Without equipment, a step plan and its crew can still say how long it takes (LB25).
+            return placeByCrew(order, start, excluded, placed);
         }
         CatalogEquipmentView equipment = catalogQuery.findProjectEquipment(order.getProjectId(), order.getEquipmentId())
             .orElseThrow(() -> conflict("The assigned equipment no longer exists; assign other equipment."));
@@ -179,16 +183,20 @@ public class WorkOrderPlanService {
                 && other.getPlannedEndAt().isAfter(other.getPlannedStartAt()))
             .toList();
         CrewPlan crewPlan = crewPlan(order, excluded, placed);
+        Integer laborMinutes = laborMinutesLeft(order);
         List<String> movedPast = new ArrayList<>();
         List<WorkOrderPlanSuggestionResponse.CrewBooking> crewMovedPast = new ArrayList<>();
         OffsetDateTime cursor = start;
         // Every round moves past at least one planned order, one booking of the crew or settles the changeover.
         for (int round = 0; round <= 2 * (planned.size() + crewPlan.bookings().size()) + 2; round++) {
             BigDecimal changeoverHours = changeoverHours(order, equipment, EquipmentSequence.previous(cursor, others));
-            BigDecimal needed = productionHours.add(changeoverHours);
             OffsetDateTime searchFrom = cursor;
             Map<String, WorkerTime> crewTime = crewPlan.userIds().isEmpty() ? Map.of()
                 : workerCalendars.workingTime(order.getProjectId(), crewPlan.userIds(), searchFrom, searchFrom.plus(SEARCH_WINDOW));
+            // The equipment's time, or the step plan's labor shared by the crew when that takes longer (LB25).
+            BigDecimal laborHours = laborMinutes == null ? null : laborHours(laborMinutes, crewPlan, crewTime);
+            BigDecimal needed = (laborHours != null && laborHours.compareTo(productionHours) > 0 ? laborHours : productionHours)
+                .add(changeoverHours);
             // Only people needed for all of their time fix when the order runs (WC39).
             List<String> shiftCrew = crewPlan.userIds().stream()
                 .filter(userId -> crewTime.containsKey(userId) && crewTime.get(userId).calendarSet()
@@ -221,7 +229,7 @@ public class WorkOrderPlanService {
                     end, remaining, rate, productionHours, changeoverHours, needed,
                     changeoverHours.signum() > 0 ? before.getWorkOrderNumber() : null, List.copyOf(movedPast),
                     crewHours(order.getProjectId(), crewPlan, slot.start(), end), waitedFor, List.copyOf(crewMovedPast),
-                    equipment.efficiencyPercent());
+                    equipment.efficiencyPercent(), laborMinutes, laborHours);
             }
             // Up to a limit there is room again when the first of the orders that fill it ends (E17).
             List<WorkOrder> waited = limit != null && limit > 1 ? EquipmentOverlap.firstToEnd(clashes) : clashes;
@@ -241,6 +249,106 @@ public class WorkOrderPlanService {
                 .orElseThrow();
         }
         throw conflict("No free time found on " + name + " around the orders already planned on it.");
+    }
+
+    /**
+     * Places an order without equipment by its step plan (docs/domain/worker-calendar.md LB25): what is left of the plan, shared
+     * by the crew with shifts at their shares, while everyone on it for all of their time works (WC24, WC39), past the other
+     * orders that hold them (WC25). Without a step plan or a crew the dates follow equipment, as before.
+     */
+    private WorkOrderPlanSuggestionResponse placeByCrew(WorkOrder order, OffsetDateTime start, Set<String> excluded,
+                                                        List<WorkOrder> placed) {
+        Integer laborMinutes = laborMinutesLeft(order);
+        CrewPlan crewPlan = crewPlan(order, excluded, placed);
+        if (laborMinutes == null || crewPlan.userIds().isEmpty()) {
+            throw conflict("Assign equipment first; the dates follow its calendar.");
+        }
+        if (laborMinutes == 0) {
+            throw conflict("The step plan of " + order.getWorkOrderNumber() + " is already worked; nothing is left to plan.");
+        }
+        BigDecimal remaining = remainingQuantity(order);
+        if (remaining != null && remaining.signum() <= 0) {
+            throw conflict("The target quantity has already been produced.");
+        }
+        List<WorkOrderPlanSuggestionResponse.CrewBooking> crewMovedPast = new ArrayList<>();
+        OffsetDateTime cursor = start;
+        // Every round moves past at least one booking of the crew.
+        for (int round = 0; round <= 2 * crewPlan.bookings().size() + 2; round++) {
+            OffsetDateTime searchFrom = cursor;
+            Map<String, WorkerTime> crewTime = workerCalendars.workingTime(order.getProjectId(), crewPlan.userIds(), searchFrom,
+                searchFrom.plus(SEARCH_WINDOW));
+            List<String> shiftCrew = crewPlan.userIds().stream()
+                .filter(userId -> crewTime.containsKey(userId) && crewTime.get(userId).calendarSet()
+                    && crewPlan.shares().get(userId) == WorkOrderCrewService.FULL_SHARE)
+                .toList();
+            BigDecimal laborHours = laborHours(laborMinutes, crewPlan, crewTime);
+            if (shiftCrew.isEmpty() || laborHours == null) {
+                throw conflict("No one on the crew of " + order.getWorkOrderNumber() + " with shifts works on it all of their time,"
+                    + " so when it runs is unknown; assign equipment or such a person.");
+            }
+            EquipmentSlot slot = slotOfCrew(order.getProjectId(), seconds(laborHours), shiftCrew, crewTime)
+                .orElseThrow(() -> conflict("The crew does not have " + plain(laborHours) + " h available together in the 366 days from "
+                    + searchFrom + "."));
+            OffsetDateTime end = wholeMinute(slot.end());
+            Map<CrewBookingOf, List<String>> crewClashes = crewClashes(crewPlan, slot.start(), end, crewTime);
+            if (crewClashes.isEmpty()) {
+                return new WorkOrderPlanSuggestionResponse(order.getWorkOrderId(), null, start, slot.start(), end, remaining, null,
+                    null, BigDecimal.ZERO, laborHours, null, List.of(), crewHours(order.getProjectId(), crewPlan, slot.start(), end),
+                    List.of(), List.copyOf(crewMovedPast), null, laborMinutes, laborHours);
+            }
+            for (Map.Entry<CrewBookingOf, List<String>> clash : crewClashes.entrySet()) {
+                String number = clash.getKey().order().getWorkOrderNumber();
+                if (crewMovedPast.stream().noneMatch(one -> one.workOrderNumber().equals(number))) {
+                    crewMovedPast.add(new WorkOrderPlanSuggestionResponse.CrewBooking(number, clash.getValue()));
+                }
+            }
+            cursor = crewClashes.keySet().stream().map(booking -> booking.order().getPlannedEndAt())
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        }
+        throw conflict("No free time found for the crew of " + order.getWorkOrderNumber() + " around the orders already holding them.");
+    }
+
+    /**
+     * What is left of the order's step plan in worker minutes (LB25): each planned process less what its runs recorded on it,
+     * never below 0. Null without a step plan.
+     */
+    private Integer laborMinutesLeft(WorkOrder order) {
+        WorkOrderLaborComparisonResponse labor = laborComparison.compare(order.getWorkOrderId());
+        if (labor.stepPlannedMinutes() == null) {
+            return null;
+        }
+        return labor.steps().stream()
+            .filter(step -> step.plannedMinutes() != null)
+            .mapToInt(step -> Math.max(0, step.plannedMinutes() - step.actualMinutes()))
+            .sum();
+    }
+
+    /**
+     * Worker minutes shared by the crew members with shifts at their shares (LB25), rounded up to 0.01 h; null when no one on
+     * the crew has shifts. People without shifts are not counted, so the time is not made shorter by work no one has time for.
+     */
+    private static BigDecimal laborHours(int minutes, CrewPlan crewPlan, Map<String, WorkerTime> crewTime) {
+        int shares = crewPlan.userIds().stream()
+            .filter(userId -> crewTime.containsKey(userId) && crewTime.get(userId).calendarSet())
+            .mapToInt(userId -> crewPlan.shares().get(userId))
+            .sum();
+        if (shares == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(minutes).multiply(BigDecimal.valueOf(WorkOrderCrewService.FULL_SHARE))
+            .divide(BigDecimal.valueOf(shares).multiply(MINUTES_PER_HOUR), 2, RoundingMode.UP);
+    }
+
+    /** The earliest stretch holding {@code seconds} while everyone in {@code shiftCrew} works (LB25); empty when 366 days do not. */
+    private Optional<EquipmentSlot> slotOfCrew(String projectId, long seconds, List<String> shiftCrew, Map<String, WorkerTime> crewTime) {
+        List<Stretch> together = crewTime.get(shiftCrew.get(0)).spans().stream()
+            .map(span -> new Stretch(span.start(), span.end()))
+            .toList();
+        for (String userId : shiftCrew.subList(1, shiftCrew.size())) {
+            together = intersect(together, crewTime.get(userId).spans());
+        }
+        return accumulate(projectId, together, seconds);
     }
 
     /** {@code from} as an instant; null when not given. */
@@ -383,6 +491,11 @@ public class WorkOrderPlanService {
         for (String userId : shiftCrew) {
             together = intersect(together, crewTime.get(userId).spans());
         }
+        return accumulate(projectId, together, seconds);
+    }
+
+    /** From the first of {@code together}, the stretch in which {@code seconds} of it have passed; empty when they do not hold that. */
+    private Optional<EquipmentSlot> accumulate(String projectId, List<Stretch> together, long seconds) {
         ZoneId zone = projectCalendar.zone(projectId);
         Instant first = null;
         long left = seconds;

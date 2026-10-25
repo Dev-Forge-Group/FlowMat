@@ -12,10 +12,10 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
 import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.production.api.dto.request.WorkOrderCreateRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.WorkOrderUpdateRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderResponse;
@@ -25,7 +25,7 @@ import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
-import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
+import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunView;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -205,20 +205,20 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         String normalizedWorkflowId = ProductionText.trimToNull(workflowId, "workflowId");
         if (normalizedWorkflowId != null) {
-            Workflow workflow = references.workflow(normalizedWorkflowId)
+            WorkflowRunView workflow = references.workflow(normalizedWorkflowId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Workflow does not exist."));
-            requireSameProject(order, workflow.getProjectId());
+            requireSameProject(order, workflow.projectId());
         }
         order.setWorkflowId(normalizedWorkflowId);
 
         String normalizedItemId = ProductionText.trimToNull(targetItemId, "targetItemId");
         if (normalizedItemId != null) {
-            Item item = references.item(normalizedItemId)
+            CatalogItemView item = references.item(normalizedItemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Target item does not exist."));
-            requireSameProject(order, item.getProjectId());
+            requireSameProject(order, item.projectId());
             // Only a new target is checked, so an order for an item phased out later can still be edited and finished.
             if (!normalizedItemId.equals(order.getTargetItemId())) {
-                ItemStatusRule.requireActive(item, "plan a work order for it");
+                ItemStatusRule.requireActive(item.itemCode(), item.itemStatus(), "plan a work order for it");
             }
         }
         order.setTargetItemId(normalizedItemId);
@@ -226,14 +226,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         // The BOM must make the order's product; an order without a product takes the BOM's.
         String normalizedBomId = ProductionText.trimToNull(bomId, "bomId");
         if (normalizedBomId != null) {
-            BomHeader bom = findBom(order, normalizedBomId);
-            if (BomStatus.RETIRED.code().equals(bom.getBomStatus())) {
+            BomRevisionView bom = findBom(order, normalizedBomId);
+            if (BomStatus.RETIRED.code().equals(bom.bomStatus())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "BOM " + bom.getBomName() + " v" + bom.getBomVersion() + " is retired; pick a current revision.");
+                    "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is retired; pick a current revision.");
             }
             if (normalizedItemId == null) {
-                order.setTargetItemId(bom.getTargetItemId());
-            } else if (!normalizedItemId.equals(bom.getTargetItemId())) {
+                order.setTargetItemId(bom.targetItemId());
+            } else if (!normalizedItemId.equals(bom.targetItemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "The BOM produces a different item than this work order.");
             }
         }
@@ -304,10 +304,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         }
     }
 
-    private BomHeader findBom(WorkOrder order, String bomId) {
-        BomHeader bom = references.bom(bomId)
+    private BomRevisionView findBom(WorkOrder order, String bomId) {
+        BomRevisionView bom = references.bom(bomId)
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "BOM does not exist."));
-        requireSameProject(order, bom.getProjectId());
+        requireSameProject(order, bom.projectId());
         return bom;
     }
 

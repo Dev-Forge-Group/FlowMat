@@ -24,6 +24,7 @@ export interface LocationForm {
   locationType: StorageLocationType
   parentLocationId: string
   note: string
+  storageCondition: string
 }
 
 export const EMPTY_LOCATION_FORM: LocationForm = {
@@ -32,6 +33,7 @@ export const EMPTY_LOCATION_FORM: LocationForm = {
   locationType: 'location',
   parentLocationId: '',
   note: '',
+  storageCondition: '',
 }
 
 export function locationForm(location: StorageLocationDto): LocationForm {
@@ -41,6 +43,7 @@ export function locationForm(location: StorageLocationDto): LocationForm {
     locationType: location.locationType,
     parentLocationId: location.parentLocationId ?? '',
     note: location.note ?? '',
+    storageCondition: location.storageCondition ?? '',
   }
 }
 
@@ -165,6 +168,7 @@ function formError(form: LocationForm): string | null {
   if (form.locationCode.trim().length > 100) return 'The code is longer than 100 characters.'
   if (form.locationName.trim().length > 100) return 'The name is longer than 100 characters.'
   if (form.note.trim().length > 500) return 'The note is longer than 500 characters.'
+  if (form.storageCondition.trim().length > 100) return 'The storage condition is longer than 100 characters.'
   return null
 }
 
@@ -182,12 +186,13 @@ export function createPayload(
       locationType: form.locationType,
       parentLocationId: form.parentLocationId || null,
       note: form.note.trim() || null,
+      storageCondition: form.storageCondition.trim() || null,
     },
     error: null,
   }
 }
 
-/** Every field the form shows, so an emptied name or note clears it; the parent only when it changed. */
+/** Every field the form shows, so an emptied name, note or storage condition clears it; the parent only when it changed. */
 export function updatePayload(
   form: LocationForm,
   location: StorageLocationDto,
@@ -199,6 +204,7 @@ export function updatePayload(
     locationName: form.locationName.trim(),
     locationType: form.locationType,
     note: form.note.trim(),
+    storageCondition: form.storageCondition.trim(),
   }
   if (form.parentLocationId !== (location.parentLocationId ?? '')) {
     if (form.parentLocationId) input.parentLocationId = form.parentLocationId

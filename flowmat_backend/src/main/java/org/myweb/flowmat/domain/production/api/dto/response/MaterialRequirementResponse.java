@@ -17,10 +17,12 @@ public record MaterialRequirementResponse(int orders, List<Line> lines, List<Str
      * Quantities are in the material's own unit.
      *
      * @param usable available (on hand − reserved) outside quarantine and closed or expired LOTs
-     * @param shortage required − usable − plannedSupply, never below zero
+     * @param shortage required − usable − plannedSupply − onOrder, never below zero
      * @param plannedSupply what open (approved or running) work orders making this item still have to make
      * @param madeHere the item has its own approved BOM (a sub-assembly, docs/domain/multi-level-bom.md); what stock and
      *     planned supply do not cover is exploded into its materials' needs
+     * @param onOrder what is ordered from suppliers and not received yet (docs/domain/purchasing.md PO8)
+     * @param supplies plannedSupply work order by work order, so its timing can be told (docs/domain/purchasing.md PO25)
      */
     public record Line(
         String itemId,
@@ -32,8 +34,14 @@ public record MaterialRequirementResponse(int orders, List<Line> lines, List<Str
         BigDecimal shortage,
         List<Need> orders,
         BigDecimal plannedSupply,
-        boolean madeHere
+        boolean madeHere,
+        BigDecimal onOrder,
+        List<Supply> supplies
     ) {
+    }
+
+    /** What one open work order making the item still has to make. */
+    public record Supply(String workOrderId, String workOrderTitle, BigDecimal quantity) {
     }
 
     /**

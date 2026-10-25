@@ -17,11 +17,11 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
 import org.myweb.flowmat.domain.bom.application.BomService;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
 import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
-import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
-import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.production.api.dto.request.StockAllocationRequest;
@@ -92,42 +92,26 @@ public class StockAllocationService {
         LocalDate today = projectCalendar.today(projectId);
         List<StockAllocationResponse.PlanLine> plan = new ArrayList<>();
         for (Map.Entry<String, BigDecimal> need : needs.entrySet()) {
-            Item item = references.item(need.getKey())
-                .filter(found -> projectId.equals(found.getProjectId()))
+            CatalogItemView item = references.item(need.getKey())
+                .filter(found -> projectId.equals(found.projectId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "An item to allocate was not found in this project."));
-            BigDecimal already = before.getOrDefault(item.getItemId(), BigDecimal.ZERO);
+            BigDecimal already = before.getOrDefault(item.itemId(), BigDecimal.ZERO);
             BigDecimal left = need.getValue().subtract(already);
             BigDecimal now = BigDecimal.ZERO;
             if (left.signum() > 0) {
                 // Locked in id order, so a movement that would drain a record this plan counts on waits for it.
-                List<Inventory> rows = references.lockItemStock(projectId, item.getItemId());
-                for (Inventory row : candidates(rows, today)) {
+                List<StockView> rows = references.lockItemStock(projectId, item.itemId());
+                for (StockView row : candidates(rows, today)) {
                     if (left.signum() <= 0) {
                         break;
                     }
-                    BigDecimal take = row.getAvailableQuantity().min(left);
-                    StockAllocation allocation = new StockAllocation();
-                    allocation.setAllocationId(idGenerator.generate());
-                    allocation.setProjectId(projectId);
-                    allocation.setWorkOrderId(order.getWorkOrderId());
-                    allocation.setInventoryId(row.getInventoryId());
-                    allocation.setItemId(item.getItemId());
-                    allocation.setLotId(row.getLotId());
-                    allocation.setQuantity(take);
-                    allocation.setConsumedQuantity(BigDecimal.ZERO);
-                    allocation.setReleasedQuantity(BigDecimal.ZERO);
-                    allocation.setStatus(OPEN);
-                    allocation.setCreatedBy(actor);
-                    allocation.setCreatedAt(OffsetDateTime.now());
-                    allocationRepository.saveAndFlush(allocation);
-                    inventoryCommandService.apply(new InventoryMovement(row.getInventoryId(), InventoryTransactionType.RESERVE,
-                        BigDecimal.ZERO, take, REFERENCE, allocation.getAllocationId(),
-                        "Allocated to work order " + order.getWorkOrderNumber(), null, actor));
+                    BigDecimal take = row.availableQuantity().min(left);
+                    open(order, row, take, actor, "Allocated to work order " + order.getWorkOrderNumber());
                     now = now.add(take);
                     left = left.subtract(take);
                 }
             }
-            plan.add(new StockAllocationResponse.PlanLine(item.getItemId(), item.getItemCode(), scale(need.getValue()), scale(already),
+            plan.add(new StockAllocationResponse.PlanLine(item.itemId(), item.itemCode(), scale(need.getValue()), scale(already),
                 scale(now), scale(left.max(BigDecimal.ZERO))));
         }
         return response(order, plan);
@@ -194,6 +178,31 @@ public class StockAllocationService {
     }
 
     /**
+     * A cancelled input of the order's run gave {@code quantity} (in the item's unit) back to a stock record; all of it is
+     * allocated to the order again as a new allocation (docs/domain/stock-allocation.md R4), or nothing is. Runs inside the
+     * caller's transaction after {@link #lockForConsumption}; the caller has checked access.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BigDecimal allocateReturned(String workOrderId, String inventoryId, BigDecimal quantity, String runItemId) {
+        WorkOrder order = lockOrder(workOrderId);
+        if (!WorkOrderServiceImpl.status(order).acceptsRuns()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Work order " + order.getWorkOrderNumber() + " is "
+                + order.getWorkOrderStatus() + "; the returned stock cannot be allocated to it again.");
+        }
+        // Read after the reversal, which holds the record's lock until commit.
+        StockView row = references.stocks(List.of(inventoryId)).stream().findFirst()
+            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        List<StockView> usable = candidates(List.of(row), projectCalendar.today(order.getProjectId()));
+        if (usable.isEmpty() || usable.get(0).availableQuantity().compareTo(quantity) < 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "The returned stock cannot be allocated again: the record is not available, "
+                + "its LOT is not usable or has expired, or it no longer has that much free stock. Cancel without allocating it again.");
+        }
+        open(order, row, quantity, projectAccessService.requireCurrentUserId(),
+            "Allocated to work order " + order.getWorkOrderNumber() + " again: run item " + runItemId + " was cancelled");
+        return quantity;
+    }
+
+    /**
      * The order is completed or cancelled, so nothing more is made for it: what is still allocated goes back to free stock.
      * Runs inside the caller's transaction; the caller has checked access. Returns how many allocations were closed.
      */
@@ -228,6 +237,26 @@ public class StockAllocationService {
                 .forEach(allocation -> byItem.merge(allocation.getItemId(), allocation.remaining(), BigDecimal::add));
         }
         return byItem;
+    }
+
+    /** A new open allocation of {@code quantity} on the record for the order, reserved through the stock commands. */
+    private void open(WorkOrder order, StockView row, BigDecimal quantity, String actor, String note) {
+        StockAllocation allocation = new StockAllocation();
+        allocation.setAllocationId(idGenerator.generate());
+        allocation.setProjectId(order.getProjectId());
+        allocation.setWorkOrderId(order.getWorkOrderId());
+        allocation.setInventoryId(row.inventoryId());
+        allocation.setItemId(row.itemId());
+        allocation.setLotId(row.lotId());
+        allocation.setQuantity(quantity);
+        allocation.setConsumedQuantity(BigDecimal.ZERO);
+        allocation.setReleasedQuantity(BigDecimal.ZERO);
+        allocation.setStatus(OPEN);
+        allocation.setCreatedBy(actor);
+        allocation.setCreatedAt(OffsetDateTime.now());
+        allocationRepository.saveAndFlush(allocation);
+        inventoryCommandService.apply(new InventoryMovement(row.inventoryId(), InventoryTransactionType.RESERVE,
+            BigDecimal.ZERO, quantity, REFERENCE, allocation.getAllocationId(), note, null, actor));
     }
 
     private void releaseRest(WorkOrder order, StockAllocation allocation, String actor) {
@@ -306,41 +335,41 @@ public class StockAllocationService {
     }
 
     /** Usable records with free stock: available status, usable LOT not expired; expiring LOTs first, then oldest. */
-    private List<Inventory> candidates(List<Inventory> rows, LocalDate today) {
-        Map<String, LotMaster> lots = references.lots(rows.stream().map(Inventory::getLotId).filter(Objects::nonNull).distinct().toList())
-            .stream().collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
+    private List<StockView> candidates(List<StockView> rows, LocalDate today) {
+        Map<String, LotView> lots = references.lots(rows.stream().map(StockView::lotId).filter(Objects::nonNull).distinct().toList())
+            .stream().collect(Collectors.toMap(LotView::lotId, Function.identity()));
         return rows.stream()
-            .filter(row -> AVAILABLE.equals(row.getInventoryStatus()))
-            .filter(row -> row.getAvailableQuantity() != null && row.getAvailableQuantity().signum() > 0)
+            .filter(row -> AVAILABLE.equals(row.inventoryStatus()))
+            .filter(row -> row.availableQuantity() != null && row.availableQuantity().signum() > 0)
             .filter(row -> {
-                LotMaster lot = row.getLotId() == null ? null : lots.get(row.getLotId());
-                return row.getLotId() == null || (lot != null && LotStatus.fromCode(lot.getLotStatus()).usable() && !lot.isExpiredOn(today));
+                LotView lot = row.lotId() == null ? null : lots.get(row.lotId());
+                return row.lotId() == null || (lot != null && LotStatus.fromCode(lot.lotStatus()).usable() && !lot.isExpiredOn(today));
             })
             .sorted(Comparator
-                .comparing((Inventory row) -> row.getLotId() == null ? null : lots.get(row.getLotId()).getExpiryDate(),
+                .comparing((StockView row) -> row.lotId() == null ? null : lots.get(row.lotId()).expiryDate(),
                     Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(Inventory::getCreatedAt, Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
-                .thenComparing(Inventory::getInventoryId))
+                .thenComparing(StockView::createdAt, Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
+                .thenComparing(StockView::inventoryId))
             .toList();
     }
 
     private StockAllocationResponse response(WorkOrder order, List<StockAllocationResponse.PlanLine> plan) {
         List<StockAllocation> allocations = allocationRepository.findAllByWorkOrderIdOrderByCreatedAtAscAllocationIdAsc(order.getWorkOrderId());
-        Map<String, Item> items = references.items(allocations.stream().map(StockAllocation::getItemId).distinct().toList())
-            .stream().collect(Collectors.toMap(Item::getItemId, Function.identity()));
-        Map<String, LotMaster> lots = references.lots(allocations.stream().map(StockAllocation::getLotId)
+        Map<String, CatalogItemView> items = references.items(allocations.stream().map(StockAllocation::getItemId).distinct().toList())
+            .stream().collect(Collectors.toMap(CatalogItemView::itemId, Function.identity()));
+        Map<String, LotView> lots = references.lots(allocations.stream().map(StockAllocation::getLotId)
                 .filter(Objects::nonNull).distinct().toList())
-            .stream().collect(Collectors.toMap(LotMaster::getLotId, Function.identity()));
-        Map<String, Inventory> rows = references.stocks(allocations.stream().map(StockAllocation::getInventoryId).distinct().toList())
-            .stream().collect(Collectors.toMap(Inventory::getInventoryId, Function.identity()));
+            .stream().collect(Collectors.toMap(LotView::lotId, Function.identity()));
+        Map<String, StockView> rows = references.stocks(allocations.stream().map(StockAllocation::getInventoryId).distinct().toList())
+            .stream().collect(Collectors.toMap(StockView::inventoryId, Function.identity()));
         List<StockAllocationResponse.Allocation> list = allocations.stream()
             .map(allocation -> {
-                Item item = items.get(allocation.getItemId());
-                LotMaster lot = allocation.getLotId() == null ? null : lots.get(allocation.getLotId());
-                Inventory row = rows.get(allocation.getInventoryId());
+                CatalogItemView item = items.get(allocation.getItemId());
+                LotView lot = allocation.getLotId() == null ? null : lots.get(allocation.getLotId());
+                StockView row = rows.get(allocation.getInventoryId());
                 return new StockAllocationResponse.Allocation(allocation.getAllocationId(), allocation.getInventoryId(), allocation.getItemId(),
-                    item == null ? null : item.getItemCode(), allocation.getLotId(), lot == null ? null : lot.getLotNo(),
-                    row == null ? null : row.getLocation(), scale(allocation.getQuantity()), scale(allocation.getConsumedQuantity()),
+                    item == null ? null : item.itemCode(), allocation.getLotId(), lot == null ? null : lot.lotNo(),
+                    row == null ? null : row.location(), scale(allocation.getQuantity()), scale(allocation.getConsumedQuantity()),
                     scale(allocation.getReleasedQuantity()), scale(allocation.remaining()), allocation.getStatus(),
                     allocation.getCreatedBy(), allocation.getCreatedAt());
             })

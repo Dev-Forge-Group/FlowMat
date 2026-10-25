@@ -24,7 +24,8 @@ public interface ProductionRunService {
     /**
      * Cancels a recorded item of an open run: reverses its stock movement (re-checking today's stock), marks it
      * cancelled, and rebuilds the run's LOT genealogy without it. BOM plan lines are not recordings and cannot be
-     * cancelled.
+     * cancelled. With {@code reallocate}, what a cancelled input gave back is allocated to the run's work order again in
+     * the same transaction, or nothing changes (docs/domain/stock-allocation.md R4).
      */
-    ProductionRunItemResponse cancelRunItem(String productionRunId, String productionRunItemId, String reason);
+    ProductionRunItemResponse cancelRunItem(String productionRunId, String productionRunItemId, String reason, boolean reallocate);
 }

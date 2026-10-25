@@ -9,13 +9,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
@@ -155,6 +156,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsMaximumBelowMinimum() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
@@ -170,6 +172,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsReservingMoreThanOnHand() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
@@ -185,6 +188,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsNegativeQuantity() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
@@ -206,11 +210,8 @@ class InventoryServiceImplTest {
         verify(inventoryRepository, never()).save(any());
     }
 
-    private static Item item() {
-        Item item = new Item();
-        item.setItemId("item-1");
-        item.setProjectId("project-1");
-        return item;
+    private static CatalogItemView item() {
+        return new CatalogItemView("item-1", "project-1", null, null, null, null, null, null, null, null, null, null, null, null, "N");
     }
 
     private void givenInventory() {

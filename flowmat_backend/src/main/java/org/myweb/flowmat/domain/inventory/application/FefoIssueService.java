@@ -11,7 +11,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.FefoIssueRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.FefoIssueResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
@@ -56,13 +56,13 @@ public class FefoIssueService {
         String projectId = request.projectId().trim();
         projectAccessService.requireProjectWriteAccess(projectId);
         String actor = projectAccessService.requireCurrentUserId();
-        Item item = catalogReferences.item(request.itemId())
-            .filter(found -> projectId.equals(found.getProjectId()))
+        CatalogItemView item = catalogReferences.item(request.itemId())
+            .filter(found -> projectId.equals(found.projectId()))
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!"Y".equals(item.getLotManageYn())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, item.getItemCode() + " is not LOT-tracked; issue from its stock record.");
+        if (!"Y".equals(item.lotManageYn())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, item.itemCode() + " is not LOT-tracked; issue from its stock record.");
         }
-        String unit = item.getUnitId() == null ? null : catalogReferences.unitCode(item.getUnitId()).orElse(null);
+        String unit = item.unitId() == null ? null : catalogReferences.unitCode(item.unitId()).orElse(null);
         String requestId = request.requestId().trim();
         boolean reserve = "reserve".equalsIgnoreCase(request.action() == null ? "" : request.action().trim());
         String referenceType = reserve ? RESERVE_REFERENCE_TYPE : REFERENCE_TYPE;
@@ -81,7 +81,7 @@ public class FefoIssueService {
             .filter(tx -> projectId.equals(tx.getProjectId()))
             .toList();
         if (!previous.isEmpty()) {
-            if (previous.stream().anyMatch(tx -> !item.getItemId().equals(tx.getItemId()))) {
+            if (previous.stream().anyMatch(tx -> !item.itemId().equals(tx.getItemId()))) {
                 throw new BusinessException(ErrorCode.CONFLICT, "requestId '" + requestId + "' was already used to " + verb + " a different item.");
             }
             return response(item, unit, reserve, previous);
@@ -89,9 +89,9 @@ public class FefoIssueService {
 
         BigDecimal needed = request.unit() == null || request.unit().isBlank()
             ? request.quantity()
-            : unitConverter.toItemUnit(request.quantity(), request.unit(), item.getUnitId()).quantity();
+            : unitConverter.toItemUnit(request.quantity(), request.unit(), item.unitId()).quantity();
         // Locked before they are read, so a concurrent movement waits instead of draining a record this split counts on.
-        List<Inventory> stock = inventoryRepository.findAllById(inventoryRepository.lockItemStock(projectId, item.getItemId())).stream()
+        List<Inventory> stock = inventoryRepository.findAllById(inventoryRepository.lockItemStock(projectId, item.itemId())).stream()
             .sorted(Comparator.comparing(Inventory::getCreatedAt, Comparator.nullsLast(Comparator.<OffsetDateTime>naturalOrder()))
                 .thenComparing(Inventory::getInventoryId))
             .filter(row -> row.getLotId() != null)
@@ -115,7 +115,7 @@ public class FefoIssueService {
         BigDecimal available = usable.stream().map(Inventory::getAvailableQuantity).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (available.compareTo(needed) < 0) {
             throw new BusinessException(ErrorCode.CONFLICT, "Only " + plain(available) + (unit == null ? "" : " " + unit) + " of "
-                + item.getItemCode() + " is available in LOTs that have not expired; " + plain(needed) + " needed. Nothing was "
+                + item.itemCode() + " is available in LOTs that have not expired; " + plain(needed) + " needed. Nothing was "
                 + (reserve ? "reserved." : "issued."));
         }
 
@@ -139,7 +139,7 @@ public class FefoIssueService {
         return response(item, unit, reserve, issued);
     }
 
-    private FefoIssueResponse response(Item item, String unit, boolean reserve, List<InventoryTransaction> transactions) {
+    private FefoIssueResponse response(CatalogItemView item, String unit, boolean reserve, List<InventoryTransaction> transactions) {
         Map<String, LotMaster> lots = lotMasterRepository.findAllById(transactions.stream()
                 .map(InventoryTransaction::getLotId).filter(id -> id != null).distinct().toList())
             .stream()
@@ -155,7 +155,7 @@ public class FefoIssueService {
                 reserve ? tx.getReservedDelta() : tx.getQuantityDelta().negate(), tx.getQuantityAfter(), tx.getReservedAfter()))
             .toList();
         BigDecimal total = lines.stream().map(FefoIssueResponse.Line::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new FefoIssueResponse(item.getItemId(), reserve ? "reserve" : "issue", total, unit, lines);
+        return new FefoIssueResponse(item.itemId(), reserve ? "reserve" : "issue", total, unit, lines);
     }
 
     private static String plain(BigDecimal value) {

@@ -2,17 +2,14 @@ package org.myweb.flowmat.domain.flowrun.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +18,6 @@ import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStep;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepAttempt;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepSource;
-import org.myweb.flowmat.domain.flowrun.repository.FlowRunEventRepository;
-import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepSourceRepository;
@@ -58,12 +53,10 @@ class FlowRunRouter {
     private final FlowRunStepRepository stepRepository;
     private final FlowRunStepAttemptRepository attemptRepository;
     private final FlowRunStepSourceRepository sourceRepository;
-    private final FlowRunRepository runRepository;
-    private final FlowRunEventRepository eventRepository;
-    private final LinkedRunWorkingTime workingTime;
     private final FlowRunEventRecorder eventRecorder;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
+    private final FlowRunStepAvailability availability;
 
     /**
      * Routes a finished step's decisions: a step for each connection that goes on, an arrival for one into a Join, and the
@@ -192,7 +185,7 @@ class FlowRunRouter {
                 "Join " + join.getNodeId() + " could not pass its joined output on: " + refused.getMessage(), List.of());
         }
         // The Join received what came last; that time goes on (ADR-010 decision 4).
-        OffsetDateTime receivedAt = joinReadyAt(graph, join);
+        OffsetDateTime receivedAt = availability.joinReadyAt(graph, join);
         if (receivedAt != null) {
             join.setScheduledAt(receivedAt);
             eventRecorder.record(runId, join.getStepId(), "step_scheduled", objectMapper.createObjectNode()
@@ -283,60 +276,13 @@ class FlowRunRouter {
      * unit, and the item when every arrival names the same one. Attrs are not merged.
      */
     private JsonNode merged(String joinStepId, FlowRunGraph graph) {
-        ObjectNode merged = objectMapper.createObjectNode();
-        ArrayNode arrivals = merged.putArray("arrivals");
-        BigDecimal total = BigDecimal.ZERO;
-        boolean summable = true;
-        boolean firstUnit = true;
-        String unit = null;
-        JsonNode item = null;
-        boolean sameItem = true;
+        FlowRunJoinOutput merged = new FlowRunJoinOutput(objectMapper);
         for (FlowRunStepSource source : sourceRepository.findAllByStepIdOrderByArrivalNoAsc(joinStepId)) {
             FlowRunStep from = stepRepository.findById(source.getSourceStepId()).orElse(null);
             JsonNode output = from == null ? objectMapper.createObjectNode() : sent(graph, from, source.getConnectionId());
-            ObjectNode arrival = arrivals.addObject();
-            arrival.put("connectionId", source.getConnectionId());
-            arrival.put("sourceStepId", source.getSourceStepId());
-            for (String field : List.of("quantity", "unit", "item", "attrs")) {
-                if (output.hasNonNull(field)) {
-                    arrival.set(field, output.get(field));
-                }
-            }
-            JsonNode quantity = output.get("quantity");
-            if (quantity == null || !quantity.isNumber()) {
-                summable = false;
-            } else {
-                total = total.add(quantity.decimalValue());
-            }
-            String arrivalUnit = output.hasNonNull("unit") ? output.get("unit").asText() : null;
-            if (firstUnit) {
-                unit = arrivalUnit;
-                firstUnit = false;
-            } else if (!Objects.equals(unit, arrivalUnit)) {
-                summable = false;
-            }
-            JsonNode arrivalItem = output.get("item");
-            if (arrivalItem == null || arrivalItem.isNull()) {
-                sameItem = false;
-            } else if (item == null) {
-                item = arrivalItem;
-            } else if (!item.equals(arrivalItem)) {
-                sameItem = false;
-            }
+            merged.add(source.getConnectionId(), source.getSourceStepId(), output);
         }
-        if (arrivals.isEmpty()) {
-            return merged;
-        }
-        if (summable) {
-            merged.put("quantity", total);
-            if (unit != null) {
-                merged.put("unit", unit);
-            }
-        }
-        if (sameItem && item != null) {
-            merged.set("item", item);
-        }
-        return merged;
+        return merged.result();
     }
 
     /** The connection's loss on the way (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 6). */
@@ -380,44 +326,7 @@ class FlowRunRouter {
      * delay applies on the way, so the step can start at once as before.
      */
     OffsetDateTime readyAt(FlowRunGraph graph, FlowRunStep source, String connectionId) {
-        Duration delay = graph.delay(connectionId);
-        OffsetDateTime carried = graph.gateway(source.getNodeId()) ? source.getScheduledAt() : null;
-        OffsetDateTime base = carried != null ? carried : source.getEndedAt();
-        if (base == null || delay == null && carried == null) {
-            return null;
-        }
-        if (delay == null) {
-            return base.truncatedTo(ChronoUnit.MICROS);
-        }
-        OffsetDateTime worked = graph.workingDelay(connectionId) ? afterWorking(source.getFlowRunId(), base, delay) : null;
-        return (worked != null ? worked : base.plus(delay)).truncatedTo(ChronoUnit.MICROS);
-    }
-
-    /** For a production-linked run, when the work order's equipment and crew have worked {@code delay} since {@code from}. */
-    private OffsetDateTime afterWorking(String runId, OffsetDateTime from, Duration delay) {
-        String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
-        return productionRunId == null ? null : workingTime.afterWorking(productionRunId, from, delay)
-            .map(end -> end.at().withOffsetSameInstant(from.getOffset()))
-            .orElse(null);
-    }
-
-    /** A Join's arrivals' latest ready time once a delay applies to any of them (ADR-010 decision 4); else null. */
-    private OffsetDateTime joinReadyAt(FlowRunGraph graph, FlowRunStep join) {
-        OffsetDateTime latest = null;
-        boolean delayed = false;
-        for (FlowRunStepSource source : sourceRepository.findAllByStepIdOrderByArrivalNoAsc(join.getStepId())) {
-            FlowRunStep from = stepRepository.findById(source.getSourceStepId()).orElse(null);
-            if (from == null) {
-                continue;
-            }
-            OffsetDateTime ready = readyAt(graph, from, source.getConnectionId());
-            delayed |= ready != null;
-            OffsetDateTime at = ready != null ? ready : from.getEndedAt();
-            if (at != null && (latest == null || at.isAfter(latest))) {
-                latest = at;
-            }
-        }
-        return delayed && latest != null ? latest.truncatedTo(ChronoUnit.MICROS) : null;
+        return availability.readyAt(graph, source, connectionId);
     }
 
     private FlowRunStep createStep(String runId, FlowRunGraph graph, String sourceStepId, FlowRunGraph.Decision decision,
@@ -428,7 +337,7 @@ class FlowRunRouter {
         OffsetDateTime readyAt = source == null ? null : readyAt(graph, source, decision.connectionId());
         if (readyAt != null) {
             // Not before its input is ready (ADR-010 decisions 1, 6); a gateway keeps it as the time it received it.
-            LinkedRunWorkingTime.WorkingStart held = graph.gateway(step.getNodeId()) ? null : workingStart(runId, readyAt);
+            LinkedRunWorkingTime.WorkingStart held = graph.gateway(step.getNodeId()) ? null : availability.workingStart(runId, readyAt);
             OffsetDateTime scheduledAt = held == null ? readyAt
                 : held.at().withOffsetSameInstant(readyAt.getOffset()).truncatedTo(ChronoUnit.MICROS);
             step.setScheduledAt(scheduledAt);
@@ -456,27 +365,13 @@ class FlowRunRouter {
         return step;
     }
 
-    /** For a production-linked run, the next time its work order's equipment and crew work, when the delay ends outside it. */
-    private LinkedRunWorkingTime.WorkingStart workingStart(String runId, OffsetDateTime readyAt) {
-        String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
-        return productionRunId == null ? null : workingTime.workingStart(productionRunId, readyAt).orElse(null);
-    }
-
     /**
      * Whether a production-linked step held for the work order equipment's next working time may start now, before its
      * {@code scheduledAt} (docs/architecture/adr/ADR-015-shift-aware-delay.md decision 6, ADR-016 decision 6): its delay is
      * over and the equipment and crew work now, as when overtime is given as that date's own shifts.
      */
     boolean mayStartEarly(FlowRun run, FlowRunStep step, OffsetDateTime now) {
-        if (run.getProductionRunId() == null) {
-            return false;
-        }
-        OffsetDateTime readyAt = eventRepository.findFirstByStepIdAndEventTypeOrderByOccurredAtDescEventIdDesc(step.getStepId(),
-                "step_scheduled")
-            .map(event -> readJson(event.getPayloadJson()).path("readyAt").asText(null))
-            .map(OffsetDateTime::parse)
-            .orElse(null);
-        return readyAt != null && !readyAt.isAfter(now) && workingTime.workingStart(run.getProductionRunId(), now).isEmpty();
+        return availability.mayStartEarly(run, step, now);
     }
 
     private FlowRunStep newStep(String runId, String sourceStepId, FlowRunGraph.Decision decision, JsonNode input) {
@@ -509,7 +404,7 @@ class FlowRunRouter {
         try {
             // Decimals stay exact on the way through, as conditions and Join totals compare them.
             return value == null ? objectMapper.createObjectNode()
-                : objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(value);
+                : objectMapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).without(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES).readTree(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Flow run step snapshot could not be read.", exception);
         }

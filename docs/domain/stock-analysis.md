@@ -84,6 +84,7 @@ Analysis 탭 위 **Stock value by month**(접힘, 펼칠 때만 불러옴)
 | count losses | 참조 `inventory_count` 중 수량이 줄어든 것([실사](stock-count.md)) | 실사로 늘어난 양은 손실을 상쇄하지 않음 |
 
 - 수량이 줄어든 움직임만 셉니다. **역분개된 움직임은 뺍니다**(언제 역분개했든, `reversal`이 가리키는 원본). 역분개 행 자체도 세지 않습니다. 합산은 DB에서 품목별로 합니다(`InventoryTransactionRepository.findItemWaste`), 기간이 길어도 원장 행을 메모리에 올리지 않습니다.
+- 공급처 반품(참조 `purchase_return`, [구매 발주](purchasing.md) PO26)도 감소 조정이지만 잃은 것이 아니라 셀 이유에 들지 않습니다(2026-10-24).
 - 품목별 줄: 이유별 수량(품목 단위), 합계, 금액(오늘 단가, 없으면 null). 합계 금액과 이유별 금액, `valueComplete`. 금액이 큰 순.
 - 화면: Analysis 탭 맨 위 **Waste**(기간 30·90·365일, 금액 요약, 품목 표, **Download CSV** `waste-<N>d-YYYY-MM-DD.csv`, 열 `item_code,item_name,unit,expired,defects,count_losses,total,value`). 재고 키 아래 캐시라 재고가 움직이면 새로 고쳐짐.
 - 품목 Details 패널의 "Last 30 days" 줄에도 그 품목의 손실이 붙습니다(`· lost 1 kg (1 short at counts)`, 금액이 있으면 `worth …`). 손실이 없으면 붙지 않습니다.

@@ -57,11 +57,13 @@ class WorkingDelayCalendarRegressionIntegrationTest extends IntegrationTestSuppo
         String from = line.node("Mix", "process");
         String to = line.node("Bake", "process");
         line.link(from, to, Map.of("delayTimeSec", 5400, "delayBasis", "working"));
-        line.calendar(line.opens.plusHours(2), line.opens.plusHours(3), line.opens.toLocalDate().plusDays(1).toString());
+        ZonedDateTime nextOpening = line.opens.toLocalDate().plusDays(1)
+            .atTime(line.opens.plusHours(2).toLocalTime()).atZone(line.opens.getZone());
+        line.calendar(nextOpening, nextOpening.plusHours(1), nextOpening.toLocalDate().toString());
         String run = line.start(false);
         line.complete(run, from);
         // One hour in the current version, then 30 minutes in tomorrow's later shift.
-        line.assertWorkingSchedule(run, to, line.opens.plusDays(1).plusHours(2).plusMinutes(30));
+        line.assertWorkingSchedule(run, to, nextOpening.plusMinutes(30));
     }
 
     @Test

@@ -604,7 +604,7 @@ export interface MaterialRequirementDto {
     unit: string | null
     required: number
     usable: number
-    /** required − usable − plannedSupply, never below zero. */
+    /** required − usable − plannedSupply − onOrder, never below zero. */
     shortage: number
     /** A work order's share, or (with viaItemCode, no work order) the share from making a short sub-assembly. */
     orders: { workOrderId: string | null; workOrderTitle: string | null; required: number; viaItemId?: string | null; viaItemCode?: string | null }[]
@@ -612,6 +612,10 @@ export interface MaterialRequirementDto {
     plannedSupply?: number
     /** The item has its own approved BOM: what stock and planned supply leave short is made from its materials. */
     madeHere?: boolean
+    /** Ordered from suppliers and not received yet (docs/domain/purchasing.md PO8). */
+    onOrder?: number
+    /** plannedSupply work order by work order (docs/domain/purchasing.md PO25). */
+    supplies?: { workOrderId: string; workOrderTitle: string | null; quantity: number }[]
   }[]
   /** Work orders whose BOM could not be worked out, with the reason. */
   problems: string[]
