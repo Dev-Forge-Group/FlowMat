@@ -47,6 +47,7 @@ export interface PurchaseReceiptDto {
 /** A change to a supplier credit kept for a return, and why (docs/domain/purchasing.md PO52); no amount withdrew it. */
 export interface PurchaseCreditChangeDto {
   amount: number | null
+  amountText?: string | null
   creditNote: string | null
   reason: string
   changedBy: string
@@ -72,6 +73,7 @@ export interface PurchaseReturnDto {
   replacement?: boolean
   /** What the supplier credited for it, with their credit note, who kept it and when (PO47); null until then. */
   creditAmount?: number | null
+  creditAmountText?: string | null
   creditNote?: string | null
   creditedBy?: string | null
   creditedAt?: string | null
@@ -168,14 +170,14 @@ export interface PurchaseReturnInput {
 
 /** What the supplier credited for a return, kept once (PO47). */
 export interface PurchaseCreditInput {
-  amount: number
+  amount: string
   /** The supplier's credit note number; left out when none. */
   creditNote?: string
 }
 
 /** A change to a kept credit, with a reason; no amount withdraws it (PO52). */
 export interface PurchaseCreditChangeInput {
-  amount: number | null
+  amount: string | null
   creditNote?: string
   reason: string
 }

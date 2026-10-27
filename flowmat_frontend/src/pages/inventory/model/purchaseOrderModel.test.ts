@@ -372,12 +372,12 @@ describe('purchase orders', () => {
     const typed = { returnId: 'b1', amount: '', creditNote: '', reason: '', change: false }
     expect(creditPayload(typed).error).toBe('Enter the amount credited: 0 or more with at most four decimals.')
     expect(creditPayload({ ...typed, amount: '1.00001' }).input).toBeNull()
-    expect(creditPayload({ ...typed, amount: '9.5', creditNote: ' CN-12 ' }).input).toEqual({ amount: 9.5, creditNote: 'CN-12' })
-    expect(creditPayload({ ...typed, amount: '0' }).input).toEqual({ amount: 0 })
+    expect(creditPayload({ ...typed, amount: '9.5', creditNote: ' CN-12 ' }).input).toEqual({ amount: '9.5', creditNote: 'CN-12' })
+    expect(creditPayload({ ...typed, amount: '0' }).input).toEqual({ amount: '0' })
     // A kept credit changes from where it stands, with a reason; withdrawn, it is owed again (PO52).
     expect(creditForm(credit, kept)).toEqual({ returnId: 'b1', amount: '9.5', creditNote: 'CN-12', reason: '', change: true })
     expect(creditPayload({ ...typed, amount: '8', change: true }).error).toBe('Give a reason for the change.')
-    expect(creditPayload({ ...typed, amount: '8', change: true, reason: ' Sent less ' }).input).toEqual({ amount: 8, reason: 'Sent less' })
+    expect(creditPayload({ ...typed, amount: '8', change: true, reason: ' Sent less ' }).input).toEqual({ amount: '8', reason: 'Sent less' })
     expect(withdrawPayload({ ...typed, change: true }).error).toBe('Give a reason for withdrawing the credit.')
     expect(withdrawPayload({ ...typed, change: true, reason: 'Wrong return' }).input).toEqual({ amount: null, reason: 'Wrong return' })
     const changes = [{ amount: 8, creditNote: 'CN-13', reason: 'Sent less', changedBy: 'kim', changedAt: '2041-09-10T10:00:00' },
@@ -387,6 +387,87 @@ describe('purchase orders', () => {
       '2041-09-11 10:00 · credit withdrawn · Wrong return · by kim'])
     expect(owedQuantity(credit, withdrawn)).toBe(4)
     expect(creditForm(credit, withdrawn)).toEqual({ returnId: 'b1', amount: '10', creditNote: '', reason: '', change: true })
+  })
+
+  describe('exact credit amounts', () => {
+    const kept = (extra: Partial<PurchaseReturnDto> = {}): PurchaseReturnDto => ({
+      returnId: 'b1', lineId: 'l1', itemCode: 'FLOUR', quantity: 4, inventoryId: 'f1', location: null, lotNo: null,
+      reason: 'Wet bags', returnedBy: 'kim', returnedAt: '2041-09-05T10:00:00', creditAmount: 9.5,
+      creditNote: 'CN-12', creditedBy: 'kim', creditedAt: '2041-09-09T10:00:00', ...extra,
+    })
+    const typed = { returnId: 'b1', amount: '', creditNote: '', reason: '', change: false }
+    const history = { creditNote: 'CN-13', reason: 'Sent less', changedBy: 'kim', changedAt: '2041-09-10T10:00:00' }
+
+    it('preserves the validated decimal string through credit and change payloads', () => {
+      expect(creditPayload({ ...typed, amount: ' 99999999999999999999.9999 ' }).input)
+        .toEqual({ amount: '99999999999999999999.9999' })
+      expect(creditPayload({ ...typed, amount: '0009.5000', change: true, reason: ' Corrected ' }).input)
+        .toEqual({ amount: '0009.5000', reason: 'Corrected' })
+      expect(creditPayload({ ...typed, amount: '0.0000' }).input).toEqual({ amount: '0.0000' })
+      expect(creditPayload({ ...typed, amount: '100000000000000000000' }).input).toBeNull()
+      for (const amount of ['1.00001', '-1', '1e2', 'NaN', 'Infinity', '.5', '']) {
+        expect(creditPayload({ ...typed, amount }).input).toBeNull()
+      }
+      expect(typedPrice('9.5')).toBe(9.5)
+    })
+
+    it.each(['9007199254740993.2301', '99999999999999999999.9999'])(
+      'reads and edits the exact saved amount %s instead of its rounded numeric value', (amount) => {
+        const back = kept({ creditAmount: Number(amount), creditAmountText: amount })
+        const form = creditForm(order(), back)
+        expect(form.amount).toBe(amount)
+        expect(form.amountWarning).toBeUndefined()
+        expect(creditPayload({ ...form, reason: 'Confirm amount' }).input?.amount).toBe(amount)
+        expect(creditText(order(), back).replace(/,/g, '')).toContain(`credited ${amount}`)
+        expect(creditChangeText({ ...history, amount: Number(amount), amountText: amount }).replace(/,/g, ''))
+          .toContain(`credit ${amount}`)
+      },
+    )
+
+    it('keeps exact zero distinct from a withdrawn credit', () => {
+      const back = kept({ creditAmount: 8, creditAmountText: '0.0000' })
+      expect(creditForm(order(), back).amount).toBe('0.0000')
+      expect(creditText(order(), back)).toBe(' · credited 0 · CN-12 · by kim')
+      expect(creditChangeText({ ...history, amount: 8, amountText: '0.0000' }))
+        .toBe('2041-09-10 10:00 · credit 0 · CN-13 · Sent less · by kim')
+      expect(creditChangeText({ ...history, amount: null, amountText: null })).toContain('credit withdrawn')
+      expect(creditChangeText({ ...history, amount: null })).toContain('credit withdrawn')
+      expect(withdrawPayload({ ...typed, change: true, reason: 'Wrong return' }).input)
+        .toEqual({ amount: null, reason: 'Wrong return' })
+    })
+
+    it.each([0, 9.5, 0.0001, 2 ** 39 - 0.0001])('keeps a safe legacy amount %s usable', (amount) => {
+      const form = creditForm(order(), kept({ creditAmount: amount }))
+      expect(form.amount).toBe(String(amount))
+      expect(form.amountWarning).toBeUndefined()
+      expect(creditText(order(), kept({ creditAmount: amount }))).not.toContain('unavailable')
+      expect(creditChangeText({ ...history, amount })).not.toContain('unavailable')
+    })
+
+    it.each([2 ** 39, 1e20, Infinity, NaN, 1.00001, -1, null])(
+      'requires explicit entry when a legacy amount %s is not known exactly', (amount) => {
+        const back = kept({ creditAmount: amount })
+        const form = creditForm(order(), back)
+        expect(form.amount).toBe('')
+        expect(form.amountWarning).toContain('exact')
+        expect(creditText(order(), back)).toContain('exact amount unavailable')
+        if (amount !== null) expect(creditChangeText({ ...history, amount })).toContain('exact amount unavailable')
+        expect(creditPayload({ ...form, reason: 'Confirm amount' }).input).toBeNull()
+        expect(creditPayload({ ...form, amount: '123.0001', reason: 'Confirm amount' }).input)
+          .toEqual({ amount: '123.0001', creditNote: 'CN-12', reason: 'Confirm amount' })
+      },
+    )
+
+    it('does not replace missing exact data with a rounded amount or an unsafe suggested value', () => {
+      const missing = creditForm(order(), kept({ creditAmountText: null }))
+      expect(missing.amount).toBe('')
+      expect(missing.amountWarning).toContain('exact')
+      const back = kept({ creditedAt: null, creditAmount: null, creditNote: null })
+      const proposed = creditForm(order({ lines: [line({ unitPrice: 9999999999.9999 })] }),
+        { ...back, quantity: 9999999999.9999 })
+      expect(proposed.amount).toBe('')
+      expect(proposed.amountWarning).toContain('exact')
+    })
   })
 
   it('tells where a draft stands with the owner\'s approval', () => {

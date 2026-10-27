@@ -99,7 +99,9 @@ public class InventoryCountPlanService {
         if (quantity == null || quantity.signum() < 0 || quantity.compareTo(new BigDecimal("9999999999.99995")) >= 0) {
             throw bad("countedQuantity must round to a value from 0 to 9999999999.9999.");
         }
-        quantity = quantity.setScale(4, RoundingMode.HALF_UP);
+        // Below half a stored unit, avoid constructing an enormous power of ten just to round to zero.
+        quantity = quantity.compareTo(new BigDecimal("0.00005")) < 0
+            ? BigDecimal.ZERO.setScale(4) : quantity.setScale(4, RoundingMode.HALF_UP);
         String actor = access.requireCurrentUserId();
         if (!Objects.equals(line.getEntryVersion(), request.expectedEntryVersion())) {
             if (actor.equals(line.getCountedBy()) && line.getCountedQuantity() != null && quantity.compareTo(line.getCountedQuantity()) == 0) {

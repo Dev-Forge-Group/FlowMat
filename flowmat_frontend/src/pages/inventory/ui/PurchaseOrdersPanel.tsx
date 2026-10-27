@@ -215,10 +215,16 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   function submitReturn(event: FormEvent) {
     event.preventDefault()
     if (!selected || !returning) return
-    const payload = returnPayload(returnable, returning, returnRequestId)
+    const submitted = returning
+    const submittedRequestId = returnRequestId
+    const payload = returnPayload(returnable, submitted, submittedRequestId)
     setReturnError(payload.error)
     // The same requestId goes again after an unconfirmed answer, so a retry cannot send stock back twice.
-    if (payload.input) giveBack.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => setReturning(null) })
+    if (payload.input) giveBack.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => {
+      setReturning((current) => current === submitted ? null : current)
+      const nextRequestId = newRequestId()
+      setReturnRequestId((current) => current === submittedRequestId ? nextRequestId : current)
+    } })
   }
 
   /** What the supplier credited for a return is kept once (PO47). */
@@ -264,9 +270,12 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   function submitDates(event: FormEvent) {
     event.preventDefault()
     if (!selected || !dates) return
-    const payload = datesPayload(selected, dates)
+    const submitted = dates
+    const payload = datesPayload(selected, submitted)
     setDatesError(payload.error)
-    if (payload.input) changeDates.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => setDates(null) })
+    if (payload.input) changeDates.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, {
+      onSuccess: () => setDates((current) => current === submitted ? null : current),
+    })
   }
 
   function startReceive(one: PurchaseOrderDto) {
@@ -283,10 +292,16 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   function submitReceive(event: FormEvent) {
     event.preventDefault()
     if (!selected || !receiving) return
-    const payload = receivePayload(selected, receiving, requestId)
+    const submitted = receiving
+    const submittedRequestId = requestId
+    const payload = receivePayload(selected, submitted, submittedRequestId)
     setReceiveError(payload.error)
     // The same requestId goes again after an unconfirmed answer, so a retry cannot receive twice.
-    if (payload.input) receive.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => setReceiving(null) })
+    if (payload.input) receive.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => {
+      setReceiving((current) => current === submitted ? null : current)
+      const nextRequestId = newRequestId()
+      setRequestId((current) => current === submittedRequestId ? nextRequestId : current)
+    } })
   }
 
   return <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 24 }}>
@@ -434,8 +449,9 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
         {orderCreditText(selected) && <p aria-label="Credit due" style={{ margin: '0 0 6px', fontSize: 12 }}>{orderCreditText(selected)}</p>}
         {crediting && <form aria-label={crediting.change ? 'Change credit' : 'Record credit'} onSubmit={submitCredit}
           style={{ display: 'grid', gap: 6, marginTop: 8, maxWidth: 360 }}>
-          <label>Amount credited<input type="number" min="0" step="any" value={crediting.amount}
-            onChange={(event) => setCrediting({ ...crediting, amount: event.target.value })} /></label>
+          <label>Amount credited<input type="text" inputMode="decimal" value={crediting.amount}
+            onChange={(event) => setCrediting({ ...crediting, amount: event.target.value, amountWarning: undefined })} /></label>
+          {crediting.amountWarning && <p role="alert" style={{ margin: 0 }}>{crediting.amountWarning}</p>}
           <label>Credit note<input value={crediting.creditNote} maxLength={100}
             onChange={(event) => setCrediting({ ...crediting, creditNote: event.target.value })} /></label>
           {crediting.change && <label>Change reason<input value={crediting.reason} maxLength={500}

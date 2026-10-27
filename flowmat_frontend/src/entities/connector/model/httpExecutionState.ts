@@ -17,6 +17,12 @@ export const isUnresolved = (execution: Pick<HttpExecution, 'transportStatus'>):
 type ExecutionState = Pick<HttpExecution, 'transportStatus' | 'applyStatus'>
   & Partial<Pick<HttpExecution, 'httpStatus' | 'errorCode' | 'outputJson'>>
 
+/** The server also blocks a transmitted result that has not been applied, including a late result from an earlier attempt. */
+export function blocksHttpTransmission(execution: ExecutionState): boolean {
+  return isUnresolved(execution) || (['SUCCEEDED', 'HTTP_REJECTED', 'RESPONSE_REJECTED'].includes(execution.transportStatus)
+    && execution.applyStatus !== 'APPLIED')
+}
+
 export function canApplyHttpExecution(execution: ExecutionState): boolean {
   if (execution.applyStatus !== 'APPLY_FAILED') return false
   return execution.transportStatus === 'SUCCEEDED' ? execution.outputJson != null

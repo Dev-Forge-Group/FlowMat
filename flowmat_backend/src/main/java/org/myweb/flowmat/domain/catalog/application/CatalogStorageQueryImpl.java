@@ -1,12 +1,13 @@
 package org.myweb.flowmat.domain.catalog.application;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogStorageQuery;
-import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
+import org.myweb.flowmat.domain.catalog.repository.ItemRepository.StorageConditionFields;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +21,8 @@ public class CatalogStorageQueryImpl implements CatalogStorageQuery {
     @Override
     @Transactional(readOnly = true)
     public Map<String, ItemStorage> findStorage(Collection<String> itemIds) {
-        return itemRepository.findAllById(itemIds).stream()
-            .collect(Collectors.toMap(Item::getItemId, item -> new ItemStorage(item.getItemCode(), item.getStorageCondition())));
+        List<StorageConditionFields> found = itemIds.isEmpty() ? List.of() : itemRepository.findStorageConditions(itemIds);
+        return found.stream()
+            .collect(Collectors.toMap(StorageConditionFields::getItemId, item -> new ItemStorage(item.getItemCode(), item.getStorageCondition())));
     }
 }

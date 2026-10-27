@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { httpExecutionsKey, httpProfilesKey, useHttpExecutions, useHttpProfileMutations } from './useHttpConnectors'
 
-const mock = vi.hoisted(() => ({ client: undefined as QueryClient | undefined, put: vi.fn(), get: vi.fn(), post: vi.fn() }))
+const mock = vi.hoisted(() => ({ client: undefined as QueryClient | undefined, putJson: vi.fn(), get: vi.fn(), post: vi.fn() }))
 vi.mock('@tanstack/react-query', async (original) => ({
   ...await original<typeof import('@tanstack/react-query')>(), useQueryClient: () => mock.client,
   useQuery: (options: unknown) => options,
@@ -12,7 +12,7 @@ vi.mock('@tanstack/react-query', async (original) => ({
     catch (error) { await options.onError?.(); throw error }
   } }),
 }))
-vi.mock('../../../shared/api/httpClient', () => ({ httpClient: { put: mock.put, get: mock.get, post: mock.post } }))
+vi.mock('../../../shared/api/httpClient', () => ({ httpClient: { putJson: mock.putJson, get: mock.get, post: mock.post } }))
 
 describe('HTTP profile conflict recovery', () => {
   beforeEach(() => { mock.client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } }) })
@@ -23,10 +23,12 @@ describe('HTTP profile conflict recovery', () => {
     client.setQueryData(httpProfilesKey('project'), [{ profileId: 'profile', version: 1 }])
     client.setQueryData([...httpProfilesKey('project'), 'profile', 'versions'], [{ revision: 1 }])
     client.setQueryData(httpProfilesKey('other'), [{ profileId: 'other', version: 2 }])
-    mock.put.mockRejectedValue({ httpStatus: 409, message: 'expectedVersion changed' })
+    mock.putJson.mockRejectedValue({ httpStatus: 409, message: 'expectedVersion changed' })
     const mutations = Reflect.apply(useHttpProfileMutations, undefined, ['project']) as ReturnType<typeof useHttpProfileMutations>
-    await expect(mutations.save.mutateAsync({ profileId: 'profile', input: { name: 'Edited', enabled: true,
-      baseOrigin: 'https://api.example.com', credentialAlias: null, expectedVersion: 1, operations: [] } })).rejects.toMatchObject({ httpStatus: 409 })
+    const body = '{"name":"Edited","enabled":true,"baseOrigin":"https://api.example.com",'
+      + '"credentialAlias":null,"expectedVersion":1,"operations":[]}'
+    await expect(mutations.save.mutateAsync({ profileId: 'profile', body })).rejects.toMatchObject({ httpStatus: 409 })
+    expect(mock.putJson).toHaveBeenCalledExactlyOnceWith('/projects/project/http-profiles/profile', body)
     expect(client.getQueryState(httpProfilesKey('project'))?.isInvalidated).toBe(true)
     expect(client.getQueryState([...httpProfilesKey('project'), 'profile', 'versions'])?.isInvalidated).toBe(true)
     expect(client.getQueryState(httpProfilesKey('other'))?.isInvalidated).toBe(false)

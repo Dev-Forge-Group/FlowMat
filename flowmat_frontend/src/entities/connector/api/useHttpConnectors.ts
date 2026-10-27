@@ -3,7 +3,7 @@ import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse, unwrapApiVoidResponse } from '../../../shared/api/unwrapApiResponse'
 import type { ApiEnvelope } from '../../../shared/types/api'
 import { requireJson } from '../model/connectorForms'
-import type { HttpExecution, HttpProfile, HttpProfileInput, HttpProfileVersion, HttpRequestPreview, ProcessHttpBinding } from '../model/types'
+import type { HttpExecution, HttpProfile, HttpProfileVersion, HttpRequestPreview, ProcessHttpBinding } from '../model/types'
 
 export const httpProfilesKey = (projectId: string) => ['http-profiles', projectId] as const
 const profilePath = (projectId: string, profileId?: string) => `/projects/${encodeURIComponent(projectId)}/http-profiles`
@@ -51,10 +51,10 @@ export function useHttpProfileMutations(projectId: string) {
     await client.cancelQueries({ queryKey: httpProfilesKey(projectId) })
     await client.invalidateQueries({ queryKey: httpProfilesKey(projectId) })
   }
-  const save = useMutation({ mutationFn: async ({ profileId, input }: { profileId?: string; input: HttpProfileInput }) =>
+  const save = useMutation({ mutationFn: async ({ profileId, body }: { profileId?: string; body: string }) =>
     unwrapApiResponse(profileId
-      ? await httpClient.put<ApiEnvelope<HttpProfile>>(profilePath(projectId, profileId), input)
-      : await httpClient.post<ApiEnvelope<HttpProfile>>(profilePath(projectId), input)), onSuccess: refresh, onError: refresh })
+      ? await httpClient.putJson<ApiEnvelope<HttpProfile>>(profilePath(projectId, profileId), body)
+      : await httpClient.postJson<ApiEnvelope<HttpProfile>>(profilePath(projectId), body)), onSuccess: refresh, onError: refresh })
   const status = useMutation({ mutationFn: async ({ profileId, expectedVersion, enabled }: {
     profileId: string; expectedVersion: number; enabled: boolean
   }) => unwrapApiResponse(await httpClient.patch<ApiEnvelope<HttpProfile>>(`${profilePath(projectId, profileId)}/status`, { expectedVersion, enabled })),

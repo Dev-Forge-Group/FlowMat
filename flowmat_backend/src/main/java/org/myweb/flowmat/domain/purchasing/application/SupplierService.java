@@ -141,7 +141,7 @@ public class SupplierService {
         if (days == null) {
             return null;
         }
-        if (days.signum() < 0 || days.stripTrailingZeros().scale() > 0 || days.compareTo(BigDecimal.valueOf(MAX_LEAD_DAYS)) > 0) {
+        if (days.signum() < 0 || days.compareTo(BigDecimal.valueOf(MAX_LEAD_DAYS)) > 0 || days.stripTrailingZeros().scale() > 0) {
             throw bad("leadTimeDays is a whole number of days from 0 to " + MAX_LEAD_DAYS + ".");
         }
         return days.intValueExact();

@@ -25,6 +25,7 @@ import org.myweb.flowmat.domain.workforce.repository.WorkerLaborRateRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
+import org.myweb.flowmat.global.util.CsvDecimalParser;
 import org.myweb.flowmat.global.util.StorableText;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,9 +62,8 @@ public class WorkerLaborRateService implements WorkerLaborRateQuery {
         requireWorker(projectId, userId);
         BigDecimal rate = request == null ? null : request.hourlyRate();
         if (rate != null) {
-            BigDecimal plain = rate.stripTrailingZeros();
-            if (rate.signum() < 0 || Math.max(plain.scale(), 0) > MAX_DECIMALS
-                || plain.precision() - plain.scale() > MAX_WHOLE_DIGITS) {
+            if (rate.signum() < 0 || CsvDecimalParser.hasMoreThanIntegerDigits(rate, MAX_WHOLE_DIGITS)
+                || (rate.scale() > MAX_DECIMALS && rate.stripTrailingZeros().scale() > MAX_DECIMALS)) {
                 throw bad("hourlyRate is 0 or more, with at most " + MAX_WHOLE_DIGITS + " whole digits and " + MAX_DECIMALS
                     + " decimals; leave it empty when unknown.");
             }

@@ -25,7 +25,7 @@ test('a kept credit is changed, then withdrawn so the return is owed again', asy
     const { pathname } = new URL(request.url())
     if (await answerAuth(route, pathname)) return
     if (request.method() === 'PUT' && pathname === '/api/purchase-orders/po1/returns/b1/credit') {
-      const body = request.postDataJSON() as { amount: number | null }
+      const body = request.postDataJSON() as { amount: string | null }
       sent.push(body)
       current = body.amount === null
         ? { ...order, returns: [{ ...back, creditAmount: null, creditNote: null, creditedBy: null, creditedAt: null, creditChanges: [lessened,
@@ -69,7 +69,7 @@ test('a kept credit is changed, then withdrawn so the return is owed again', asy
   await form.getByLabel('Change reason').fill('Wrong return')
   await form.getByRole('button', { name: 'Withdraw credit' }).click()
   await expect(form).toHaveCount(0)
-  expect(sent).toEqual([{ amount: 8, creditNote: 'CN-13', reason: 'Supplier sent less' }, { amount: null, reason: 'Wrong return' }])
+  expect(sent).toEqual([{ amount: '8', creditNote: 'CN-13', reason: 'Supplier sent less' }, { amount: null, reason: 'Wrong return' }])
   await expect(item).toContainText('· credit due 10')
   await expect(item.getByRole('button', { name: 'Record credit' })).toBeVisible()
   await expect(item.getByRole('button', { name: 'Change credit' })).toHaveCount(0)

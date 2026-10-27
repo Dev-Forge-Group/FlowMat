@@ -1,4 +1,4 @@
-import type { HttpOperation, HttpProfile, HttpProfileInput } from './types'
+import type { HttpProfile } from './types'
 
 export interface ProfileForm {
   profileId?: string
@@ -24,12 +24,15 @@ export function requireJson(value: string, label: string): string {
   return value
 }
 
-export function profileInput(form: ProfileForm): HttpProfileInput {
-  const operations: unknown = JSON.parse(requireJson(form.operations, 'Operations'))
-  if (!Array.isArray(operations) || operations.length === 0) throw new Error('Operations must be a nonempty JSON array.')
-  return { ...(form.expectedVersion === undefined ? {} : { expectedVersion: form.expectedVersion }),
+/** Preserve operation JSON so the server can reject fractional statuses and duplicate keys before normalization. */
+export function profileBody(form: ProfileForm): string {
+  const operations = requireJson(form.operations, 'Operations')
+  const parsed: unknown = JSON.parse(operations)
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('Operations must be a nonempty JSON array.')
+  const metadata = { ...(form.expectedVersion === undefined ? {} : { expectedVersion: form.expectedVersion }),
     name: form.name.trim(), baseOrigin: form.baseOrigin.trim(), credentialAlias: form.credentialAlias.trim() || null,
-    enabled: form.enabled, operations: operations as HttpOperation[] }
+    enabled: form.enabled }
+  return `${JSON.stringify(metadata).slice(0, -1)},"operations":${operations}}`
 }
 
 export interface BindingForm {

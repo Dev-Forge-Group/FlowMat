@@ -284,10 +284,40 @@ export function owedQuantity(order: Pick<PurchaseOrderDto, 'status' | 'lines' | 
   return 0
 }
 
+const CREDIT_AMOUNT_PATTERN = /^\d+(\.\d{1,4})?$/
+
+function typedCreditAmount(value: string): string | null {
+  const amount = value.trim()
+  if (!CREDIT_AMOUNT_PATTERN.test(amount)) return null
+  const whole = amount.split('.')[0].replace(/^0+/, '')
+  return whole.length <= 20 ? amount : null
+}
+
+/** Legacy numbers are usable only where separate four-decimal amounts cannot round to the same number. */
+function readCreditAmount(text: string | null | undefined, amount: number | null | undefined): string | null {
+  if (text !== undefined) return text === null ? null : typedCreditAmount(text)
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount >= 2 ** 39) return null
+  const value = String(amount)
+  return CREDIT_AMOUNT_PATTERN.test(value) ? value : null
+}
+
+/** Format the whole part as an integer and keep the fractional digits as text. */
+function formatCreditAmount(amount: string): string {
+  const [whole, fraction = ''] = amount.split('.')
+  const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 })
+  const integer = formatter.format(BigInt(whole))
+  const decimals = fraction.replace(/0+$/, '')
+  if (!decimals) return integer
+  const separator = formatter.formatToParts(0.1).find((part) => part.type === 'decimal')?.value ?? '.'
+  return integer + separator + [...decimals].map((digit) => formatter.format(Number(digit))).join('')
+}
+
 /** " · credit due 10", " · credit due (no price)", " · credited 9.5 · CN-12 · by kim"; empty when nothing is owed (PO47). */
 export function creditText(order: PurchaseOrderDto, back: PurchaseReturnDto): string {
   if (back.creditedAt) {
-    return ` · credited ${formatQty(back.creditAmount ?? 0)}${back.creditNote ? ` · ${back.creditNote}` : ''} · by ${back.creditedBy ?? ''}`
+    const amount = readCreditAmount(back.creditAmountText, back.creditAmount)
+    return ` · credited ${amount === null ? '(exact amount unavailable)' : formatCreditAmount(amount)}`
+      + `${back.creditNote ? ` · ${back.creditNote}` : ''} · by ${back.creditedBy ?? ''}`
   }
   const owed = owedQuantity(order, back)
   if (owed <= 0) return ''
@@ -322,6 +352,8 @@ export interface CreditForm {
   reason: string
   /** A credit was kept for the return, so this changes it. */
   change: boolean
+  /** An amount must be entered explicitly when the saved or suggested value cannot be read exactly. */
+  amountWarning?: string
 }
 
 /**
@@ -331,17 +363,27 @@ export interface CreditForm {
 export function creditForm(order: PurchaseOrderDto, back: PurchaseReturnDto): CreditForm {
   const change = Boolean(back.creditedAt) || (back.creditChanges ?? []).length > 0
   if (back.creditedAt) {
-    return { returnId: back.returnId, amount: String(back.creditAmount ?? 0), creditNote: back.creditNote ?? '', reason: '', change }
+    const amount = readCreditAmount(back.creditAmountText, back.creditAmount)
+    return { returnId: back.returnId, amount: amount ?? '', creditNote: back.creditNote ?? '', reason: '', change,
+      ...(amount === null ? { amountWarning: 'The saved credit amount could not be read exactly. Enter the correct amount before saving.' } : {}) }
   }
   const value = returnValue(order, { lineId: back.lineId, quantity: owedQuantity(order, back) || back.quantity })
-  return { returnId: back.returnId, amount: value == null ? '' : String(value), creditNote: '', reason: '', change }
+  const amount = readCreditAmount(undefined, value)
+  return { returnId: back.returnId, amount: amount ?? '', creditNote: '', reason: '', change,
+    ...(value != null && amount === null
+      ? { amountWarning: 'The suggested credit amount could not be calculated exactly. Enter the correct amount before saving.' } : {}) }
 }
 
 /** The credit to send, with the reason for a change, or what is wrong (PO47, PO52); the server checks again. */
 export function creditPayload(form: CreditForm):
   { input: PurchaseCreditInput & { reason?: string }; error: null } | { input: null; error: string } {
-  const amount = typedPrice(form.amount)
-  if (amount == null) return { input: null, error: 'Enter the amount credited: 0 or more with at most four decimals.' }
+  const amount = form.amount.trim()
+  if (!CREDIT_AMOUNT_PATTERN.test(amount)) {
+    return { input: null, error: 'Enter the amount credited: 0 or more with at most four decimals.' }
+  }
+  if (typedCreditAmount(amount) === null) {
+    return { input: null, error: 'The amount credited is too large: use at most 20 whole digits.' }
+  }
   const reason = form.reason.trim()
   if (form.change && !reason) return { input: null, error: 'Give a reason for the change.' }
   const creditNote = form.creditNote.trim()
@@ -358,8 +400,10 @@ export function withdrawPayload(form: CreditForm): { input: PurchaseCreditChange
 
 /** "2041-09-10 10:00 · credit 8 · CN-13 · Supplier sent less · by kim", "… · credit withdrawn · Wrong return · by kim" (PO52). */
 export function creditChangeText(change: PurchaseCreditChangeDto): string {
-  const what = change.amount == null ? 'credit withdrawn'
-    : `credit ${formatQty(change.amount)}${change.creditNote ? ` · ${change.creditNote}` : ''}`
+  const withdrawn = change.amountText === null || (change.amountText === undefined && change.amount == null)
+  const amount = readCreditAmount(change.amountText, change.amount)
+  const what = withdrawn ? 'credit withdrawn'
+    : `credit ${amount === null ? '(exact amount unavailable)' : formatCreditAmount(amount)}${change.creditNote ? ` · ${change.creditNote}` : ''}`
   return `${savedAtText(change.changedAt)} · ${what} · ${change.reason} · by ${change.changedBy}`
 }
 

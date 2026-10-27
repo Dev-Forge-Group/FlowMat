@@ -10,6 +10,9 @@ import org.myweb.flowmat.domain.flowrun.api.dto.request.FlowRunStartRequest;
 import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunResponse;
 import org.myweb.flowmat.domain.flowrun.application.FlowRunService;
 import org.myweb.flowmat.global.response.ApiResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,5 +67,11 @@ public class FlowRunController {
         @PathVariable String flowRunId, @Valid @RequestBody FlowRunFailRequest request
     ) {
         return ApiResponse.ok(service.fail(flowRunId, request));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> unreadable(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+            "Flow run request must be valid JSON with inputPayload numbers within the safe conversion limits."));
     }
 }

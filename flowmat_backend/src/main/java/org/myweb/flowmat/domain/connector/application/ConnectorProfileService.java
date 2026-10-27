@@ -6,9 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.connector.api.dto.request.ConnectorProfileRequest;
 import org.myweb.flowmat.domain.connector.api.dto.request.ConnectorProfileRequest.Operation;
@@ -42,11 +39,8 @@ public class ConnectorProfileService implements ConnectorProfileQuery {
 
     public List<ConnectorProfileResponse> list(String projectId) {
         access.requireProjectReadAccess(projectId);
-        List<ConnectorProfile> rows = profiles.findAllByProjectIdAndDeletedYnOrderByCreatedAtDescProfileIdAsc(projectId, "N");
-        if (rows.isEmpty()) return List.of();
-        Map<String, ConnectorProfileVersion> current = versions.findCurrentVersions(projectId).stream()
-            .collect(Collectors.toMap(ConnectorProfileVersion::getProfileId, Function.identity()));
-        return rows.stream().map(profile -> response(profile, requireCurrent(current.get(profile.getProfileId())))).toList();
+        return profiles.findAllByProjectIdAndDeletedYnOrderByCreatedAtDescProfileIdAsc(projectId, "N").stream()
+            .map(this::response).toList();
     }
 
     public ConnectorProfileResponse get(String projectId, String profileId) {
@@ -205,8 +199,19 @@ public class ConnectorProfileService implements ConnectorProfileQuery {
     }
 
     private List<Operation> operations(ConnectorProfileVersion version) {
-        try { return json.readValue(version.getOperationsJson(), OPERATIONS); }
+        return operations(version.getOperationsJson());
+    }
+
+    private List<Operation> operations(String operationsJson) {
+        try { return json.readValue(operationsJson, OPERATIONS); }
         catch (JsonProcessingException exception) { throw new IllegalStateException("Connector operations could not be read."); }
+    }
+
+    private ConnectorProfileResponse response(ConnectorProfileRepository.CurrentProfile profile) {
+        if (profile.getProfileVersionId() == null) throw new IllegalStateException("Connector profile configuration is missing.");
+        return new ConnectorProfileResponse(profile.getProfileId(), profile.getProjectId(), profile.getName(), profile.isEnabled(),
+            profile.getVersion(), profile.getCurrentRevision(), profile.getProfileVersionId(), profile.getBaseOrigin(),
+            profile.getCredentialAlias(), operations(profile.getOperationsJson()), profile.getCreatedAt(), profile.getUpdatedAt());
     }
 
     private ConnectorProfileResponse response(ConnectorProfile profile, ConnectorProfileVersion version) {

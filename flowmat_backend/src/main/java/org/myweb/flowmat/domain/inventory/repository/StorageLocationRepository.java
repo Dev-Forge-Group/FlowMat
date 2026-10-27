@@ -11,6 +11,21 @@ public interface StorageLocationRepository extends JpaRepository<StorageLocation
 
     List<StorageLocation> findAllByProjectIdAndDeletedYn(String projectId, String deletedYn);
 
+    /** Scalar fields avoid reusing a location loaded before a stock movement waited. */
+    @Query("""
+        select l.locationId as locationId, l.locationCode as locationCode,
+               l.parentLocationId as parentLocationId, l.storageCondition as storageCondition
+        from StorageLocation l where l.projectId = :projectId and l.deletedYn = :deletedYn
+        """)
+    List<StorageConditionFields> findStorageConditions(@Param("projectId") String projectId, @Param("deletedYn") String deletedYn);
+
+    interface StorageConditionFields {
+        String getLocationId();
+        String getLocationCode();
+        String getParentLocationId();
+        String getStorageCondition();
+    }
+
     Optional<StorageLocation> findByLocationIdAndDeletedYn(String locationId, String deletedYn);
 
     /** Resolve the lock scope without caching location state before waiting for another mutation. */

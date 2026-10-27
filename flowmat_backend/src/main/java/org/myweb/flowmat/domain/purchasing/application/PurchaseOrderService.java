@@ -348,6 +348,16 @@ public class PurchaseOrderService {
         List<PurchaseReceiptRequest.Line> requested = request.lines() == null ? List.of() : request.lines();
         List<PurchaseReceipt> earlier = receipts.findAllByPurchaseOrderIdAndRequestId(order.getPurchaseOrderId(), request.requestId());
         if (!earlier.isEmpty()) {
+            // Reject malformed fields before replay normalization or decimal expansion.
+            for (PurchaseReceiptRequest.Line wanted : requested) {
+                if (wanted == null) {
+                    throw bad("lines must not contain null entries.");
+                }
+                quantity(wanted.quantity(), "quantity");
+                text(wanted.location(), "location", MAX_PLACE);
+                text(wanted.lotNo(), "lotNo", MAX_PLACE);
+                date(wanted.expiryDate(), "expiryDate");
+            }
             if (sameReceipt(earlier, requested)) {
                 return response(order);
             }
@@ -429,16 +439,18 @@ public class PurchaseOrderService {
         if (request == null || request.requestId() == null) {
             throw bad("requestId is required.");
         }
+        String reason = text(request.reason(), "reason", MAX_NOTE);
+        if (reason == null) {
+            throw bad("Give a reason.");
+        }
+        // Validate stored text before the replay comparison trims fields.
+        text(request.nonconformityId(), "nonconformityId", 50);
         Optional<PurchaseReturn> earlier = returns.findByPurchaseOrderIdAndRequestId(order.getPurchaseOrderId(), request.requestId());
         if (earlier.isPresent()) {
             if (sameReturn(earlier.get(), request)) {
                 return response(order);
             }
             throw new BusinessException(ErrorCode.CONFLICT, "requestId already belongs to a different return.");
-        }
-        String reason = text(request.reason(), "reason", MAX_NOTE);
-        if (reason == null) {
-            throw bad("Give a reason.");
         }
         if (!receipts.existsByPurchaseOrderId(order.getPurchaseOrderId())) {
             throw new BusinessException(ErrorCode.CONFLICT, "Nothing was received on " + order.getOrderNumber() + " to send back.");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bindingBody, profileInput, profileForm, emptyProfileForm, rawRunInputBody } from './connectorForms'
+import { bindingBody, profileBody, profileForm, emptyProfileForm, rawRunInputBody } from './connectorForms'
 
 describe('HTTP profile and binding forms', () => {
   it('retains decimal literals and scale when sending a binding', () => {
@@ -23,14 +23,14 @@ describe('HTTP profile and binding forms', () => {
       currentRevision: 2, profileVersionId: 'r', baseOrigin: 'https://api.example.com', credentialAlias: null,
       operations: [{ operationId: 'send', method: 'POST', relativePath: '/jobs', successStatuses: [202] }],
       createdAt: '', updatedAt: '' })
-    expect(profileInput(form)).toMatchObject({ expectedVersion: 3, credentialAlias: null })
-    expect(profileInput({ ...emptyProfileForm(), name: 'New' })).not.toHaveProperty('expectedVersion')
+    expect(JSON.parse(profileBody(form))).toMatchObject({ expectedVersion: 3, credentialAlias: null })
+    expect(JSON.parse(profileBody({ ...emptyProfileForm(), name: 'New' }))).not.toHaveProperty('expectedVersion')
   })
 
   it('requires operation JSON to be a nonempty array without accepting a secret input field', () => {
-    expect(() => profileInput({ ...emptyProfileForm(), operations: '{}' })).toThrow('Operations')
-    expect(() => profileInput({ ...emptyProfileForm(), operations: '[]' })).toThrow('Operations')
-    expect(profileInput(emptyProfileForm())).not.toHaveProperty('password')
+    expect(() => profileBody({ ...emptyProfileForm(), operations: '{}' })).toThrow('Operations')
+    expect(() => profileBody({ ...emptyProfileForm(), operations: '[]' })).toThrow('Operations')
+    expect(JSON.parse(profileBody(emptyProfileForm()))).not.toHaveProperty('password')
   })
 
   it('keeps exact input digits when starting a graph run whose HTTP mapping copies its source', () => {
@@ -40,5 +40,31 @@ describe('HTTP profile and binding forms', () => {
     expect(JSON.parse(body)).toMatchObject({ workflowId: 'workflow', workflowRevisionId: 'revision', runType: 'actual' })
     expect(() => rawRunInputBody({ workflowId: 'workflow', workflowRevisionId: 'revision', runType: 'actual' }, '{'))
       .toThrow('Run input must contain valid JSON.')
+  })
+})
+
+
+describe('profile operation JSON retains the original validation input', () => {
+  it.each([
+    ['fractional token', '[{"operationId":"send","method":"POST","relativePath":"/jobs","successStatuses":[200.0]}]'],
+    ['rounded boundary', '[{"operationId":"send","method":"POST","relativePath":"/jobs","successStatuses":[199.99999999999999]}]'],
+    ['duplicate keys', '[{"operationId":"send","method":"POST","method":"DELETE","relativePath":"/jobs","successStatuses":[200]}]'],
+  ])('preserves %s for the strict server parser', (_case, operations) => {
+    const body = profileBody({ ...emptyProfileForm(), operations })
+    expect(body).toContain(`"operations":${operations}`)
+  })
+
+  it('escapes and trims ordinary metadata while keeping operation whitespace and an edit version', () => {
+    const operations = ' [ {"operationId":"send","method":"POST","relativePath":"/jobs","successStatuses":[200,202]} ] '
+    const body = profileBody({ ...emptyProfileForm(), expectedVersion: 7, name: '  Dispatch "priority"  ',
+      baseOrigin: '  https://api.example.com  ', credentialAlias: '  dispatch  ', enabled: false, operations })
+    expect(body).toContain(`"operations":${operations}`)
+    expect(JSON.parse(body)).toMatchObject({ expectedVersion: 7, name: 'Dispatch "priority"',
+      baseOrigin: 'https://api.example.com', credentialAlias: 'dispatch', enabled: false })
+    expect(JSON.parse(profileBody({ ...emptyProfileForm(), credentialAlias: '  ' }))).toHaveProperty('credentialAlias', null)
+  })
+
+  it('rejects malformed operation JSON locally without constructing a body', () => {
+    expect(() => profileBody({ ...emptyProfileForm(), operations: '[{' })).toThrow('Operations must contain valid JSON.')
   })
 })

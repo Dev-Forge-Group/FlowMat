@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canApplyHttpExecution, executionSummary, isUnresolved, pinnedHttpBinding, savedRequestId } from './httpExecutionState'
+import { blocksHttpTransmission, canApplyHttpExecution, executionSummary, isUnresolved, pinnedHttpBinding, savedRequestId } from './httpExecutionState'
 
 describe('explicit HTTP execution safety', () => {
   it('reuses a saved request ID after an uncertain browser response', () => {
@@ -44,5 +44,27 @@ describe('explicit HTTP execution safety', () => {
     expect(pinnedHttpBinding({ nodeBindings: [{ processId: 'a', operationId: 'send', profileVersionId: 'v' }] }, 'a'))
       .toMatchObject({ operationId: 'send' })
     expect(pinnedHttpBinding({ nodeBindings: 'bad' }, 'a')).toBeNull()
+  })
+})
+
+
+describe('HTTP transmission barriers match durable server evidence', () => {
+  it.each(['PENDING', 'OUTCOME_UNKNOWN'])('blocks %s independently of local application status', (transportStatus) => {
+    for (const applyStatus of ['PENDING', 'APPLY_FAILED', 'LATE', 'APPLIED']) {
+      expect(blocksHttpTransmission({ transportStatus, applyStatus })).toBe(true)
+    }
+  })
+
+  it.each(['SUCCEEDED', 'HTTP_REJECTED', 'RESPONSE_REJECTED'])('blocks unapplied %s evidence from any attempt', (transportStatus) => {
+    for (const applyStatus of ['PENDING', 'APPLY_FAILED', 'LATE']) {
+      expect(blocksHttpTransmission({ transportStatus, applyStatus })).toBe(true)
+    }
+    expect(blocksHttpTransmission({ transportStatus, applyStatus: 'APPLIED' })).toBe(false)
+  })
+
+  it('does not turn a known unsent transport failure into a previous-transmission barrier', () => {
+    for (const applyStatus of ['PENDING', 'APPLY_FAILED', 'LATE', 'APPLIED']) {
+      expect(blocksHttpTransmission({ transportStatus: 'TRANSPORT_FAILED', applyStatus })).toBe(false)
+    }
   })
 })

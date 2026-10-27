@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogStorageQuery;
-import org.myweb.flowmat.domain.inventory.domain.entity.StorageLocation;
 import org.myweb.flowmat.domain.inventory.repository.InventorySettingRepository;
 import org.myweb.flowmat.domain.inventory.repository.StorageLocationRepository;
+import org.myweb.flowmat.domain.inventory.repository.StorageLocationRepository.StorageConditionFields;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Component;
@@ -42,9 +42,9 @@ public class StorageConditionGuard {
         if (wanted == null) {
             return;
         }
-        Map<String, StorageLocation> byId = new HashMap<>();
-        StorageLocation place = null;
-        for (StorageLocation one : locations.findAllByProjectIdAndDeletedYn(projectId, "N")) {
+        Map<String, StorageConditionFields> byId = new HashMap<>();
+        StorageConditionFields place = null;
+        for (StorageConditionFields one : locations.findStorageConditions(projectId, "N")) {
             byId.put(one.getLocationId(), one);
             if (one.getLocationCode().trim().equalsIgnoreCase(location.trim())) {
                 place = one;
@@ -52,7 +52,7 @@ public class StorageConditionGuard {
         }
         String condition = null;
         Set<String> seen = new HashSet<>();
-        for (StorageLocation at = place; at != null && seen.add(at.getLocationId()); at = byId.get(at.getParentLocationId())) {
+        for (StorageConditionFields at = place; at != null && seen.add(at.getLocationId()); at = byId.get(at.getParentLocationId())) {
             if (at.getStorageCondition() != null && !at.getStorageCondition().isBlank()) {
                 condition = at.getStorageCondition();
                 break;

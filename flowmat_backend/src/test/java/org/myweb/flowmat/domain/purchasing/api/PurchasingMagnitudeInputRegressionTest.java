@@ -183,6 +183,16 @@ class PurchasingMagnitudeInputRegressionTest {
         assertSavedMagnitude(endpoint, new BigDecimal(number));
     }
 
+    @ParameterizedTest(name = "{0} preserves quoted credit boundary {1}")
+    @MethodSource("quotedCreditAmounts")
+    void quotedCreditAmountStillReachesPersistenceUnchanged(Endpoint endpoint, String number) throws Exception {
+        MockHttpServletResponse response = send(endpoint, mapper.writeValueAsString(number));
+
+        assertEquals(200, response.getStatus(), response.getContentAsString());
+        assertTrue(mapper.readTree(response.getContentAsString()).path("success").asBoolean(), response.getContentAsString());
+        assertSavedMagnitude(endpoint, new BigDecimal(number));
+    }
+
     private MockHttpServletResponse send(Endpoint endpoint, String number) throws Exception {
         String body;
         MockHttpServletRequestBuilder request;
@@ -288,6 +298,12 @@ class PurchasingMagnitudeInputRegressionTest {
 
     private static Stream<Endpoint> endpoints() {
         return Arrays.stream(Endpoint.values());
+    }
+
+    private static Stream<Arguments> quotedCreditAmounts() {
+        return Stream.of(Endpoint.CREDIT_AMOUNT, Endpoint.CREDIT_CHANGE_AMOUNT)
+            .flatMap(endpoint -> Stream.of("0.0000", "99999999999999999999.9999")
+                .map(number -> Arguments.of(endpoint, number)));
     }
 
     private enum Endpoint {

@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "composite": true,
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",

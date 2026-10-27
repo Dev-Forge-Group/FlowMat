@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useIsProjectOwner } from '../../../entities/project/api/useIsProjectOwner'
 import { useHttpProfiles, useHttpProfileMutations, useHttpProfileVersions } from '../../../entities/connector/api/useHttpConnectors'
-import { emptyProfileForm, profileForm, profileInput, type ProfileForm } from '../../../entities/connector/model/connectorForms'
+import { emptyProfileForm, profileForm, profileBody, type ProfileForm } from '../../../entities/connector/model/connectorForms'
 import { compareHttpProfileVersions, defaultHttpProfileComparison } from '../../../entities/connector/model/httpProfileHistory'
 import type { HttpOperation, HttpProfileVersion } from '../../../entities/connector/model/types'
 import { errorMessage } from '../../../shared/lib/errorMessage'
@@ -26,7 +26,7 @@ export function HTTPProfilesPanel({ projectId }: { projectId: string }) {
     if (!form || pending) return
     setProblem(null)
     try {
-      await save.mutateAsync({ profileId: form.profileId, input: profileInput(form) })
+      await save.mutateAsync({ profileId: form.profileId, body: profileBody(form) })
       setForm(null)
     } catch (error) { setProblem(errorMessage(error, 'Could not save the HTTP profile.')) }
   }

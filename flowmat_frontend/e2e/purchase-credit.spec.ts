@@ -58,7 +58,7 @@ test('a return not replaced is owed back until the supplier credit is recorded',
   await form.getByLabel('Credit note').fill('CN-12')
   await form.getByRole('button', { name: 'Save credit' }).click()
   await expect(form).toHaveCount(0)
-  expect(sent).toEqual([{ amount: 9.5, creditNote: 'CN-12' }])
+  expect(sent).toEqual([{ amount: '9.5', creditNote: 'CN-12' }])
 
   // Credited, nothing is owed any more.
   await expect(item).toHaveText('2041-09-05 10:00 · FLOUR 4 back from WH-A · Wet bags · by demo-owner · credited 9.5 · CN-12 · by demo-owner'

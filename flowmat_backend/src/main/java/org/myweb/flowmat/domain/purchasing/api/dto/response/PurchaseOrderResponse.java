@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.purchasing.api.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -60,10 +61,18 @@ public record PurchaseOrderResponse(String purchaseOrderId, String projectId, St
                          String reason, String returnedBy, OffsetDateTime returnedAt, String nonconformityId, String ncrNo,
                          boolean replacement, BigDecimal creditAmount, String creditNote, String creditedBy, OffsetDateTime creditedAt,
                          List<CreditChange> creditChanges) {
+        @JsonProperty("creditAmountText")
+        public String creditAmountText() {
+            return creditAmount == null ? null : creditAmount.toPlainString();
+        }
     }
 
     /** @param amount null when the credit was withdrawn */
     public record CreditChange(BigDecimal amount, String creditNote, String reason, String changedBy, OffsetDateTime changedAt) {
+        @JsonProperty("amountText")
+        public String amountText() {
+            return amount == null ? null : amount.toPlainString();
+        }
     }
 
     /**

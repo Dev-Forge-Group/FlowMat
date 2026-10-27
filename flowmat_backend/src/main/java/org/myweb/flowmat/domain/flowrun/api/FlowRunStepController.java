@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.flowrun.api;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -96,6 +97,10 @@ public class FlowRunStepController {
     /** A body that is not JSON, or a snapshot number past the safe limits, is the caller's mistake (500 before). */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> unreadable(HttpMessageNotReadableException exception) {
+        if (exception.getCause() instanceof JsonMappingException mapping
+            && mapping.getPath().stream().anyMatch(part -> "attemptNo".equals(part.getFieldName()))) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("attemptNo must be a whole number."));
+        }
         return ResponseEntity.badRequest().body(ApiResponse.error(
             "inputSnapshot and outputSnapshot must be valid JSON with numbers within the safe conversion limits."));
     }

@@ -1,5 +1,6 @@
 package org.myweb.flowmat;
 
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -177,8 +178,9 @@ class FlowRunStepIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(auth(get("/flow-runs/" + cancelRunId + "/steps/" + plannedStepId + "/attempts")))
             .andExpect(jsonPath("$.data.length()").value(0));
         mockMvc.perform(auth(get("/flow-runs/" + cancelRunId + "/events")))
-            .andExpect(jsonPath("$.data[6].eventType").value("run_cancelled"))
-            .andExpect(jsonPath("$.data[6].payload.reason").value("Operator stopped"));
+            .andExpect(jsonPath("$.data.length()").value(7))
+            .andExpect(jsonPath("$.data[?(@.eventType == 'run_cancelled')].payload.reason")
+                .value(contains("Operator stopped")));
         mockMvc.perform(auth(post("/flow-runs/" + cancelRunId + "/steps/" + runningStepId + "/retry")))
             .andExpect(status().isConflict());
         mockMvc.perform(auth(post("/flow-runs/" + cancelRunId + "/cancel")

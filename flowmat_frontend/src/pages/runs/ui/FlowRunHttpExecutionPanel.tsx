@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useHttpExecutions, useHttpExecutionMutations, useHttpRequestPreview, usePinnedHttpProfileVersion } from '../../../entities/connector/api/useHttpConnectors'
-import { canApplyHttpExecution, executionSummary, isUnresolved, savedRequestId } from '../../../entities/connector/model/httpExecutionState'
+import { blocksHttpTransmission, canApplyHttpExecution, executionSummary, isUnresolved, savedRequestId } from '../../../entities/connector/model/httpExecutionState'
 import type { PinnedHttpBinding } from '../../../entities/connector/model/types'
 import { useIsProjectOwner } from '../../../entities/project/api/useIsProjectOwner'
 import { httpClient } from '../../../shared/api/httpClient'
@@ -25,10 +25,12 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
     catch { return null }
   })
   const [confirmed, setConfirmed] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const rows = query.data ?? []
   const latestAttempt = attempts.data?.[attempts.data.length - 1]
-  const unresolved = rows.some(isUnresolved)
+  const blockedTransmission = rows.some(blocksHttpTransmission)
+  const unappliedTransmission = rows.some((row) => blocksHttpTransmission(row) && !isUnresolved(row))
   const saved = rows.find((row) => row.requestId === requestId)
   const resumeRequest = Boolean(requestId && !saved)
   const currentClaim = latestAttempt && latestAttempt.status === 'running'
@@ -36,9 +38,20 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
   const active = runStatus === 'running' && (stepStatus === 'planned' || stepStatus === 'running')
   const operation = profileVersion.data?.profileVersionId === binding.profileVersionId
     ? profileVersion.data.operations.find((candidate) => candidate.operationId === binding.operationId) : undefined
-  const maySend = owner && active && !unresolved && !currentClaim && !query.isPending && !query.isError
+  const maySend = owner && active && !blockedTransmission && !currentClaim && !query.isPending && !query.isError
     && !attempts.isPending && !attempts.isError && Boolean(operation) && !profileVersion.isError
-  const pending = execute.isPending || apply.isPending
+  const pending = execute.isPending || apply.isPending || refreshing
+  const checking = query.isFetching || attempts.isFetching || profileVersion.isFetching
+
+  async function refreshResults() {
+    if (pending || checking) return
+    setRefreshing(true)
+    try {
+      await Promise.all([query.refetch(), attempts.refetch(), profileVersion.refetch()])
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function send() {
     if (!maySend || !confirmed || pending) return
@@ -85,6 +98,7 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
           catch (error) { setProblem(errorMessage(error, 'Could not apply the saved result. No HTTP request was resent.')) }
         }}>{apply.isPending ? 'Applying...' : 'Apply saved result'}</button>}
     </article>)}
+    {unappliedTransmission && <p role="status">A previous HTTP transmission has not been applied. Another request is blocked; check the recorded result.</p>}
     {!owner && <p>Only the project owner can send an HTTP request or apply a saved result.</p>}
     {owner && maySend && <>
       {resumeRequest && <p>A previous browser request has no confirmed result. Retrying uses its saved request ID.</p>}
@@ -96,7 +110,7 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
         {execute.isPending ? 'Waiting for HTTP result...' : resumeRequest ? 'Retry same request' : rows.length ? 'Execute next attempt' : 'Execute HTTP request'}
       </button>
     </>}
-    <button type="button" disabled={query.isFetching || pending} onClick={() => { void query.refetch() }}>Refresh saved results</button>
+    <button type="button" disabled={checking || pending} onClick={() => { void refreshResults() }}>Refresh saved results</button>
     {problem && <p role="alert">{problem}</p>}
   </section>
 }

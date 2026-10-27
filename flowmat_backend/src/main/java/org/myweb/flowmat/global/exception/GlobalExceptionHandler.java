@@ -46,7 +46,7 @@ public class GlobalExceptionHandler {
     /** Two writers raced on a {@code @Version} entity; the loser should reload rather than see a 500. */
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(OptimisticLockingFailureException e) {
-        log.info("Optimistic lock conflict: {}", e.getMessage());
+        log.info("Optimistic lock conflict ({})", e.getClass().getSimpleName());
         return ResponseEntity
             .status(ErrorCode.CONFLICT.getStatus())
             .body(ApiResponse.error(ErrorCode.CONFLICT.getMessage()));
@@ -58,7 +58,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
-        log.info("Constraint conflict: {}", e.getMostSpecificCause().getMessage());
+        log.info("Constraint conflict ({})", e.getMostSpecificCause().getClass().getSimpleName());
         return ResponseEntity
             .status(ErrorCode.CONFLICT.getStatus())
             .body(ApiResponse.error("This conflicts with a change that was just saved. Reload and try again."));

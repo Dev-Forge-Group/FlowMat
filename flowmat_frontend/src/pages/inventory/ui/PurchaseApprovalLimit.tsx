@@ -16,12 +16,14 @@ export function PurchaseApprovalLimit({ projectId }: { projectId: string }) {
   const save = useSavePurchaseSettingsMutation(projectId)
   const owner = useIsProjectOwner(projectId)
   const [typed, setTyped] = useState<string | null>(null)
+  const [limitVersion, setLimitVersion] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const limit = query.data?.approvalLimit ?? null
   const steps = query.data?.approvalSteps ?? []
   const editors = (useProjectMembersQuery(projectId).data ?? [])
     .filter((member) => member.memberStatus === 'active' && member.projectRole === 'editor')
   const [rows, setRows] = useState<ApprovalStepRow[] | null>(null)
+  const [stepsVersion, setStepsVersion] = useState<number | null>(null)
   const [stepsError, setStepsError] = useState<string | null>(null)
 
   function setRow(index: number, patch: Partial<ApprovalStepRow>) {
@@ -34,7 +36,7 @@ export function PurchaseApprovalLimit({ projectId }: { projectId: string }) {
     const payload = approvalStepsPayload(rows)
     setStepsError(payload.error)
     if (!payload.steps) return
-    save.mutate({ approvalLimit: limit, approvalSteps: payload.steps, expectedVersion: query.data?.version ?? null },
+    save.mutate({ approvalLimit: limit, approvalSteps: payload.steps, expectedVersion: stepsVersion },
       { onSuccess: () => setRows(null) })
   }
 
@@ -46,16 +48,17 @@ export function PurchaseApprovalLimit({ projectId }: { projectId: string }) {
       return
     }
     setError(null)
-    save.mutate({ approvalLimit: value, expectedVersion: query.data?.version ?? null }, { onSuccess: () => setTyped(null) })
+    save.mutate({ approvalLimit: value, expectedVersion: limitVersion }, { onSuccess: () => setTyped(null) })
   }
 
   return <div role="group" aria-label="Purchase approval" style={{ fontSize: 12, margin: '6px 0' }}>
     <span className="inspector-hint">{approvalRulesText(limit, steps)}</span>
     {owner && typed === null && <button type="button" style={{ marginLeft: 6, fontSize: 11 }}
-      onClick={() => { setTyped(limit === null ? '' : String(limit)); save.reset() }}>Change approval limit</button>}
+      onClick={() => { setTyped(limit === null ? '' : String(limit)); setLimitVersion(query.data?.version ?? null); save.reset() }}>Change approval limit</button>}
     {owner && rows === null && typed === null && <button type="button" style={{ marginLeft: 6, fontSize: 11 }}
       onClick={() => {
         setRows(steps.map((step) => ({ fromValue: String(step.fromValue), approverId: step.approverId })))
+        setStepsVersion(query.data?.version ?? null)
         setStepsError(null)
         save.reset()
       }}>Change approval steps</button>}

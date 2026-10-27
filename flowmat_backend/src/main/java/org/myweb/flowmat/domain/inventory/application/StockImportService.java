@@ -319,7 +319,8 @@ public class StockImportService implements StockReceiptCommand {
             problems.add(what + " is too large");
             return null;
         }
-        BigDecimal rounded = number.setScale(4, RoundingMode.HALF_UP);
+        BigDecimal rounded = number.abs().compareTo(new BigDecimal("0.00005")) < 0
+            ? BigDecimal.ZERO.setScale(4) : number.setScale(4, RoundingMode.HALF_UP);
         if (rounded.precision() - 4 > MAX_INTEGER_DIGITS) {
             problems.add(what + " is too large");
             return null;
