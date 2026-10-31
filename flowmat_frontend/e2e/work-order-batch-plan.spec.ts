@@ -40,7 +40,9 @@ test('ticked orders are planned in sequence and the drafts take their dates', as
       asked.push(request.postDataJSON())
       return ok(route, { from: '2030-01-06T15:00:00Z', lines: [
         { workOrderId: 'wo-2', workOrderNumber: 'WO-0002', workOrderStatus: 'draft',
-          suggestion: suggestion('wo-2', '2030-01-07T09:00:00+09:00', '2030-01-07T14:00:00+09:00', 5, []), problem: null },
+          suggestion: { ...suggestion('wo-2', '2030-01-07T09:00:00+09:00', '2030-01-07T14:00:00+09:00', 5, []),
+            schedule: [{ nodeId: 'p1', nodeName: 'Mix', userId: 'kim', from: '2030-01-07T09:00:00+09:00', to: '2030-01-07T14:00:00+09:00' }] },
+          problem: null },
         { workOrderId: 'wo-1', workOrderNumber: 'WO-0001', workOrderStatus: 'draft',
           suggestion: suggestion('wo-1', '2030-01-07T14:00:00+09:00', '2030-01-08T16:00:00+09:00', 10, ['WO-0002']), problem: null },
         { workOrderId: 'wo-3', workOrderNumber: 'WO-0003', workOrderStatus: 'approved',
@@ -86,7 +88,10 @@ test('ticked orders are planned in sequence and the drafts take their dates', as
   const lines = batch.getByRole('list', { name: 'Suggested dates' }).getByRole('listitem')
   await expect(lines).toHaveCount(4)
   expect(asked).toEqual([{ projectId: 'prj-e2e', workOrderIds: ['wo-2', 'wo-1', 'wo-3', 'wo-5'], from: '2030-01-06T15:00:00.000Z' }])
-  await expect(lines.nth(0)).toHaveText('WO-0002 Mon 2030-01-07 09:00 → Mon 2030-01-07 14:00 · needs 5 h')
+  await expect(lines.nth(0)).toContainText('WO-0002 Mon 2030-01-07 09:00 → Mon 2030-01-07 14:00 · needs 5 h')
+  // Who works on which process when (LB35), under its line.
+  await expect(lines.nth(0).getByRole('group', { name: 'Who works when for WO-0002' })).toHaveText('Mix: kim Mon 2030-01-07 09:00–14:00')
+  await expect(lines.nth(1).getByRole('group')).toHaveCount(0)
   await expect(lines.nth(1)).toHaveText('WO-0001 Mon 2030-01-07 14:00 → Tue 2030-01-08 16:00 · needs 10 h · after WO-0002')
   await expect(lines.nth(2)).toContainText('keeps its dates until the project owner reschedules it')
   await expect(lines.nth(3)).toHaveText('WO-0005 Set a target quantity first.')

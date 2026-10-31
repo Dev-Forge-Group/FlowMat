@@ -74,8 +74,8 @@ public class ItemDisposalCostService implements CatalogDisposalCostQuery {
         if (!"N".equals(item.getDeletedYn())) throw new BusinessException(ErrorCode.NOT_FOUND);
         BigDecimal cost = request.disposalCost();
         if (cost != null) {
-            BigDecimal normalized = cost.stripTrailingZeros();
-            if (cost.signum() < 0 || normalized.scale() > 4 || normalized.precision() - normalized.scale() > 10)
+            if (cost.signum() == 0) cost = BigDecimal.ZERO;
+            if (cost.signum() < 0 || (long) cost.precision() - cost.scale() > 10 || cost.stripTrailingZeros().scale() > 4)
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "disposalCost must be nonnegative, with at most 10 whole digits and 4 decimals.");
             cost = cost.setScale(4);
         }

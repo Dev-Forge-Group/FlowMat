@@ -17,6 +17,9 @@ public class InventoryCatalogReferences {
     private final CatalogUnitQuery units;
     private final CatalogItemRuleFactsQuery ruleFacts;
     public Optional<CatalogItemView> item(String id) { return catalog.findActiveItem(id); }
+    public Optional<CatalogItemView> lockItemForStock(String projectId, String itemId) {
+        return catalog.lockProjectItemForStock(projectId, itemId);
+    }
     public List<CatalogItemView> items(Collection<String> ids) { return List.copyOf(catalog.findItems(ids).values()); }
     public List<CatalogItemView> projectItems(String id) { return catalog.findProjectItems(id); }
     public Optional<Map<String,Object>> itemRuleFacts(String id) { return ruleFacts.findActiveItem(id); }

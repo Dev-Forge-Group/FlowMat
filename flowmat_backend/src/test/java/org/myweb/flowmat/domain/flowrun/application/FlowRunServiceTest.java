@@ -56,7 +56,8 @@ class FlowRunServiceTest {
     void setUp() {
         service = new FlowRunService(runRepository, stepRepository, eventRecorder, workflowQuery,
             accessService, workflowAccess, idGenerator, objectMapper,
-            new FlowRunTermination(runRepository, stepRepository, attemptRepository, eventRecorder));
+            new FlowRunTermination(runRepository, stepRepository, attemptRepository, eventRecorder,
+                new FlowRunHttpInFlightRequests()));
     }
 
     @Test

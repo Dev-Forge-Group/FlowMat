@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { uploadInstructionAttachment, downloadInstructionAttachment, readAttachments } from './instructionAttachments'
 const auth=vi.hoisted(()=>({ getAccess:vi.fn(()=> 'test-access'), refresh:vi.fn() }))
-vi.mock('../../auth/lib/authSession',()=>({ tokenStorage:{getAccess:auth.getAccess}, refreshAccessToken:auth.refresh }))
+vi.mock('../../auth/lib/authSession',()=>({ tokenStorage:{getAccess:auth.getAccess,getSessionVersion:()=>0}, refreshAccessToken:auth.refresh }))
 const id='00000000-0000-4000-8000-000000000001', instructionId='instruction'
 const row={attachmentId:id,instructionId,fileName:'Guard.txt',contentType:'text/plain',sizeBytes:5,sha256:'a'.repeat(64),createdBy:'owner',createdAt:'2026-10-09T00:00:00Z'}
 const envelope=(data:unknown,status=200)=>new Response(JSON.stringify({success:status===200,data,message:'storage unavailable'}),{status,headers:{'Content-Type':'application/json'}})

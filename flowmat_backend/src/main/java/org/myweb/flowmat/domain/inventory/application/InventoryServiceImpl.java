@@ -61,6 +61,17 @@ public class InventoryServiceImpl implements InventoryService {
         projectAccessService.requireProjectWriteAccess(request.projectId());
         CatalogItemView item = findActiveItem(request.itemId());
         validateSameProject(request.projectId(), item.projectId());
+        // Resolve and lock the destination before the item row, so a waiting receipt does not block item changes.
+        String location = trimToNull(request.location());
+        if (location != null) {
+            location = storageLocationService.resolveForStock(item.projectId(), location);
+        }
+        String lotId = trimToNull(request.lotId());
+        if (lotId != null) {
+            inventoryRepository.lockStockPlace(item.projectId(), item.itemId(), lotId, location);
+        }
+        item = catalogReferences.lockItemForStock(item.projectId(), item.itemId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ItemStatusRule.requireActive(item.itemCode(), item.itemStatus(), "receive stock");
         evaluateRules(
             request.projectId(),
@@ -75,14 +86,6 @@ public class InventoryServiceImpl implements InventoryService {
             )
         );
 
-        // A project with a location list takes new stock only at an active listed place (docs/domain/storage-location.md).
-        String location = trimToNull(request.location());
-        if (location != null) {
-            location = storageLocationService.resolveForStock(item.projectId(), location);
-        }
-
-        // LOT-tracked items hold stock per LOT; everything else never names one.
-        String lotId = trimToNull(request.lotId());
         boolean awaitingChecks = false;
         if ("Y".equals(item.lotManageYn())) {
             if (lotId == null) {
@@ -91,9 +94,7 @@ public class InventoryServiceImpl implements InventoryService {
             }
             LotMaster lot = lotService.requireLotForStock(lotId, item.projectId(), item.itemId());
             awaitingChecks = LotStatus.INSPECTION_PENDING.code().equals(lot.getLotStatus());
-            // One stock record per item + location + LOT (V17 unique index); say so instead of a bare conflict. Taking turns
-            // with anything else creating that record (another Add Stock, a transfer) makes the check hold until commit.
-            inventoryRepository.lockStockPlace(item.projectId(), item.itemId(), lotId, location);
+            // The stock-place lock above keeps this V17 uniqueness check valid until commit.
             if (inventoryRepository.existsLotStockAt(item.projectId(), item.itemId(), lotId, location)) {
                 throw new BusinessException(ErrorCode.CONFLICT,
                     "LOT " + lot.getLotNo() + " already has a stock record"
@@ -183,9 +184,11 @@ public class InventoryServiceImpl implements InventoryService {
         }
         if (inventory.getLotId() != null) {
             lotMasterRepository.findById(inventory.getLotId())
-                .filter(lot -> LotStatus.CLOSED.code().equals(lot.getLotStatus()))
                 .ifPresent(lot -> {
-                    throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.getLotNo() + " is closed.");
+                    inventoryCommandService.lockLotForStock(lot);
+                    if (LotStatus.CLOSED.code().equals(lot.getLotStatus())) {
+                        throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.getLotNo() + " is closed.");
+                    }
                 });
         }
         applyQuantities(inventory, request);

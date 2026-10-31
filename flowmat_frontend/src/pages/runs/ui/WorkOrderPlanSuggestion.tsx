@@ -5,7 +5,7 @@ import { useWorkOrderPlanSuggestionQuery } from '../../../entities/production/ap
 import { useSaveWorkOrderMutation } from '../../../entities/production/api/useWorkOrders'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { WorkOrderDto } from '../../../shared/types/api'
-import { defaultPlanFrom, planInput, planSummary } from '../model/workOrderPlanModel'
+import { defaultPlanFrom, planInput, planSchedule, planSummary } from '../model/workOrderPlanModel'
 
 /**
  * Suggests planned dates from the assigned equipment's shifts, downtime, changeover and the orders already planned on it
@@ -52,6 +52,9 @@ export function WorkOrderPlanSuggestion({ order, projectId }: { order: WorkOrder
         {suggestion.isFetching ? 'Suggesting...' : 'Suggest dates'}
       </button>
       {plan && <span role="status">{planSummary(plan)}</span>}
+      {plan && planSchedule(plan).length > 0 && <ul aria-label="Who works when" style={{ margin: '4px 0', paddingLeft: 18, fontSize: 12 }}>
+        {planSchedule(plan).map((line) => <li key={line}>{line}</li>)}
+      </ul>}
       {plan && (order.workOrderStatus === 'draft'
         ? <button type="button" onClick={apply} disabled={save.isPending}>{save.isPending ? 'Saving...' : 'Use these dates'}</button>
         : <span className="inspector-hint">Only a draft's planned dates can change.</span>)}

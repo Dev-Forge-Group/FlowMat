@@ -1,8 +1,11 @@
 package org.myweb.flowmat.domain.catalog.application;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +53,7 @@ public class ItemImportService {
     private final StockQuery stockQuery;
     private final ItemService itemService;
     private final ProjectAccessService projectAccessService;
+    private final EntityManager entities;
 
     /** A checked row: a create, an update of {@code itemId}, or neither when nothing changes. */
     private record Plan(ItemCreateRequest create, String itemId, ItemUpdateRequest update) {
@@ -69,8 +73,17 @@ public class ItemImportService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Import at most " + MAX_ROWS + " items at a time.");
         }
 
-        Map<String, List<Item>> existing = itemRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtAsc(projectId, NOT_DELETED)
-            .stream()
+        List<Item> loaded = itemRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtAsc(projectId, NOT_DELETED);
+        if (!request.dryRun()) {
+            Set<String> requestedCodes = rows.stream().map(row -> trimToNull(row.itemCode())).collect(Collectors.toSet());
+            // Refresh before filling blank cells, in a stable lock order for overlapping imports.
+            loaded.stream()
+                .filter(item -> requestedCodes.contains(item.getItemCode()))
+                .sorted(Comparator.comparing(Item::getItemId))
+                .forEach(item -> entities.refresh(item, LockModeType.PESSIMISTIC_WRITE));
+        }
+        Map<String, List<Item>> existing = loaded.stream()
+            .filter(item -> NOT_DELETED.equals(item.getDeletedYn()))
             .collect(Collectors.groupingBy(Item::getItemCode));
         Map<String, UnitMaster> units = unitMasterRepository.findAllByActiveYnOrderByUnitTypeAscUnitCodeAsc("Y").stream()
             .collect(Collectors.toMap(unit -> unit.getUnitCode().toLowerCase(Locale.ROOT), Function.identity(), (first, second) -> first));

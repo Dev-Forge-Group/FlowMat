@@ -105,6 +105,9 @@ public class QualityServiceImpl implements QualityService {
             }
             request = InspectionStandardService.applyTo(standard, request);
         }
+        BigDecimal measuredValue = QualityNumbers.requireStorable(request.measuredValue(), "measuredValue");
+        BigDecimal standardMin = QualityNumbers.requireStorable(request.standardMin(), "standardMin");
+        BigDecimal standardMax = QualityNumbers.requireStorable(request.standardMax(), "standardMax");
         String result = decideResult(request);
         boolean quarantine = Boolean.TRUE.equals(request.quarantineLot());
         if (quarantine && !QualityInspection.FAIL.equals(result)) {
@@ -122,9 +125,9 @@ public class QualityServiceImpl implements QualityService {
         inspection.setLotId(target.lot() == null ? null : target.lot().lotId());
         inspection.setInspectionType(request.inspectionType().trim());
         inspection.setResultStatus(result);
-        inspection.setMeasuredValue(request.measuredValue());
-        inspection.setStandardMin(request.standardMin());
-        inspection.setStandardMax(request.standardMax());
+        inspection.setMeasuredValue(measuredValue);
+        inspection.setStandardMin(standardMin);
+        inspection.setStandardMax(standardMax);
         inspection.setUnit(trimToNull(request.unit()));
         inspection.setNote(trimToNull(request.note()));
         inspection.setInspectedBy(actor);
@@ -181,7 +184,8 @@ public class QualityServiceImpl implements QualityService {
         if (target.item() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Pick the item or LOT the defect was found in.");
         }
-        if (request.quantity() == null || request.quantity().signum() <= 0) {
+        BigDecimal quantity = QualityNumbers.requireStorable(request.quantity(), "quantity");
+        if (quantity == null || quantity.signum() <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The defective quantity must be more than 0.");
         }
         String severity = trimToNull(request.severity()) == null ? "minor" : request.severity().trim().toLowerCase(Locale.ROOT);
@@ -198,7 +202,7 @@ public class QualityServiceImpl implements QualityService {
         defect.setItemId(target.item().itemId());
         defect.setLotId(target.lot() == null ? null : target.lot().lotId());
         defect.setDefectType(request.defectType().trim());
-        defect.setQuantity(request.quantity());
+        defect.setQuantity(quantity);
         defect.setSeverity(severity);
         defect.setReason(trimToNull(request.reason()));
         defect.setResolvedYn("N");

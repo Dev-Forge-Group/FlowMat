@@ -54,7 +54,8 @@ class FlowRunTerminationTest {
 
     @BeforeEach
     void setUp() {
-        termination = new FlowRunTermination(runRepository, stepRepository, attemptRepository, eventRecorder);
+        termination = new FlowRunTermination(runRepository, stepRepository, attemptRepository, eventRecorder,
+            new FlowRunHttpInFlightRequests());
     }
 
     @ParameterizedTest

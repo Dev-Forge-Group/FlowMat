@@ -85,6 +85,11 @@ class WorkflowRevisionComparisonIntegrationTest extends IntegrationTestSupport {
         JsonNode capacity = changes(all).stream().filter(x -> x.path("path").asText().equals("/capacity")).findFirst().orElseThrow();
         assertEquals(0, new BigDecimal("9007199254740993.123456789").compareTo(capacity.path("before").decimalValue()));
         assertEquals(0, new BigDecimal("9007199254740993.123456790").compareTo(capacity.path("after").decimalValue()));
+        assertTrue(capacity.path("beforeJson").isTextual());
+        assertTrue(capacity.path("afterJson").isTextual());
+        assertEquals("9007199254740993.123456789", capacity.path("beforeJson").textValue());
+        assertEquals(0, new BigDecimal("9007199254740993.123456790")
+            .compareTo(new BigDecimal(capacity.path("afterJson").textValue())));
         List<JsonNode> paged = new ArrayList<>();
         int offset = 0;
         do {

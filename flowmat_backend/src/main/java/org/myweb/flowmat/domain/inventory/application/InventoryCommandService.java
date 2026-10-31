@@ -1,10 +1,15 @@
 package org.myweb.flowmat.domain.inventory.application;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +49,7 @@ public class InventoryCommandService {
     private static final String AVAILABLE = "available";
     private static final String NOT_DELETED = "N";
 
+    private final EntityManager entities;
     private final InventoryRepository inventoryRepository;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
     private final InventoryTransactionRepository inventoryTransactionRepository;
@@ -64,6 +70,10 @@ public class InventoryCommandService {
 
         if (before.getLotId() != null) {
             LotMaster lot = lotMasterRepository.findById(before.getLotId()).orElse(null);
+            if (lot != null) {
+                if (type.changesStatusOnly()) lockLot(lot);
+                else lockLotForStock(lot);
+            }
             if (lot != null && "closed".equals(lot.getLotStatus())) {
                 throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.getLotNo() + " is closed.");
             }
@@ -213,6 +223,10 @@ public class InventoryCommandService {
     static String lotStatusFor(List<Inventory> rows) {
         BigDecimal onHand = rows.stream().map(row -> zeroIfNull(row.getQuantity())).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal reserved = rows.stream().map(row -> zeroIfNull(row.getReservedQuantity())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return lotStatusFor(onHand, reserved);
+    }
+
+    static String lotStatusFor(BigDecimal onHand, BigDecimal reserved) {
         return onHand.signum() == 0 ? "consumed" : reserved.signum() > 0 ? "reserved" : AVAILABLE;
     }
 
@@ -322,8 +336,11 @@ public class InventoryCommandService {
      */
     @Transactional
     public String releaseInspection(String lotId, String actorUserId) {
+        lockLotExclusively(lotId);
         LotMaster lot = lotMasterRepository.findForUpdate(lotId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "LOT does not exist."));
+        // The caller may have loaded this LOT before a concurrent failed inspection committed.
+        entities.refresh(lot);
         if (!INSPECTION_PENDING.equals(lot.getLotStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.getLotNo() + " is " + lot.getLotStatus()
                 + ", not waiting for its receipt checks.");
@@ -340,7 +357,7 @@ public class InventoryCommandService {
         List<Inventory> stock = inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED);
         LotMaster current = lotMasterRepository.findById(lotId).orElseThrow();
         current.setLotStatus(stock.isEmpty() ? AVAILABLE : lotStatusFor(stock));
-        lotMasterRepository.save(current);
+        lotMasterRepository.saveAndFlush(current);
         return current.getLotStatus();
     }
 
@@ -351,13 +368,45 @@ public class InventoryCommandService {
     @Transactional
     public void holdForReceiptChecks(String lotId, String lotNo, String actorUserId) {
         OffsetDateTime now = OffsetDateTime.now();
-        for (Inventory row : inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED)) {
-            if (!QUARANTINED.equals(row.getInventoryStatus())) {
-                inventoryRepository.updateStatus(row.getInventoryId(), QUARANTINED, now);
-                record(findActiveInventory(row.getInventoryId()), InventoryTransactionType.QUARANTINE, BigDecimal.ZERO, BigDecimal.ZERO,
-                    LOT_REOPEN, lotId, "Held for the receipt checks of reopened LOT " + lotNo, null, actorUserId);
-            }
+        for (String inventoryId : inventoryRepository.findInventoryIdsToHoldForLot(lotId)) {
+            inventoryRepository.updateStatus(inventoryId, QUARANTINED, now);
+            record(findActiveInventory(inventoryId), InventoryTransactionType.QUARANTINE, BigDecimal.ZERO, BigDecimal.ZERO,
+                LOT_REOPEN, lotId, "Held for the receipt checks of reopened LOT " + lotNo, null, actorUserId);
         }
+    }
+
+    /** Quantity writers may run together, while closing, reopening and quarantine exclude them. */
+    void lockLotForStock(LotMaster lot) {
+        if (!lotMasterRepository.tryStockLifecycleLock(lot.getLotId())) throw busyLot();
+        refreshLot(lot, false);
+    }
+
+    void lockLot(LotMaster lot) {
+        lockLotExclusively(lot.getLotId());
+        refreshLot(lot, true);
+    }
+
+    private void lockLotExclusively(String lotId) {
+        if (!lotMasterRepository.tryExclusiveLifecycleLock(lotId)) throw busyLot();
+    }
+
+    private void refreshLot(LotMaster lot, boolean exclusive) {
+        LockModeType held = entities.getLockMode(lot);
+        // A lifecycle operation may already have unsaved edits in this same persistence context.
+        if (held == LockModeType.PESSIMISTIC_WRITE || held == LockModeType.PESSIMISTIC_FORCE_INCREMENT) return;
+        try {
+            if (exclusive) {
+                entities.refresh(lot, LockModeType.PESSIMISTIC_WRITE, Map.of("jakarta.persistence.lock.timeout", 0));
+            } else {
+                entities.refresh(lot);
+            }
+        } catch (LockTimeoutException | PessimisticLockException conflict) {
+            throw busyLot();
+        }
+    }
+
+    private BusinessException busyLot() {
+        return new BusinessException(ErrorCode.CONFLICT, "LOT is being changed. Reload and try again.");
     }
 
     private Inventory findActiveInventory(String inventoryId) {

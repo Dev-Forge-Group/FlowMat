@@ -188,11 +188,13 @@ public class InspectionStandardService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "stage must be one of " + String.join(", ", STAGES) + ".");
         }
         standard.setStage(stage);
-        if (request.standardMin() != null && request.standardMax() != null && request.standardMin().compareTo(request.standardMax()) > 0) {
+        BigDecimal standardMin = QualityNumbers.requireStorable(request.standardMin(), "standardMin");
+        BigDecimal standardMax = QualityNumbers.requireStorable(request.standardMax(), "standardMax");
+        if (standardMin != null && standardMax != null && standardMin.compareTo(standardMax) > 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The lower limit is above the upper limit.");
         }
-        standard.setStandardMin(request.standardMin());
-        standard.setStandardMax(request.standardMax());
+        standard.setStandardMin(standardMin);
+        standard.setStandardMax(standardMax);
         standard.setUnit(trimToNull(request.unit()));
         standard.setRequiredYn(Boolean.TRUE.equals(request.required()) ? "Y" : "N");
         standard.setNote(trimToNull(request.note()));

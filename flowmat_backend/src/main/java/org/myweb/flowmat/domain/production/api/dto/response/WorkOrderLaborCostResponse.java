@@ -8,5 +8,5 @@ import java.util.List;
  * (docs/architecture/adr/ADR-025-worker-labor-cost.md).
  */
 public record WorkOrderLaborCostResponse(String workOrderId, int runs, int workedMinutes, BigDecimal cost, boolean costComplete,
-                                         List<RunLaborCostResponse.Person> people) {
+                                         List<RunLaborCostResponse.Person> people, BigDecimal premiumCost, boolean premiumsComplete) {
 }

@@ -43,12 +43,13 @@ export function useWorkerLaborRatesQuery(projectId: string, userId: string, enab
   })
 }
 
-/** Each change answers with the rates; labor cost is read again. */
+/** Each change answers with the rates; labor cost and pay are read again. */
 export function useWorkerLaborRateMutations(projectId: string, userId: string) {
   const client = useQueryClient()
   const onSuccess = (rates: WorkerLaborRatesDto) => {
     client.setQueryData(key(projectId, userId), rates)
     void client.invalidateQueries({ queryKey: ['labor-cost'] })
+    void client.invalidateQueries({ queryKey: ['attendance-pay'] })
   }
   return {
     set: useMutation({

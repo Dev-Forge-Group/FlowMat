@@ -43,7 +43,7 @@ export function WorkerCalendarsPanel({ projectId }: { projectId: string }) {
   const [loadOpen, setLoadOpen] = useState(false)
 
   return (
-    <section aria-label="Workers" style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
+    <section aria-label="Workers" style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 18, minWidth: 0 }}>
       <h2 style={{ margin: 0 }}>Workers</h2>
       <p className="inspector-hint">When each person in this project works. Project holidays apply to everyone.</p>
       {query.isError && <p role="alert">{errorMessage(query.error, 'Failed to load the workers.')}</p>}
@@ -156,7 +156,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets,
     )
   }
   return (
-    <div style={{ fontSize: 12, padding: '4px 0 4px 12px', display: 'grid', gap: 8 }}>
+    <div style={{ fontSize: 12, padding: '4px 0 4px 12px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', minWidth: 0, gap: 8 }}>
       <div role="group" aria-label="Rota" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <label>Repeats every <select aria-label="Rota weeks" value={rotaWeeks} onChange={(event) => chooseWeeks(Number(event.target.value))}>
           {ROTA_WEEKS.map((weeks) => <option key={weeks} value={weeks}>{weeks === 1 ? '1 week' : `${weeks} weeks`}</option>)}
@@ -185,7 +185,7 @@ function WorkerCalendarEditor({ projectId, worker, today, editable, copyTargets,
           <button type="button" onClick={() => setRows((current) => current.filter((_, one) => one !== index))}>Remove shift</button>
         </div>
       ))}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button"
           onClick={() => setRows((current) => [...current,
             { shiftStart: '09:00', shiftEnd: '17:00', workDays: [1, 2, 3, 4, 5], rotaWeek: current[current.length - 1]?.rotaWeek ?? 1 }])}>

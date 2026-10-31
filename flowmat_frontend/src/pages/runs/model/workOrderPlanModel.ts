@@ -48,6 +48,23 @@ export function planSummary(plan: WorkOrderPlanSuggestionDto): string {
     + crewDelayNote(plan.waitedForCrew, plan.crewMovedPast) + crewNote(plan.crew)
 }
 
+/**
+ * Who works on which process when, for a step plan split among people (docs/domain/worker-calendar.md LB35): one line per process
+ * in the order they start, "Mix: kim Mon 2041-05-06 09:00–14:00, lee Mon 2041-05-06 09:00–10:00"; none otherwise.
+ */
+export function planSchedule(plan: Pick<WorkOrderPlanSuggestionDto, 'schedule'>): string[] {
+  const lines = new Map<string, { name: string; people: string[] }>()
+  for (const turn of plan.schedule ?? []) {
+    const start = localInput(new Date(turn.from))
+    const end = localInput(new Date(turn.to))
+    const span = `${planStamp(turn.from)}–${end.slice(0, 10) === start.slice(0, 10) ? end.slice(11) : planStamp(turn.to)}`
+    const line = lines.get(turn.nodeId) ?? { name: turn.nodeName ?? turn.nodeId, people: [] }
+    line.people.push(`${turn.userId} ${span}`)
+    lines.set(turn.nodeId, line)
+  }
+  return [...lines.values()].map((line) => `${line.name}: ${line.people.join(', ')}`)
+}
+
 /** Orders a batch can plan: drafts and approved orders with equipment (docs/domain/equipment-schedule.md P8, P12). */
 export function batchPlannable(orders: WorkOrderDto[]): WorkOrderDto[] {
   return orders.filter((order) => Boolean(order.equipmentId)

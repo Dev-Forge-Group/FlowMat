@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import javax.crypto.SecretKey;
 import lombok.Getter;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -28,6 +29,10 @@ public class JwtProvider {
     private static final String TYP_REFRESH = "refresh";
     private static final String TYP_OAUTH_SIGNUP = "oauth-signup";
     private static final String TYP_OAUTH_LINK = "oauth-link";
+    private static final String TYP_GUEST_SESSION = "guest-session";
+    private static final String CLAIM_GUEST_SESSION_VERIFIED = "guestSessionVerified";
+    private static final Pattern GUEST_SID = Pattern.compile("[0-9a-f]{32}");
+    private static final Pattern GUEST_SUBJECT = Pattern.compile("GUEST_[0-9a-f]{32}");
 
     private final SecretKey key;
 
@@ -81,6 +86,47 @@ public class JwtProvider {
             .id(UUID.randomUUID().toString())
             .issuedAt(new Date(now))
             .expiration(new Date(now + refreshExpiryMs))
+            .signWith(key, Jwts.SIG.HS256)
+            .compact();
+    }
+
+    public String generateGuestSessionToken(String sid, long expiryMs) {
+        if (sid == null || !GUEST_SID.matcher(sid).matches()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Guest session ID is invalid.");
+        }
+        long now = System.currentTimeMillis();
+        return Jwts.builder()
+            .subject(sid)
+            .claim(CLAIM_TYP, TYP_GUEST_SESSION)
+            .claim(CLAIM_ROLE, "guest")
+            .issuedAt(new Date(now))
+            .expiration(new Date(now + expiryMs))
+            .signWith(key, Jwts.SIG.HS256)
+            .compact();
+    }
+
+    public String resolveGuestSessionId(String token) {
+        Claims claims = parseClaimsQuietly(token);
+        if (claims == null || !TYP_GUEST_SESSION.equals(claims.get(CLAIM_TYP, String.class))
+                || !"guest".equals(claims.get(CLAIM_ROLE, String.class))) {
+            return null;
+        }
+        String sid = claims.getSubject();
+        return sid != null && GUEST_SID.matcher(sid).matches() ? sid : null;
+    }
+
+    public String generateGuestAccessToken(String userId, long expiryMs) {
+        if (userId == null || !GUEST_SUBJECT.matcher(userId).matches()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Guest user ID is invalid.");
+        }
+        long now = System.currentTimeMillis();
+        return Jwts.builder()
+            .subject(userId)
+            .claim(CLAIM_TYP, TYP_ACCESS)
+            .claim(CLAIM_ROLE, "guest")
+            .claim(CLAIM_GUEST_SESSION_VERIFIED, true)
+            .issuedAt(new Date(now))
+            .expiration(new Date(now + expiryMs))
             .signWith(key, Jwts.SIG.HS256)
             .compact();
     }
@@ -157,7 +203,7 @@ public class JwtProvider {
     }
 
     public boolean isAccessToken(String token) {
-        return TYP_ACCESS.equals(resolveTokenType(token));
+        return isTrustedAccessClaims(parseClaimsQuietly(token));
     }
 
     public boolean isRefreshToken(String token) {
@@ -166,7 +212,7 @@ public class JwtProvider {
 
     public Authentication getAuthentication(String token) {
         Claims claims = parseClaimsOrThrow(token);
-        if (!TYP_ACCESS.equals(claims.get(CLAIM_TYP, String.class))) {
+        if (!isTrustedAccessClaims(claims)) {
             throw new BusinessException(ErrorCode.TOKEN_TYPE_INVALID);
         }
         String userId = claims.getSubject();
@@ -177,6 +223,18 @@ public class JwtProvider {
             null,
             List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
         );
+    }
+
+    private boolean isTrustedAccessClaims(Claims claims) {
+        if (claims == null || !TYP_ACCESS.equals(claims.get(CLAIM_TYP, String.class))) {
+            return false;
+        }
+        if (!"guest".equals(normalizeRole(claims.get(CLAIM_ROLE, String.class)))) {
+            return true;
+        }
+        // Legacy guest access was minted from an unsigned, caller-selected cookie.
+        return Boolean.TRUE.equals(claims.get(CLAIM_GUEST_SESSION_VERIFIED))
+            && claims.getSubject() != null && GUEST_SUBJECT.matcher(claims.getSubject()).matches();
     }
 
     private Claims parseClaimsQuietly(String token) {

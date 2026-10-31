@@ -29,6 +29,9 @@ public class ProductionRunLabor {
     @Column(length = 500) private String note;
     /** The process step of the run it was worked on; null for the whole run (LB13, V98). */
     private String stepId;
+    /** When the worked time started and ended, both or neither (LB31, V132); null when only its minutes were recorded. */
+    private OffsetDateTime workedFrom;
+    private OffsetDateTime workedTo;
     private String recordedBy;
     private OffsetDateTime recordedAt;
     @JdbcTypeCode(SqlTypes.CHAR) private String cancelledYn;

@@ -12,13 +12,16 @@ import org.myweb.flowmat.global.util.WholeNumberDeserializer;
  * @param workedMinutes whole minutes, 1 to 10080 (7 days)
  * @param note          optional, at most 500 characters
  * @param stepId        a process step of the run it was worked on (LB13); the whole run when left out
+ * @param workedFrom    when it started, a date and time with an offset (LB31); given with {@code workedTo}, or neither
+ * @param workedTo      when it ended; with clock times {@code workedMinutes} may be left out (the whole minutes between) or be at
+ *                      most those minutes
  */
 public record RunLaborRequest(UUID requestId, String userId,
                               @JsonDeserialize(using = WholeNumberDeserializer.class) Integer workedMinutes, String note,
-                              String stepId) {
+                              String stepId, String workedFrom, String workedTo) {
 
     /** Worked time on the whole run, as callers sent it before V98. */
     public RunLaborRequest(UUID requestId, String userId, Integer workedMinutes, String note) {
-        this(requestId, userId, workedMinutes, note, null);
+        this(requestId, userId, workedMinutes, note, null, null, null);
     }
 }

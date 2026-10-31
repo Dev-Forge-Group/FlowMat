@@ -16,6 +16,9 @@ import { useProjectTimeZone } from '../../../entities/project/api/useProjectTime
 import { RunStatusBadge, formatQty } from './runDisplay'
 import { WorkOrdersPanel } from './WorkOrdersPanel'
 import { FlowRunsPanel } from './FlowRunsPanel'
+import { HttpExecutionAttentionPanel } from './HttpExecutionAttentionPanel'
+import { WorkflowRevisionComparisonPanel } from './WorkflowRevisionComparisonPanel'
+import { useCurrentUserQuery } from '../../../entities/auth/api/useCurrentUserQuery'
 
 const RUN_TYPES = ['actual', 'simulation']
 
@@ -26,9 +29,11 @@ export function RunsRoute() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
+  const me = useCurrentUserQuery()
+  const userId = !me.isError ? me.data?.userId ?? '' : ''
   const workflowsQuery = useWorkflowsQuery(projectId)
   const itemsQuery = useItemsQuery(projectId)
-  const workflows = workflowsQuery.data ?? []
+  const workflows = !workflowsQuery.isError ? workflowsQuery.data ?? [] : []
   const workflowId = searchParams.get('workflowId') ?? workflows[0]?.workflowId ?? ''
   const requestedView = searchParams.get('view')
   const view = requestedView === 'work-orders' || requestedView === 'flow-runs' ? requestedView : 'runs'
@@ -118,11 +123,12 @@ export function RunsRoute() {
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 1120, margin: '0 auto' }}>
+    <div style={{ padding: 32, width: '100%', minWidth: 0, maxWidth: 1120, boxSizing: 'border-box', margin: '0 auto' }}>
       <Link to="/" style={{ fontSize: 13, color: 'var(--accent)' }}>Back to home</Link>
       <h1>Production</h1>
 
-      <div role="tablist" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+      <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minWidth: 0,
+        borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
         {(['runs', 'flow-runs', 'work-orders'] as const).map((name) => (
           <button
             key={name}
@@ -145,13 +151,26 @@ export function RunsRoute() {
         ))}
       </div>
 
+      {view !== 'work-orders' && userId && !workflowsQuery.isError
+        && workflows.some((workflow) => workflow.workflowId === workflowId)
+        && revisionsQuery.isSuccess && !revisionsQuery.isError && (
+          <WorkflowRevisionComparisonPanel key={`${userId}:${projectId}:${workflowId}`}
+            userId={userId} projectId={projectId} workflowId={workflowId} revisions={revisions} />
+        )}
+
       {view === 'work-orders' && (
         <WorkOrdersPanel projectId={projectId} workflows={workflows} items={itemsQuery.data ?? []} />
       )}
 
       {view === 'flow-runs' && (
-        <FlowRunsPanel key={workflowId} projectId={projectId} workflowId={workflowId}
-          workflows={workflows} revisions={revisions} onSelectWorkflow={selectWorkflow} />
+        <>
+          <HttpExecutionAttentionPanel key={projectId} projectId={projectId} />
+          {!workflowsQuery.isPending && !workflowsQuery.isError && searchParams.has('workflowId')
+            && !workflows.some((workflow) => workflow.workflowId === workflowId)
+            ? <p role="alert">Requested workflow is unavailable.</p>
+            : <FlowRunsPanel key={`${projectId}:${workflowId}`} projectId={projectId} workflowId={workflowId}
+              workflows={workflows} revisions={revisions} onSelectWorkflow={selectWorkflow} />}
+        </>
       )}
 
       {view === 'runs' && workflowsQuery.isLoading && <p>Loading workflows...</p>}

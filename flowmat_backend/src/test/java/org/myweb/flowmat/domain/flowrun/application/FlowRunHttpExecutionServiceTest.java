@@ -10,6 +10,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.myweb.flowmat.domain.connector.application.publicapi.*;
 import org.myweb.flowmat.domain.flowrun.domain.entity.*;
 import org.myweb.flowmat.domain.flowrun.repository.*;
@@ -43,7 +45,7 @@ class FlowRunHttpExecutionServiceTest {
 
     @BeforeEach void setup() throws Exception {
         service = new FlowRunHttpExecutionService(runs, steps, attempts, executions, access, workflow, profiles,
-            mapping, gateway, stepService, ids, mapper, new TestTransactions());
+            mapping, gateway, stepService, ids, mapper, new TestTransactions(), new FlowRunHttpInFlightRequests());
         run = new FlowRun(); run.setFlowRunId("run"); run.setProjectId("project"); run.setWorkflowId("workflow");
         run.setWorkflowRevisionId("revision"); run.setStatus("running"); run.setRunType("actual"); run.setExecutionMode("graph");
         step = new FlowRunStep(); step.setStepId("step"); step.setFlowRunId("run"); step.setNodeId("node");
@@ -102,6 +104,28 @@ class FlowRunHttpExecutionServiceTest {
         assertThrows(BusinessException.class, () -> service.execute("run", "step", UUID.randomUUID()));
         verifyNoInteractions(stepService);
         verify(gateway, times(1)).execute(any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"cancelled", "failed"})
+    void uncertainResultAfterRunTerminationStaysUnknownAndLocallyLate(String terminalStatus) {
+        UUID request = UUID.randomUUID();
+        when(gateway.execute(any(), any())).thenAnswer(call -> {
+            run.setStatus(terminalStatus);
+            step.setStatus("cancelled");
+            attempt.setStatus("cancelled");
+            return new ConnectorHttpOutcome("OUTCOME_UNKNOWN", null, null, "CANCELLED", true);
+        });
+
+        var result = service.execute("run", "step", request);
+
+        assertEquals("OUTCOME_UNKNOWN", result.transportStatus());
+        assertEquals("LATE", result.applyStatus());
+        assertEquals("REMOTE_OUTCOME_UNKNOWN", result.errorCode());
+        assertNull(result.output());
+        assertEquals(result, service.execute("run", "step", request));
+        verify(gateway, times(1)).execute(any(), any());
+        verifyNoInteractions(stepService);
     }
 
     @Test void cancelledRunKeepsResponseEvidenceWithoutCompletingAnyAttempt() {

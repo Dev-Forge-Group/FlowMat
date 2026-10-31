@@ -40,9 +40,19 @@ public record WorkOrderPlanSuggestionResponse(
     BigDecimal efficiencyPercent,
     /** What is left of the step plan in worker minutes (docs/domain/worker-calendar.md LB25); null without a step plan. */
     Integer laborMinutes,
-    /** That shared by the crew with shifts at their shares, rounded up to 0.01 h; null when not known. */
-    BigDecimal laborHours
+    /** How long that takes the crew with shifts, each doing their share while they work (LB27); to 0.01 h up, null when not known. */
+    BigDecimal laborHours,
+    /** Who works on which process when, for a step plan split among people (docs/domain/worker-calendar.md LB35); empty otherwise. */
+    List<Turn> schedule
 ) {
+    /**
+     * One person's time on one process: from their first start on it to their last end.
+     *
+     * @param nodeName the process's name as planned
+     */
+    public record Turn(String nodeId, String nodeName, String userId, OffsetDateTime from, OffsetDateTime to) {
+    }
+
 
     public record CrewBooking(String workOrderNumber, List<String> userIds) {
     }

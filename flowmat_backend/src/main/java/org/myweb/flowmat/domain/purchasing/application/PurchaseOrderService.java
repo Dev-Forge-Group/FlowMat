@@ -811,7 +811,8 @@ public class PurchaseOrderService {
 
     private static ReceiptKey receiptKey(String lineId, BigDecimal quantity, String location, String lotNo) {
         return new ReceiptKey(lineId, quantity == null ? "" : quantity.stripTrailingZeros().toPlainString(),
-            location == null ? "" : location.trim(), lotNo == null ? "" : lotNo.trim());
+            location == null || location.isBlank() ? "" : location.trim(),
+            lotNo == null || lotNo.isBlank() ? "" : lotNo.trim());
     }
 
     private PurchaseOrderResponse response(PurchaseOrder order) {

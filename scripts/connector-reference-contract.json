@@ -1,0 +1,390 @@
+{
+  "contractVersion": "flowmat-reference-v1",
+  "purpose": "Controlled local reference contract for FlowMat File -> Transform -> HTTP -> Data acceptance.",
+  "scope": {
+    "controlledReferenceApi": true,
+    "externalServiceAccepted": false,
+    "qtSourceRefactored": false,
+    "businessEffects": "Validation and bounded process-local memory only. No provisioning, filesystem write or downstream service call.",
+    "fileAndTransform": "Existing manually reported File/Transform steps with synthetic JSON fixtures. This contract does not implement file upload, a file reader or automatic transformation."
+  },
+  "operation": {
+    "method": "POST",
+    "path": "/v1/records/validate",
+    "requestContentType": "application/json",
+    "optionalCharset": "utf-8",
+    "requestContentEncoding": [
+      "identity"
+    ],
+    "responseContentType": "application/json",
+    "requestBodyLimitBytes": 16384,
+    "successStatuses": [
+      200
+    ],
+    "completion": "synchronous",
+    "asynchronous202": false,
+    "polling": false,
+    "automaticRetry": false,
+    "queryStringAllowed": false
+  },
+  "authentication": {
+    "kind": "BEARER",
+    "tokenEnvironment": "FLOWMAT_REFERENCE_TOKEN",
+    "minimumTokenLength": 32,
+    "maximumTokenLength": 4096,
+    "tokenPattern": "^[A-Za-z0-9._~+/-]+=*$",
+    "credentialAlias": "setup-reference",
+    "credentialValuesInContract": false,
+    "credentialLogging": false
+  },
+  "requestSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schemaVersion",
+      "requestId",
+      "record"
+    ],
+    "properties": {
+      "schemaVersion": {
+        "const": 1
+      },
+      "requestId": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "record": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "recordId",
+          "observedAt",
+          "value",
+          "unit",
+          "note"
+        ],
+        "properties": {
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+            "calendarValidation": "Must equal Date.toISOString after parsing; invalid calendar dates are rejected."
+          },
+          "value": {
+            "type": "string",
+            "pattern": "^[+-]?(?:0|[1-9][0-9]{0,19})(?:\\.[0-9]{1,9})?$",
+            "precision": "At most 20 integer digits and 9 fractional digits; preserve the string spelling without numeric conversion."
+          },
+          "unit": {
+            "enum": [
+              "records",
+              "samples",
+              "m",
+              "ms"
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+            "lengthUnit": "Unicode code points"
+          }
+        }
+      }
+    }
+  },
+  "requestValidation": {
+    "utf8": "Fatal decoding; invalid UTF-8 is rejected.",
+    "requiredKeys": "All keys are required, including note with an explicit null when there is no note.",
+    "unknownKeys": "Rejected at both root and record levels.",
+    "negativeZero": "Allowed and retained as a string.",
+    "controlCharacters": "U+0000-U+001F, U+007F-U+009F, U+2028 and U+2029 are rejected in note.",
+    "unicodeScalars": "Reject lone high or low surrogates in note. Valid paired Unicode characters are preserved and counted as one.",
+    "schemaVersionToken": "Use the exact JSON integer token 1. Fractional, decimal and exponent spellings (including 1.0 and 1e0) are rejected before any provider operation; native JSON primitive source prevents rounding a fractional version to 1."
+  },
+  "responseShape": {
+    "rootKeys": [
+      "schemaVersion",
+      "requestId",
+      "result",
+      "provider"
+    ],
+    "schemaVersion": 1,
+    "requestId": "Canonical lower-case UUID.",
+    "result": "The validated record fields unchanged, plus accepted:true.",
+    "provider": {
+      "contractVersion": "flowmat-reference-v1"
+    }
+  },
+  "errors": {
+    "bodyShape": {
+      "error": "FIXED_CODE"
+    },
+    "codesByStatus": {
+      "400": "INVALID_REQUEST",
+      "401": "UNAUTHORIZED",
+      "404": "NOT_FOUND",
+      "405": "METHOD_NOT_ALLOWED",
+      "409": "REQUEST_ID_CONFLICT",
+      "413": "BODY_TOO_LARGE",
+      "415": "UNSUPPORTED_MEDIA_TYPE",
+      "503": "CAPACITY_EXCEEDED"
+    },
+    "unsupportedContentEncodingCode": "UNSUPPORTED_MEDIA_TYPE",
+    "inputEcho": false,
+    "authorizationEcho": false,
+    "exceptionText": false
+  },
+  "idempotency": {
+    "key": "requestId",
+    "uuidCaseSensitive": false,
+    "sameContent": "Validated field values are identical, independent of object key order and JSON whitespace. Decimal string spelling is part of the content.",
+    "sameContentStatus": 200,
+    "sameContentResponse": "Return the identical cached response.",
+    "changedContentStatus": 409,
+    "defaultMaximumKeys": 1000,
+    "maximumConfigurableKeys": 1000,
+    "atCapacity": "Existing requests remain replayable; a new requestId returns 503.",
+    "ttl": null,
+    "automaticEviction": false,
+    "restart": "Cache is lost on process restart. This reference does not promise durable provider idempotency.",
+    "flowMatExecutionRequestId": "A separate idempotency identifier passed to FlowMat /execute. It is not injected into this payload; request mapping reads attrs.referenceRequestId.",
+    "counts": [
+      "requests",
+      "processed",
+      "replayed"
+    ]
+  },
+  "binding": {
+    "requestMapping": {
+      "object": {
+        "schemaVersion": {
+          "literal": 1
+        },
+        "requestId": {
+          "from": "/attrs/referenceRequestId"
+        },
+        "record": {
+          "object": {
+            "recordId": {
+              "from": "/attrs/recordId"
+            },
+            "observedAt": {
+              "from": "/attrs/observedAt"
+            },
+            "value": {
+              "from": "/attrs/value"
+            },
+            "unit": {
+              "from": "/attrs/unit"
+            },
+            "note": {
+              "from": "/attrs/note"
+            }
+          }
+        }
+      }
+    },
+    "responseMapping": {
+      "object": {
+        "attrs": {
+          "from": "/result"
+        }
+      }
+    }
+  },
+  "profileTemplate": {
+    "name": "FlowMat controlled reference API",
+    "baseOrigin": "${REFERENCE_ORIGIN}",
+    "credentialAlias": "setup-reference",
+    "enabled": true,
+    "operations": [
+      {
+        "operationId": "validate-record",
+        "method": "POST",
+        "relativePath": "/v1/records/validate",
+        "successStatuses": [
+          200
+        ]
+      }
+    ]
+  },
+  "samples": {
+    "request": {
+      "schemaVersion": 1,
+      "requestId": "11111111-2222-4333-8444-555555555555",
+      "record": {
+        "recordId": "setup-record-001",
+        "observedAt": "2026-10-28T01:02:03.000Z",
+        "value": "9007199254740993.123456789",
+        "unit": "records",
+        "note": null
+      }
+    },
+    "response": {
+      "schemaVersion": 1,
+      "requestId": "11111111-2222-4333-8444-555555555555",
+      "result": {
+        "recordId": "setup-record-001",
+        "observedAt": "2026-10-28T01:02:03.000Z",
+        "value": "9007199254740993.123456789",
+        "unit": "records",
+        "note": null,
+        "accepted": true
+      },
+      "provider": {
+        "contractVersion": "flowmat-reference-v1"
+      }
+    },
+    "inputPayload": {
+      "attrs": {
+        "referenceRequestId": "11111111-2222-4333-8444-555555555555",
+        "recordId": "setup-record-001",
+        "observedAt": "2026-10-28T01:02:03.000Z",
+        "value": "9007199254740993.123456789",
+        "unit": "records",
+        "note": null
+      }
+    },
+    "outputPayload": {
+      "attrs": {
+        "recordId": "setup-record-001",
+        "observedAt": "2026-10-28T01:02:03.000Z",
+        "value": "9007199254740993.123456789",
+        "unit": "records",
+        "note": null,
+        "accepted": true
+      }
+    }
+  },
+  "portContract": {
+    "resourceType": "data",
+    "itemId": null,
+    "schemaJson": {
+      "type": "object",
+      "properties": {
+        "recordId": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "accepted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recordId",
+        "observedAt",
+        "value",
+        "unit",
+        "accepted"
+      ]
+    },
+    "validationRule": "attrs.accepted = true",
+    "nullableNote": "Leave note undeclared and optional in the existing FlowMat port schema; the reference API validates null|string. Existing PortSchema does not support nullable string properties.",
+    "appliesTo": [
+      "HTTP process output port",
+      "Downstream Data process input port"
+    ],
+    "inputSide": "File/Transform inputs do not have accepted yet. Validate them through requestSchema and requestMapping; do not attach the accepted=true response port contract to those inputs."
+  },
+  "deploymentTemplate": {
+    "flowmat.connector.enabled": true,
+    "flowmat.connector.allowed-origins": [
+      "${REFERENCE_ORIGIN}"
+    ],
+    "flowmat.connector.private-cidrs": [
+      "${OWNED_REFERENCE_IPV4}/32"
+    ],
+    "flowmat.connector.allow-private-http": true,
+    "flowmat.connector.credentials.setup-reference.project-id": "${REFERENCE_PROJECT_ID}",
+    "flowmat.connector.credentials.setup-reference.kind": "BEARER",
+    "flowmat.connector.credentials.setup-reference.token-environment": "FLOWMAT_REFERENCE_TOKEN"
+  },
+  "bindPolicy": {
+    "defaultHost": "127.0.0.1",
+    "defaultPort": 0,
+    "allowedHosts": [
+      "Canonical loopback IPv4 literal",
+      "A single RFC1918 IPv4 address assigned to a local network interface"
+    ],
+    "forbiddenHosts": [
+      "Wildcard",
+      "Public IP",
+      "DNS name",
+      "Metadata/link-local",
+      "RFC1918 address not owned by this machine"
+    ],
+    "productionLoopback": "Remains blocked by ConnectorTargetPolicy, even when listed in allowed-origins or private-cidrs.",
+    "strictConnectorAcceptance": "Requires the owned RFC1918 interface, its exact origin and /32. If none is available, protocol tests can pass but strict connector acceptance remains unverified.",
+    "productionPolicyBypass": false
+  },
+  "permissionMatrix": {
+    "profileManage": [
+      "owner"
+    ],
+    "bindingManage": [
+      "owner",
+      "editor"
+    ],
+    "mappingPreview": [
+      "owner",
+      "editor"
+    ],
+    "sendExternalRequest": [
+      "owner"
+    ],
+    "applySavedResult": [
+      "owner"
+    ],
+    "readSavedResult": [
+      "owner",
+      "editor",
+      "viewer"
+    ],
+    "nonmember": "403 without provider traffic",
+    "anonymous": "401 without provider traffic",
+    "organizationMembershipOnly": "Does not grant project access."
+  },
+  "acceptanceChecks": [
+    "Preview sends no provider request and resolves no credential value.",
+    "Owner execution records one committed claim before provider traffic.",
+    "The response result is copied to output attrs and the downstream data step input unchanged.",
+    "The decimal string and UTC millisecond timestamp are unchanged.",
+    "Explicit note:null is not changed to missing.",
+    "Replaying the same FlowMat execute requestId does not increase provider traffic.",
+    "Provider requestId replay is a separate bounded in-memory contract.",
+    "Viewer/editor execution is denied before provider traffic.",
+    "Unregistered origins and loopback targets remain blocked by the production policy.",
+    "No item, inventory, LOT, BOM, work order or production run is created.",
+    "No synthetic token or Authorization value appears in output, events, errors, counts or console logs."
+  ],
+  "cleanup": {
+    "provider": "Close only the owned server; its cache is process-local and is discarded.",
+    "flowMat": "Use a new disposable project and isolated database; delete only resources created by this acceptance run.",
+    "processes": "Track the owned process handle/PID and command. Never stop unrelated servers or containers.",
+    "records": "No external service cleanup is required because no external service is called."
+  },
+  "runtime": {
+    "nodeMinimumVersion": "22.22.3",
+    "dependencies": [],
+    "nativeJsonNumberSourceRequired": true
+  }
+}

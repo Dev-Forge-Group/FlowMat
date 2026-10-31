@@ -5,12 +5,12 @@ import {
   useWorkflowStepsQuery,
 } from '../../../entities/production/api/useWorkOrderLaborComparison'
 import { errorMessage } from '../../../shared/lib/errorMessage'
-import { comparisonLine, comparisonSteps, comparisonTotal, stepPlanPayload, stepPlanRows, stepPlanTotal } from '../model/laborModel'
+import { comparisonLine, comparisonSteps, comparisonTotal, splitTotal, stepPlanPayload, stepPlanRows, stepPlanTotal } from '../model/laborModel'
 
 /**
  * The work order's planned crew time beside the time its runs recorded for each person (docs/domain/worker-calendar.md
- * LB6-LB7), and by process beside its step plan, which an open order on a workflow sets (LB18, LB23-LB24). Shown when it has a crew,
- * recorded or planned time, or a workflow to plan.
+ * LB6-LB7), and by process beside its step plan, which an open order on a workflow sets (LB18, LB23-LB24); a process's plan can be
+ * split among the crew (LB29-LB30). Shown when it has a crew, recorded or planned time, or a workflow to plan.
  */
 export function WorkOrderLaborComparison({ workOrderId, workflowId, planOpen = false }:
   { workOrderId: string; workflowId?: string; planOpen?: boolean }) {
@@ -18,18 +18,23 @@ export function WorkOrderLaborComparison({ workOrderId, workflowId, planOpen = f
   const save = useSaveStepPlanMutation(workOrderId)
   const [editing, setEditing] = useState(false)
   const [typed, setTyped] = useState<Record<string, string>>({})
+  const [typedPeople, setTypedPeople] = useState<Record<string, string>>({})
   const [problem, setProblem] = useState<string | null>(null)
   const processes = useWorkflowStepsQuery(workflowId, editing)
   const value = query.data && Array.isArray(query.data.people) ? query.data : undefined
   const canPlan = planOpen && Boolean(workflowId)
   const rows = (editing ? stepPlanRows(processes.data ?? [], value) : [])
-    .map((row) => (row.nodeId in typed ? { ...row, minutes: typed[row.nodeId] } : row))
+    .map((row) => ({ ...row, minutes: row.nodeId in typed ? typed[row.nodeId] : row.minutes,
+      people: row.people.map((person) => {
+        const key = personKey(row.nodeId, person.userId)
+        return key in typedPeople ? { ...person, minutes: typedPeople[key] } : person
+      }) }))
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const payload = stepPlanPayload(rows)
     setProblem(payload.error)
-    if (payload.steps) save.mutate(payload.steps, { onSuccess: () => { setEditing(false); setTyped({}) } })
+    if (payload.steps) save.mutate(payload.steps, { onSuccess: () => { setEditing(false); setTyped({}); setTypedPeople({}) } })
   }
 
   if (query.isError) return <p role="alert" style={{ fontSize: 12 }}>{errorMessage(query.error, 'Could not compare the labor time.')}</p>
@@ -41,22 +46,37 @@ export function WorkOrderLaborComparison({ workOrderId, workflowId, planOpen = f
     {comparisonSteps(value) && <div className="inspector-hint">{comparisonSteps(value)}</div>}
     {stepPlanTotal(value) && <div className="inspector-hint">{stepPlanTotal(value)}</div>}
     {canPlan && !editing && <button type="button" style={{ fontSize: 11 }}
-      onClick={() => { setEditing(true); setTyped({}); setProblem(null); save.reset() }}>Plan by step</button>}
+      onClick={() => { setEditing(true); setTyped({}); setTypedPeople({}); setProblem(null); save.reset() }}>Plan by step</button>}
     {editing && <form aria-label="Step plan" noValidate onSubmit={submit} style={{ display: 'grid', gap: 4, marginTop: 4, maxWidth: 360 }}>
       {processes.isLoading && <span className="inspector-hint">Reading the workflow...</span>}
       {processes.isError && <p role="alert">{errorMessage(processes.error, 'Could not read the workflow.')}</p>}
-      {rows.map((row) => <label key={row.nodeId}>{row.nodeName}
-        <input aria-label={`${row.nodeName} planned minutes`} type="number" min="1" step="1" value={row.minutes}
-          style={{ width: 90, marginLeft: 6 }} onChange={(event) => setTyped({ ...typed, [row.nodeId]: event.target.value })} /> min
-      </label>)}
+      {rows.map((row) => <div key={row.nodeId} style={{ display: 'grid', gap: 2 }}>
+        <label>{row.nodeName}
+          <input aria-label={`${row.nodeName} planned minutes`} type="number" min="1" step="1" value={row.minutes} placeholder={splitTotal(row)}
+            style={{ width: 90, marginLeft: 6 }} onChange={(event) => setTyped({ ...typed, [row.nodeId]: event.target.value })} /> min
+        </label>
+        {row.people.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginLeft: 12 }}>
+          {row.people.map((person) => <label key={person.userId}>{person.userId}
+            <input aria-label={`${row.nodeName} · ${person.userId} minutes`} type="number" min="1" step="1" value={person.minutes}
+              style={{ width: 70, marginLeft: 4 }}
+              onChange={(event) => setTypedPeople({ ...typedPeople, [personKey(row.nodeId, person.userId)]: event.target.value })} />
+          </label>)}
+        </div>}
+      </div>)}
       {processes.isSuccess && rows.length === 0 && <span className="inspector-hint">The workflow has no process to plan.</span>}
       <div style={{ display: 'flex', gap: 6 }}>
         <button type="submit" disabled={save.isPending || !processes.isSuccess}>Save step plan</button>
         <button type="button" onClick={() => { setEditing(false); setProblem(null) }}>Cancel</button>
       </div>
-      <span className="inspector-hint">Worker minutes for everyone on the process together; leave a process empty not to plan it.</span>
+      <span className="inspector-hint">Worker minutes for everyone on the process together; leave a process empty not to plan it.
+        {rows.some((row) => row.people.length > 0) && ' Or split it among people: its minutes are then theirs added up.'}</span>
       {problem && <p role="alert">{problem}</p>}
       {save.isError && <p role="alert">{errorMessage(save.error, 'The step plan was not saved.')}</p>}
     </form>}
   </section>
+}
+
+/** A person's minutes on a process as typed in the form. */
+function personKey(nodeId: string, userId: string): string {
+  return `${nodeId} ${userId}`
 }

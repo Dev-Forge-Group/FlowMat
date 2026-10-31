@@ -92,7 +92,7 @@ public class AuthServiceImpl implements AuthService {
         if (request == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        String userId = normalizeRequired(request.userId(), "User ID is required.");
+        String userId = normalizeSignupUserId(request.userId());
         String userName = normalizeRequired(request.userName(), "User name is required.");
         String nickname = normalizeRequired(request.userNickname(), "Nickname is required.");
         String email = normalizeEmail(request.userEmail());
@@ -185,7 +185,13 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(readOnly = true)
     public UserTokenResponse issueGuestToken(String guestSid, String currentAccessToken) {
         String normalizedSid = normalizeRequired(guestSid, "Guest session ID is required.").replace("-", "");
+        if (!normalizedSid.matches("[0-9a-f]{32}")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Guest session ID is invalid.");
+        }
         String guestUserId = GUEST_USER_ID_PREFIX + normalizedSid;
+        if (userRepository.existsByUserId(guestUserId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "Guest identity conflicts with a registered user.");
+        }
         String accessToken = normalizeNullable(currentAccessToken);
 
         if (hasText(accessToken)) {
@@ -203,7 +209,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (!hasText(accessToken) || shouldReissueGuestToken(accessToken)) {
-            accessToken = jwtProvider.generateAccessToken(guestUserId, GUEST_ROLE, GUEST_ACCESS_EXPIRY_MS);
+            accessToken = jwtProvider.generateGuestAccessToken(guestUserId, GUEST_ACCESS_EXPIRY_MS);
         }
 
         return new UserTokenResponse(accessToken, null, normalizedSid, false);
@@ -400,7 +406,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "This social account is already linked.");
         }
 
-        String userId = normalizeRequired(request.userId(), "User ID is required.");
+        String userId = normalizeSignupUserId(request.userId());
         String userName = normalizeRequired(request.userName(), "User name is required.");
         String nickname = normalizeRequired(request.userNickname(), "Nickname is required.");
         String tel = normalizeRequired(request.userTel(), "Phone number is required.");
@@ -446,6 +452,14 @@ public class AuthServiceImpl implements AuthService {
         String jti = jwtProvider.resolveJti(refreshToken);
         authRedisStore.storeRefreshToken(jti, user.getUserId(), normalizedDeviceId, Duration.ofMillis(jwtProvider.getRefreshExpiryMs()));
         return new UserTokenResponse(accessToken, refreshToken, normalizedDeviceId, isAdditionalInfoRequired(user));
+    }
+
+    private String normalizeSignupUserId(String value) {
+        String userId = normalizeRequired(value, "User ID is required.");
+        if (userId.regionMatches(true, 0, GUEST_USER_ID_PREFIX, 0, GUEST_USER_ID_PREFIX.length())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "userId uses a reserved prefix.");
+        }
+        return userId;
     }
 
     private void ensureUnique(String userId, String email, String tel, String nickname) {

@@ -37,7 +37,10 @@ public record RunLaborResponse(String productionRunId, int workedMinutes, List<P
         String cancelReason,
         /** The process step it was worked on and its name; null for the whole run (LB13). */
         String stepId,
-        String stepName
+        String stepName,
+        /** When it started and ended; null when only its minutes were recorded (LB31). */
+        OffsetDateTime workedFrom,
+        OffsetDateTime workedTo
     ) {
     }
 

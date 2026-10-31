@@ -37,12 +37,18 @@ export type RunLabor = {
     cancelled: boolean; cancelledBy: string | null; cancelledAt: string | null; cancelReason: string | null
     /** The process step it was worked on; null or left out for the whole run (LB13). */
     stepId?: string | null; stepName?: string | null
+    /** When it started and ended; null or left out when only its minutes were recorded (LB31). */
+    workedFrom?: string | null; workedTo?: string | null
   }[]
   /** The run's process steps in order; older answers leave it out. */
   steps?: RunLaborStep[]
 }
 
-export type RunLaborInput = { requestId: string; userId?: string; workedMinutes: number; note?: string; stepId?: string }
+export type RunLaborInput = {
+  requestId: string; userId?: string; workedMinutes: number; note?: string; stepId?: string
+  /** Its clock times, both or neither (LB31). */
+  workedFrom?: string; workedTo?: string
+}
 
 const key = (runId: string) => ['run-labor', runId]
 const path = (runId: string) => `/production-runs/${encodeURIComponent(runId)}/labor`

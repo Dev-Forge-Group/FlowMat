@@ -18,7 +18,8 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
-import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpGateway;
+import org.myweb.flowmat.domain.connector.application.publicapi.CancellableConnectorHttpGateway;
+import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpCancellation;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpOutcome;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorProfileOperation;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
 
 /** Resolves only deployment-registered credentials and returns no remote data on any failure. */
 @Component
-public class DefaultConnectorHttpGateway implements ConnectorHttpGateway {
+public class DefaultConnectorHttpGateway implements CancellableConnectorHttpGateway {
     private static final int MAX_BYTES = ConnectorHttpTransport.MAX_BYTES;
     private static final Set<String> METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
@@ -52,6 +53,21 @@ public class DefaultConnectorHttpGateway implements ConnectorHttpGateway {
 
     @Override
     public ConnectorHttpOutcome execute(ConnectorProfileOperation operation, JsonNode requestBody) {
+        return executeInternal(operation, requestBody, null);
+    }
+
+    @Override
+    public ConnectorHttpOutcome execute(ConnectorProfileOperation operation, JsonNode requestBody,
+                                        ConnectorHttpCancellation cancellation) {
+        if (cancellation == null) return failure("TRANSPORT_FAILED", null, "INVALID_REQUEST", false);
+        return executeInternal(operation, requestBody, cancellation);
+    }
+
+    private ConnectorHttpOutcome executeInternal(ConnectorProfileOperation operation, JsonNode requestBody,
+                                                 ConnectorHttpCancellation cancellation) {
+        if (cancellation != null && cancellation.isCancelled()) {
+            return failure("TRANSPORT_FAILED", null, "CANCELLED", false);
+        }
         if (!properties.isEnabled()) return failure("TRANSPORT_FAILED", null, "CONNECTOR_DISABLED", false);
         if (operation == null || !METHODS.contains(operation.method())) {
             return failure("TRANSPORT_FAILED", null, "INVALID_REQUEST", false);
@@ -93,7 +109,7 @@ public class DefaultConnectorHttpGateway implements ConnectorHttpGateway {
                     throw new ConnectorHttpTransport.TransportFailure("DNS_FAILURE", false, null);
                 }
             });
-            remote = transport.exchange(request);
+            remote = cancellation == null ? transport.exchange(request) : transport.exchange(request, cancellation);
         } catch (ConnectorHttpTransport.TransportFailure failure) {
             return failure(failure.mayHaveBeenSent() && failure.httpStatus() == null ? "OUTCOME_UNKNOWN" : "TRANSPORT_FAILED",
                 failure.httpStatus(), failure.code(), failure.mayHaveBeenSent());
@@ -163,7 +179,10 @@ public class DefaultConnectorHttpGateway implements ConnectorHttpGateway {
             for (JsonNode child : node) if (echoesCredential(child, forbidden)) return true;
             return false;
         }
-        return containsSecret(node.asText(), forbidden);
+        // JSONB expands exponent notation before stored numbers are exposed by read APIs.
+        return containsSecret(node.asText(), forbidden)
+            || node.isNumber() && !forbidden.isEmpty()
+                && containsSecret(node.decimalValue().toPlainString(), forbidden);
     }
 
     private static boolean containsSecret(String value, Set<String> forbidden) {

@@ -1,5 +1,7 @@
 package org.myweb.flowmat.domain.catalog.application;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
@@ -39,6 +41,7 @@ public class ItemServiceImpl implements ItemService {
     /** Other domains that still rely on an item; see {@link ItemUsageCheck}. */
     private final List<ItemUsageCheck> itemUsageChecks;
     private final CatalogQuery catalogQuery;
+    private final EntityManager entities;
 
     /** Blank clears the unit; otherwise it must reference an active unit_master row. */
     private String requireActiveUnit(String unitId) {
@@ -113,6 +116,7 @@ public class ItemServiceImpl implements ItemService {
     public ItemResponse updateItem(String itemId, ItemUpdateRequest request) {
         Item item = findActiveItem(itemId);
         projectAccessService.requireProjectWriteAccess(item.getProjectId());
+        lockActiveItem(item);
         if (hasText(request.itemCode()) && !request.itemCode().trim().equals(item.getItemCode())) {
             // Items are referred to by id everywhere, so a code can change; it must stay unique like on create.
             String code = request.itemCode().trim();
@@ -182,6 +186,7 @@ public class ItemServiceImpl implements ItemService {
     public void deleteItem(String itemId) {
         Item item = findActiveItem(itemId);
         projectAccessService.requireProjectOwnerAccess(item.getProjectId());
+        lockActiveItem(item);
         CatalogItemView view = catalogQuery.findItems(List.of(item.getItemId())).get(item.getItemId());
         List<String> reasons = itemUsageChecks.stream()
             .map(check -> check.whyInUse(view))
@@ -247,6 +252,13 @@ public class ItemServiceImpl implements ItemService {
             item.setConversionRate(quantity);
         } else if (item.getConversionRate() == null) {
             item.setConversionRate(BigDecimal.ONE);
+        }
+    }
+
+    private void lockActiveItem(Item item) {
+        entities.refresh(item, LockModeType.PESSIMISTIC_WRITE);
+        if (!NOT_DELETED.equals(item.getDeletedYn())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
         }
     }
 

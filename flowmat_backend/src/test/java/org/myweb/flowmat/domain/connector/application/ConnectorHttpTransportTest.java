@@ -16,12 +16,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpCancellation;
 
 class ConnectorHttpTransportTest {
     private HttpServer server;
@@ -217,6 +219,157 @@ class ConnectorHttpTransportTest {
         }
         assertThat(dnsFinished.await(1, TimeUnit.SECONDS)).isTrue();
         assertThat(requests).hasValue(0);
+    }
+
+    @Test
+    void cancellationBeforeExchangeDoesNotResolveAnAddressOrSendARequest() {
+        var cancellation = new ConnectorHttpCancellation();
+        AtomicInteger resolutions = new AtomicInteger();
+        AtomicInteger requests = new AtomicInteger();
+        server.createContext("/cancelled", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        cancellation.cancel();
+
+        assertThatThrownBy(() -> transport.exchange(request("/cancelled", () -> {
+            resolutions.incrementAndGet();
+            return InetAddress.getLoopbackAddress();
+        }), cancellation)).isInstanceOfSatisfying(ConnectorHttpTransport.TransportFailure.class, failure -> {
+            assertThat(failure.code()).isEqualTo("CANCELLED");
+            assertThat(failure.mayHaveBeenSent()).isFalse();
+        });
+
+        assertThat(resolutions).hasValue(0);
+        assertThat(requests).hasValue(0);
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
+    }
+
+    @Test
+    void cancellationDuringDnsReturnsWithoutInterruptingCallerAndLateDnsCannotSend() throws Exception {
+        transport.close();
+        transport = new ConnectorHttpTransport(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(10), 1);
+        var cancellation = new ConnectorHttpCancellation();
+        var dnsStarted = new CountDownLatch(1);
+        var releaseDns = new CountDownLatch(1);
+        var dnsFinished = new CountDownLatch(1);
+        AtomicInteger requests = new AtomicInteger();
+        AtomicBoolean callerInterrupted = new AtomicBoolean();
+        server.createContext("/dns-cancelled", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        try (var callers = Executors.newVirtualThreadPerTaskExecutor()) {
+            var result = callers.submit(() -> {
+                try {
+                    return transport.exchange(request("/dns-cancelled", () -> {
+                        dnsStarted.countDown();
+                        boolean done = false;
+                        while (!done) {
+                            try {
+                                releaseDns.await();
+                                done = true;
+                            } catch (InterruptedException ignored) {
+                                // Platform DNS may ignore worker interruption.
+                            }
+                        }
+                        dnsFinished.countDown();
+                        return InetAddress.getLoopbackAddress();
+                    }), cancellation);
+                } finally {
+                    callerInterrupted.set(Thread.currentThread().isInterrupted());
+                }
+            });
+            assertThat(dnsStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            cancellation.cancel();
+
+            assertThatThrownBy(() -> result.get(2, TimeUnit.SECONDS))
+                .isInstanceOfSatisfying(java.util.concurrent.ExecutionException.class, exception -> {
+                    assertThat(exception.getCause()).isInstanceOfSatisfying(ConnectorHttpTransport.TransportFailure.class,
+                        failure -> {
+                            assertThat(failure.code()).isEqualTo("CANCELLED");
+                            assertThat(failure.mayHaveBeenSent()).isFalse();
+                        });
+                });
+            assertThat(callerInterrupted).isFalse();
+            assertThatThrownBy(() -> transport.exchange(request("/dns-cancelled", InetAddress::getLoopbackAddress)))
+                .isInstanceOfSatisfying(ConnectorHttpTransport.TransportFailure.class,
+                    failure -> assertThat(failure.code()).isEqualTo("BUSY"));
+        } finally {
+            releaseDns.countDown();
+        }
+        assertThat(dnsFinished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(requests).hasValue(0);
+    }
+
+    @Test
+    void cancellationAbortsHeldResponseWithoutInterruptingCallerOrRetrying() throws Exception {
+        transport.close();
+        transport = new ConnectorHttpTransport(Duration.ofSeconds(1), Duration.ofSeconds(10), Duration.ofSeconds(10), 1);
+        var cancellation = new ConnectorHttpCancellation();
+        var responseHeld = new CountDownLatch(1);
+        var releaseResponse = new CountDownLatch(1);
+        AtomicInteger requests = new AtomicInteger();
+        AtomicBoolean callerInterrupted = new AtomicBoolean();
+        server.createContext("/held", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write('{');
+            exchange.getResponseBody().flush();
+            responseHeld.countDown();
+            try {
+                releaseResponse.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.createContext("/after-cancel", exchange -> {
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        try (var callers = Executors.newVirtualThreadPerTaskExecutor()) {
+            var result = callers.submit(() -> {
+                try {
+                    return transport.exchange(request("/held", InetAddress::getLoopbackAddress), cancellation);
+                } finally {
+                    callerInterrupted.set(Thread.currentThread().isInterrupted());
+                }
+            });
+            assertThat(responseHeld.await(2, TimeUnit.SECONDS)).isTrue();
+
+            cancellation.cancel();
+
+            assertThatThrownBy(() -> result.get(2, TimeUnit.SECONDS))
+                .isInstanceOfSatisfying(java.util.concurrent.ExecutionException.class, exception -> {
+                    assertThat(exception.getCause()).isInstanceOfSatisfying(ConnectorHttpTransport.TransportFailure.class,
+                        failure -> {
+                            assertThat(failure.code()).isEqualTo("CANCELLED");
+                            assertThat(failure.mayHaveBeenSent()).isTrue();
+                        });
+                });
+            assertThat(callerInterrupted).isFalse();
+            // The single worker must become reusable while the first server response is still held.
+            long workerDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            ConnectorHttpTransport.TransportResponse next = null;
+            while (next == null && System.nanoTime() < workerDeadline) {
+                try {
+                    next = transport.exchange(request("/after-cancel", InetAddress::getLoopbackAddress));
+                } catch (ConnectorHttpTransport.TransportFailure failure) {
+                    if (!failure.code().equals("BUSY")) throw failure;
+                    Thread.yield();
+                }
+            }
+            assertThat(next).isNotNull();
+            assertThat(next.status()).isEqualTo(204);
+            assertThat(requests).hasValue(1);
+        } finally {
+            releaseResponse.countDown();
+        }
     }
 
     @Test

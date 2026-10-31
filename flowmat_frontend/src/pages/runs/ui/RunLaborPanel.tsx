@@ -8,13 +8,13 @@ import type { RunCorrectionLineRequest } from '../../../shared/types/api'
 import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { newRequestId } from '../../../shared/lib/requestId'
 import {
-  firstWorker, laborChoices, laborSummary, stepHint, stepSuggestion, stepSummary, suggestionHint,
+  firstWorker, laborChoices, laborSpan, laborSummary, laborTimes, laborTimesText, stepHint, stepSuggestion, stepSummary, suggestionHint,
 } from '../model/laborModel'
 
 /**
  * Who worked on a run and for how long (docs/domain/worker-calendar.md LB1-LB7). The minutes start from the person's share
- * of their shifts during the run less what is recorded; there is no cost, as there are no worker rates. A finished run's
- * worked time changes through a run correction (LB9-LB11).
+ * of their shifts during the run less what is recorded, or from its clock times when they are given (LB31-LB32); there is no cost,
+ * as there are no worker rates. A finished run's worked time changes through a run correction (LB9-LB11).
  */
 export function RunLaborPanel({ projectId, runId, open }: { projectId: string; runId: string; open: boolean }) {
   const query = useRunLaborQuery(runId)
@@ -27,6 +27,10 @@ export function RunLaborPanel({ projectId, runId, open }: { projectId: string; r
   const [note, setNote] = useState('')
   // '' is the whole run; otherwise a process step of the run (LB16).
   const [stepId, setStepId] = useState('')
+  // Clock times as typed in the browser's time, both or neither (LB31).
+  const [workedFrom, setWorkedFrom] = useState('')
+  const [workedTo, setWorkedTo] = useState('')
+  const [timeProblem, setTimeProblem] = useState<string | null>(null)
   // Counts edits, so a reply clears the form only when nothing was typed or picked after it was sent.
   const inputVersion = useRef(0)
   const edited = () => { inputVersion.current += 1 }
@@ -40,25 +44,33 @@ export function RunLaborPanel({ projectId, runId, open }: { projectId: string; r
   const startedSteps = (Array.isArray(data?.steps) ? data.steps : []).filter((one) => one.startedAt)
   const step = startedSteps.find((one) => one.stepId === stepId)
   const suggested = step ? stepSuggestion(step, person, data?.lines ?? []) : person?.suggestedMinutes ?? null
-  const shownMinutes = minutes ?? (suggested != null ? String(suggested) : '')
+  const span = laborSpan(workedFrom, workedTo)
+  const shownMinutes = minutes ?? (span != null ? String(span) : suggested != null ? String(suggested) : '')
   const choices = laborChoices(people, Array.isArray(workers.data) ? workers.data : [])
-  const hint = minutes !== null ? null : step ? (suggested != null ? stepHint(step, person) : null) : suggestionHint(person)
+  const hint = minutes !== null ? null : span != null ? 'From the clock times; fewer minutes leave out breaks.'
+    : step ? (suggested != null ? stepHint(step, person) : null) : suggestionHint(person)
   const byStep = data ? stepSummary(data) : ''
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const submittedVersion = inputVersion.current
-    const input = JSON.stringify([chosen, shownMinutes, note.trim(), step?.stepId ?? ''])
+    const times = laborTimes(workedFrom, workedTo)
+    setTimeProblem(times.error)
+    if (times.error) return
+    const input = JSON.stringify([chosen, shownMinutes, note.trim(), step?.stepId ?? '', times.workedFrom ?? '', times.workedTo ?? ''])
     const requestId = attempt?.input === input ? attempt.requestId : newRequestId()
     setAttempt({ requestId, input })
     record.mutate(
-      { requestId, userId: chosen, workedMinutes: Number(shownMinutes), note: note.trim() || undefined, stepId: step?.stepId },
+      { requestId, userId: chosen, workedMinutes: Number(shownMinutes), note: note.trim() || undefined, stepId: step?.stepId,
+        workedFrom: times.workedFrom, workedTo: times.workedTo },
       {
         onSuccess: () => {
           setAttempt(null)
           if (inputVersion.current === submittedVersion) {
             setMinutes(null)
             setNote('')
+            setWorkedFrom('')
+            setWorkedTo('')
           }
         },
         onError: (error) => {
@@ -88,7 +100,7 @@ export function RunLaborPanel({ projectId, runId, open }: { projectId: string; r
             {data.lines.map((line) => (
               <tr key={line.runLaborId} style={{ opacity: line.cancelled ? 0.5 : 1 }}>
                 <td>
-                  {line.userId}{line.stepName ? ` · ${line.stepName}` : ''}{line.note ? ` · ${line.note}` : ''}
+                  {line.userId}{line.stepName ? ` · ${line.stepName}` : ''}{laborTimesText(line)}{line.note ? ` · ${line.note}` : ''}
                   {line.cancelled && <span> · cancelled: {line.cancelReason}</span>}
                 </td>
                 <td style={{ textAlign: 'right' }}>{line.workedMinutes}</td>
@@ -135,6 +147,16 @@ export function RunLaborPanel({ projectId, runId, open }: { projectId: string; r
             </label>
           )}
           <label style={{ display: 'grid', gap: 4 }}>
+            <span>Worked from</span>
+            <input type="datetime-local" aria-label="Worked from" value={workedFrom}
+              onChange={(e) => { edited(); setWorkedFrom(e.target.value); setMinutes(null) }} />
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span>Worked to</span>
+            <input type="datetime-local" aria-label="Worked to" value={workedTo}
+              onChange={(e) => { edited(); setWorkedTo(e.target.value); setMinutes(null) }} />
+          </label>
+          <label style={{ display: 'grid', gap: 4 }}>
             <span>Worked minutes</span>
             <input type="number" min={1} max={10080} step={1} required value={shownMinutes}
               onChange={(e) => { edited(); setMinutes(e.target.value) }} />
@@ -149,6 +171,7 @@ export function RunLaborPanel({ projectId, runId, open }: { projectId: string; r
           {hint && <span className="inspector-hint" style={{ flexBasis: '100%' }}>{hint}</span>}
         </form>
       )}
+      {timeProblem && <p role="alert">{timeProblem}</p>}
       {record.isError && <p role="alert">{errorMessage(record.error, 'Failed to record the worked time.')}</p>}
       {!open && data && <LaborCorrectionRequest runId={runId} data={data} choices={choices} />}
     </section>

@@ -39,7 +39,13 @@ public record WorkOrderLaborComparisonResponse(
      *
      * @param sequenceNo     null for a process that is planned but has not run yet
      * @param plannedMinutes the worker minutes planned for it (LB23); null when it is not in the step plan
+     * @param people         the people its plan is split among, in plan order, then anyone else who recorded time on it (LB29)
      */
-    public record Step(String nodeId, String nodeName, Integer sequenceNo, int actualMinutes, Integer plannedMinutes) {
+    public record Step(String nodeId, String nodeName, Integer sequenceNo, int actualMinutes, Integer plannedMinutes,
+                       List<StepPerson> people) {
+    }
+
+    /** @param plannedMinutes their part of the process's plan; null when the plan does not name them */
+    public record StepPerson(String userId, Integer plannedMinutes, int actualMinutes) {
     }
 }

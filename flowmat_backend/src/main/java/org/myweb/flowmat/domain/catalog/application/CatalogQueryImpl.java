@@ -1,5 +1,9 @@
 package org.myweb.flowmat.domain.catalog.application;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -21,7 +25,10 @@ import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
+import org.myweb.flowmat.global.exception.BusinessException;
+import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -36,6 +43,7 @@ public class CatalogQueryImpl implements CatalogQuery {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentScheduleService equipmentScheduleService;
     private final EquipmentChangeoverService equipmentChangeoverService;
+    private final EntityManager entities;
 
     @Override
     public Optional<CatalogItemView> findProjectItem(String projectId, String itemId) {
@@ -48,6 +56,33 @@ public class CatalogQueryImpl implements CatalogQuery {
     public Optional<CatalogItemView> findActiveItem(String itemId) {
         return itemRepository.findByItemIdAndDeletedYn(itemId, NOT_DELETED)
             .map(item -> view(item, units(List.of(item))));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<CatalogItemView> lockProjectItemForStock(String projectId, String itemId) {
+        return lockProjectItem(projectId, itemId, "This item is being changed. Reload and try receiving stock again.");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<CatalogItemView> lockProjectItemForReference(String projectId, String itemId) {
+        return lockProjectItem(projectId, itemId, "This item is being changed. Reload and try again.");
+    }
+
+    private Optional<CatalogItemView> lockProjectItem(String projectId, String itemId, String conflictMessage) {
+        Item item = itemRepository.findByItemIdAndDeletedYn(itemId, NOT_DELETED)
+            .filter(found -> Objects.equals(projectId, found.getProjectId()))
+            .orElse(null);
+        if (item == null) return Optional.empty();
+        try {
+            entities.refresh(item, LockModeType.PESSIMISTIC_READ, Map.of("jakarta.persistence.lock.timeout", 0));
+        } catch (LockTimeoutException | PessimisticLockException conflict) {
+            throw new BusinessException(ErrorCode.CONFLICT, conflictMessage);
+        }
+        if (!NOT_DELETED.equals(item.getDeletedYn()) || !Objects.equals(projectId, item.getProjectId()))
+            return Optional.empty();
+        return Optional.of(view(item, units(List.of(item))));
     }
 
     @Override

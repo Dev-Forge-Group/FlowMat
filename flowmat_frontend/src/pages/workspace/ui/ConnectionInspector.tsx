@@ -37,6 +37,10 @@ const CONNECTION_TYPE_OPTIONS = [
 
 export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sourceIsExclusive = false, sourceIsSplit = false }: Props) {
   const labelRef = useRef<HTMLInputElement>(null)
+  const edgeIdRef = useRef<string | null>(null)
+  const draftChangedRef = useRef(false)
+  const savingRef = useRef(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [label, setLabel] = useState('')
   const [connectionType, setConnectionType] = useState('material')
   const [flowRate, setFlowRate] = useState('')
@@ -58,7 +62,14 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
   }, [focusLabel, edge?.id])
 
   useEffect(() => {
-    if (!edge) return
+    if (!edge) {
+      edgeIdRef.current = null
+      draftChangedRef.current = false
+      return
+    }
+    if (edgeIdRef.current === edge.id && draftChangedRef.current) return
+    edgeIdRef.current = edge.id
+    draftChangedRef.current = false
     setSaveError(null)
     setLabel(edge.label ?? '')
     setConnectionType(edge.connectionType ?? 'material')
@@ -81,6 +92,7 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (savingRef.current) return
     setSaveError(null)
     const split = splitInput(splitKind, splitValue)
     if (sourceIsSplit && 'error' in split) {
@@ -97,6 +109,9 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
       setSaveError('Delay is 0 or more seconds.')
       return
     }
+    savingRef.current = true
+    setIsSaving(true)
+    draftChangedRef.current = false
     try {
       await onSubmit({
       connectionId: currentEdge.id,
@@ -116,7 +131,13 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
       ...(sourceIsSplit && !('error' in split) ? split : {}),
       })
     } catch (error) {
-      setSaveError(errorMessage(error, 'Could not save connection.'))
+      if (edgeIdRef.current === currentEdge.id) {
+        draftChangedRef.current = true
+        setSaveError(errorMessage(error, 'Could not save connection.'))
+      }
+    } finally {
+      savingRef.current = false
+      setIsSaving(false)
     }
   }
 
@@ -130,7 +151,8 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
         <dd style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{currentEdge.toProcessId}</dd>
       </dl>
 
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
+      <form onSubmit={handleSubmit} onChangeCapture={() => { draftChangedRef.current = true }}
+        aria-busy={isSaving} style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
         <label style={{ display: 'grid', gap: '4px' }}>
           <span>Label</span>
           <input
@@ -277,9 +299,10 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {saveError && <p role="alert" style={{ color: '#991b1b' }}>{saveError}</p>}
-          <button type="submit">Save Connection</button>
+          <button type="submit" disabled={isSaving}>Save Connection</button>
           <button
             type="button"
+            disabled={isSaving}
             onClick={() => void onDelete(currentEdge.id)}
             style={{ border: '1px solid #fca5a5', color: '#991b1b', background: '#fef2f2' }}
           >

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLaborPerson } from '../../../entities/production/api/useRunLabor'
 import {
-  comparisonLine, comparisonSteps, comparisonTotal, stepPlanPayload, stepPlanRows, stepPlanTotal, firstWorker, laborChoices, laborSummary, stepHint, stepSuggestion, stepSummary, suggestionHint,
+  comparisonLine, comparisonSteps, comparisonTotal, splitTotal, stepPlanPayload, stepPlanRows, stepPlanTotal, firstWorker, laborChoices, laborSpan, laborSummary, laborTimes, laborTimesText, stepHint, stepSuggestion, stepSummary, suggestionHint,
 } from './laborModel'
 
 const person = (userId: string, sharePercent: number | null, workedMinutes: number, suggestedMinutes: number | null,
@@ -107,13 +107,65 @@ describe('work order labor comparison', () => {
     const processes = [{ processId: 'p1', processName: 'Mix', nodeType: 'process' }, { processId: 'g1', processName: 'Which?', nodeType: 'exclusive' },
       { processId: 'p2', processName: 'Bake', nodeType: 'process' }, { processId: 'p3', processName: 'Cool', nodeType: 'storage' }]
     const rows = stepPlanRows(processes, { steps })
-    expect(rows).toEqual([{ nodeId: 'p1', nodeName: 'Mix', minutes: '240' }, { nodeId: 'p2', nodeName: 'Bake', minutes: '180' },
-      { nodeId: 'p3', nodeName: 'Cool', minutes: '' }])
+    expect(rows).toEqual([{ nodeId: 'p1', nodeName: 'Mix', minutes: '240', people: [] }, { nodeId: 'p2', nodeName: 'Bake', minutes: '180', people: [] },
+      { nodeId: 'p3', nodeName: 'Cool', minutes: '', people: [] }])
     expect(stepPlanRows(processes, undefined).map((row) => row.minutes)).toEqual(['', '', ''])
     expect(stepPlanPayload(rows)).toEqual({ steps: [{ nodeId: 'p1', plannedMinutes: 240 }, { nodeId: 'p2', plannedMinutes: 180 }], error: null })
     for (const minutes of ['2.5', '0', '100001', 'soon']) {
       expect(stepPlanPayload([{ ...rows[0], minutes }]).error).toBe('Mix: enter whole minutes from 1 to 100000, or leave it empty.')
     }
     expect(stepPlanPayload([rows[2]])).toEqual({ steps: [], error: null })
+  })
+
+  it('splits a process\'s plan among people beside what each recorded', () => {
+    const mix = { nodeId: 'p1', nodeName: 'Mix', sequenceNo: 1, actualMinutes: 120, plannedMinutes: 180,
+      people: [{ userId: 'kim', plannedMinutes: 120, actualMinutes: 100 }, { userId: 'lee', plannedMinutes: 60, actualMinutes: 0 },
+        { userId: 'dan', plannedMinutes: null, actualMinutes: 20 }] }
+    const bake = { nodeId: 'p2', nodeName: 'Bake', sequenceNo: null, actualMinutes: 0, plannedMinutes: 180, people: [] }
+    expect(comparisonSteps({ steps: [mix, bake] }))
+      .toBe('By step: Mix 120 of 180 planned (kim 100 of 120, lee 0 of 60, dan 20), Bake 0 of 180 planned')
+    // Who recorded time on a plan for everyone together is not listed by step (LB29).
+    expect(comparisonSteps({ steps: [{ ...mix, people: [{ userId: 'dan', plannedMinutes: null, actualMinutes: 120 }] }] }))
+      .toBe('By step: Mix 120 of 180 planned')
+    // The crew and whoever the plan names can take a part; a split process starts with its own minutes empty (LB30).
+    const processes = [{ processId: 'p1', processName: 'Mix', nodeType: 'process' }, { processId: 'p2', processName: 'Bake', nodeType: 'process' }]
+    const people = [{ userId: 'kim', sharePercent: 50, plannedMinutes: null, actualMinutes: 100 },
+      { userId: 'sun', sharePercent: 100, plannedMinutes: null, actualMinutes: 0 },
+      { userId: 'dan', sharePercent: null, plannedMinutes: null, actualMinutes: 20 }]
+    const rows = stepPlanRows(processes, { steps: [mix, bake], people })
+    expect(rows).toEqual([
+      { nodeId: 'p1', nodeName: 'Mix', minutes: '', people: [{ userId: 'kim', minutes: '120' }, { userId: 'sun', minutes: '' }, { userId: 'lee', minutes: '60' }] },
+      { nodeId: 'p2', nodeName: 'Bake', minutes: '180', people: [{ userId: 'kim', minutes: '' }, { userId: 'sun', minutes: '' }] }])
+    expect(splitTotal(rows[0])).toBe('180')
+    expect(splitTotal(rows[1])).toBe('')
+    expect(stepPlanPayload(rows)).toEqual({ steps: [{ nodeId: 'p1', people: [{ userId: 'kim', plannedMinutes: 120 }, { userId: 'lee', plannedMinutes: 60 }] },
+      { nodeId: 'p2', plannedMinutes: 180 }], error: null })
+    // Its own minutes may stay when they agree.
+    expect(stepPlanPayload([{ ...rows[0], minutes: '180' }]).steps)
+      .toEqual([{ nodeId: 'p1', people: [{ userId: 'kim', plannedMinutes: 120 }, { userId: 'lee', plannedMinutes: 60 }] }])
+    expect(stepPlanPayload([{ ...rows[0], minutes: '200' }]).error)
+      .toBe("Mix: the people's minutes add up to 180, not 200; leave Mix's minutes empty or make them agree.")
+    expect(stepPlanPayload([{ ...rows[1], people: [{ userId: 'kim', minutes: '1.5' }] }]).error)
+      .toBe('Bake · kim: enter whole minutes from 1 to 100000, or leave it empty.')
+    expect(stepPlanPayload([{ ...rows[1], minutes: '', people: [{ userId: 'kim', minutes: '60000' }, { userId: 'sun', minutes: '50000' }] }]).error)
+      .toBe("Bake: the people's minutes add up to more than 100000.")
+  })
+})
+
+describe('clock times of worked time', () => {
+  it('sends both or neither, the end later, and counts the minutes between', () => {
+    expect(laborTimes('', '')).toEqual({ error: null })
+    expect(laborTimes('2041-09-01T09:00', '').error).toBe('Give both Worked from and Worked to, or neither.')
+    expect(laborTimes('2041-09-01T11:00', '2041-09-01T09:00').error).toBe('Worked to must be after Worked from.')
+    const times = laborTimes('2041-09-01T09:00', '2041-09-01T11:00')
+    expect(times.error).toBeNull()
+    expect(Date.parse(times.workedTo ?? '') - Date.parse(times.workedFrom ?? '')).toBe(7_200_000)
+    expect(laborSpan('2041-09-01T09:00', '2041-09-01T11:00')).toBe(120)
+    expect(laborSpan('2041-09-01T09:00', '')).toBeNull()
+    // Shown in the browser's time, the date once when it ends on the same day.
+    expect(laborTimesText(times)).toBe(' · 2041-09-01 09:00–11:00')
+    expect(laborTimesText(laborTimes('2041-09-01T22:00', '2041-09-02T02:00'))).toBe(' · 2041-09-01 22:00–2041-09-02 02:00')
+    expect(laborTimesText({ workedFrom: null, workedTo: null })).toBe('')
+    expect(laborTimesText({})).toBe('')
   })
 })

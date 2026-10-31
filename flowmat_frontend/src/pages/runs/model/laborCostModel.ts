@@ -2,17 +2,35 @@ import type { LaborCostPerson } from '../../../entities/production/api/useLaborC
 import type { WorkerLaborRateLineDto } from '../../../entities/workforce/api/useWorkerLaborRates'
 import { formatQty } from '../../../shared/lib/formatQty'
 
-/** "Labor cost: 45", or "Known labor cost: 45 (some worked time has no rate)" (docs/architecture/adr/ADR-025-worker-labor-cost.md). */
-export function laborCostText(cost: { cost: number; costComplete: boolean }): string {
-  return cost.costComplete ? `Labor cost: ${formatQty(cost.cost)}`
-    : `Known labor cost: ${formatQty(cost.cost)} (some worked time has no rate)`
+interface PremiumAmounts {
+  cost: number
+  premiumCost?: number | null
+  premiumsComplete?: boolean
 }
 
-/** "kim: 90 min · 45", "lee: 30 min · no rate". */
+/**
+ * " · with pay premiums 162" when the premiums change the amount (docs/architecture/adr/ADR-028-pay-premiums.md decision 12),
+ * saying when some days had no attendance and stay at the rate; nothing otherwise.
+ */
+function premiumText(cost: PremiumAmounts): string {
+  if (cost.premiumCost == null || Number(cost.premiumCost) === Number(cost.cost)) return ''
+  return ` · with pay premiums ${formatQty(cost.premiumCost)}${cost.premiumsComplete === false ? ' (days without attendance at the rate)' : ''}`
+}
+
+/**
+ * "Labor cost: 45", or "Known labor cost: 45 (some worked time has no rate)" (docs/architecture/adr/ADR-025-worker-labor-cost.md),
+ * then the amount with the pay premiums when they change it.
+ */
+export function laborCostText(cost: PremiumAmounts & { costComplete: boolean }): string {
+  return (cost.costComplete ? `Labor cost: ${formatQty(cost.cost)}`
+    : `Known labor cost: ${formatQty(cost.cost)} (some worked time has no rate)`) + premiumText(cost)
+}
+
+/** "kim: 90 min · 45", "lee: 30 min · no rate", "kim: 120 min · 120 · with pay premiums 132". */
 export function laborCostPersonText(person: LaborCostPerson): string {
   const cost = person.costComplete ? formatQty(person.cost)
     : Number(person.cost) > 0 ? `${formatQty(person.cost)} known, some without a rate` : 'no rate'
-  return `${person.userId}: ${person.workedMinutes} min · ${cost}`
+  return `${person.userId}: ${person.workedMinutes} min · ${cost}${premiumText(person)}`
 }
 
 /** One saved rate, e.g. "30/h from 2041-09-01 (current) · Base · set by demo-owner". */

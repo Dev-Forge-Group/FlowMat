@@ -8,6 +8,51 @@ on:
   workflow_dispatch:
 
 jobs:
+  browser-mock:
+    name: Mock browser E2E (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      REAL_API_E2E: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: flowmat_frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: flowmat_frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: flowmat_frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run mocked browser E2E
+        working-directory: flowmat_frontend
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-results/mock-${{ matrix.shard }}.json
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/3 --workers=1 --trace=off --reporter=line,json --output=test-results/mock-${{ matrix.shard }}
+
+      - name: Upload mocked Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-mock-${{ matrix.shard }}
+          path: |
+            flowmat_frontend/test-results/mock-${{ matrix.shard }}
+            flowmat_frontend/playwright-results/mock-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -45,12 +90,15 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 22.22.3
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '22.22.3'
           cache: npm
           cache-dependency-path: flowmat_frontend/package-lock.json
+
+      - name: Run connector reference Node tests
+        run: node --test scripts/connector-reference-api.test.mjs scripts/connector-reference-flow.test.mjs
 
       - name: Start backend
         working-directory: flowmat_backend
@@ -142,6 +190,20 @@ jobs:
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/approval-notification-e2e-fixture.sql
           npm run test:e2e -- e2e/approval-notification-real-api.spec.ts --workers=1 --retries=0 --trace=off
 
+      - name: Run real execution policy and notification browser acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_NOTIFICATION_E2E_DISPOSABLE: '1'
+          PGPASSWORD: flowmat-ci-password
+          PGOPTIONS: '-c flowmat.notification_e2e_disposable=true'
+        run: |
+          psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/notification-e2e-fixture.sql
+          npm run test:e2e -- e2e/execution-policy-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/stock-alert-notification-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          # The recipient test removes viewer membership, so run it last.
+          npm run test:e2e -- e2e/notification-reorder-real-api.spec.ts --workers=1 --retries=0 --trace=off
+
       - name: Run real worker planning browser acceptance
         working-directory: flowmat_frontend
         env:
@@ -187,10 +249,6 @@ jobs:
           REAL_API_E2E: '1'
           FLOWMAT_EQUIPMENT_E2E_DISPOSABLE: '1'
         run: npm run test:e2e -- e2e/equipment-capacity-real-api.spec.ts --workers=1 --retries=0 --trace=off
-
-      - name: Run browser E2E
-        working-directory: flowmat_frontend
-        run: npm run test:e2e
 
       - name: Run real BOM and LOT E2E
         working-directory: flowmat_frontend
@@ -293,6 +351,12 @@ jobs:
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/equipment-days.spec.ts
+
+      - name: Run real instruction quality and inventory report acceptance
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/instruction-quality-real-api.spec.ts e2e/inventory-reports.spec.ts --workers=1 --retries=0 --trace=off
 
       - name: Upload backend log
         if: always()

@@ -38,7 +38,9 @@ test('a step plan dates an order that has no equipment', async ({ page }) => {
       return ok(route, { workOrderId: 'wo-1', equipmentId: null, from: '2041-05-06T09:00:00Z', plannedStartAt: '2041-05-06T09:00:00Z',
         plannedEndAt: '2041-05-06T16:00:00Z', remainingQuantity: 10, capacityPerHour: null, productionHours: null, changeoverHours: 0,
         neededHours: 7, changeoverFrom: null, movedPast: [], crew: [{ userId: 'kim', calendarSet: true, hours: 7, sharePercent: 100 }],
-        waitedForCrew: [], crewMovedPast: [], efficiencyPercent: null, laborMinutes: 420, laborHours: 7 })
+        waitedForCrew: [], crewMovedPast: [], efficiencyPercent: null, laborMinutes: 420, laborHours: 7,
+        schedule: [{ nodeId: 'p1', nodeName: 'Mix', userId: 'kim', from: '2041-05-06T09:00:00Z', to: '2041-05-06T14:00:00Z' },
+          { nodeId: 'p2', nodeName: 'Bake', userId: 'kim', from: '2041-05-06T14:00:00Z', to: '2041-05-06T16:00:00Z' }] })
     }
     if (pathname.endsWith('/crew')) return ok(route, { workOrderId: pathname.split('/')[3], plannedStartAt: null, plannedEndAt: null, members: [] })
     if (pathname.endsWith('/readiness')) {
@@ -73,6 +75,9 @@ test('a step plan dates an order that has no equipment', async ({ page }) => {
   const plan = page.getByLabel('Plan dates')
   await plan.getByRole('button', { name: 'Suggest dates' }).click()
   await expect(plan.getByRole('status')).toHaveText('Mon 2041-05-06 09:00 → Mon 2041-05-06 16:00 · needs 7 h · labor 7 h for 420 worker min')
+  // Who works on which process when (LB35).
+  await expect(plan.getByLabel('Who works when').getByRole('listitem'))
+    .toHaveText(['Mix: kim Mon 2041-05-06 09:00–14:00', 'Bake: kim Mon 2041-05-06 14:00–16:00'])
   expect(asked).toEqual(['2041-05-06T09:00:00.000Z'])
   await plan.getByRole('button', { name: 'Use these dates' }).click()
   await expect.poll(() => saved.length).toBe(1)

@@ -7,9 +7,11 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +23,12 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRunLabor;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrderStepPlan;
+import org.myweb.flowmat.domain.production.domain.entity.WorkOrderStepPlanPerson;
 import org.myweb.flowmat.domain.production.repository.ProductionRunLaborRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderCrewRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
+import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanPersonRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
@@ -36,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * A work order's planned crew time beside the time its runs recorded for each person (docs/domain/worker-calendar.md LB6), and by
- * process beside its step plan (LB18, LB23).
+ * process beside its step plan (LB18, LB23), and for a plan split among people each one's minutes on it (LB29).
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +54,7 @@ public class WorkOrderLaborComparisonService {
     private final ProductionRunRepository runs;
     private final ProductionRunLaborRepository labor;
     private final WorkOrderStepPlanRepository stepPlans;
+    private final WorkOrderStepPlanPersonRepository stepPlanPeople;
     private final WorkerCalendarQuery workerCalendars;
     private final LinkedRunSteps linkedSteps;
     private final ProjectAccessService access;
@@ -82,6 +87,7 @@ public class WorkOrderLaborComparisonService {
             linkedSteps.steps(runId).stream().filter(step -> !step.gateway()).forEach(step -> stepsById.put(step.stepId(), step));
         }
         Map<String, WorkOrderLaborComparisonResponse.Step> byProcess = new LinkedHashMap<>();
+        Map<String, Map<String, Integer>> stepActual = new HashMap<>();
         int wholeRun = 0;
         if (!runIds.isEmpty()) {
             for (ProductionRunLabor row : labor.findAllByProductionRunIdInAndCancelledYnOrderByRecordedAtAscRunLaborIdAsc(runIds, "N")) {
@@ -92,9 +98,12 @@ public class WorkOrderLaborComparisonService {
                     wholeRun += row.getWorkedMinutes();
                 } else {
                     byProcess.merge(step.nodeId(), new WorkOrderLaborComparisonResponse.Step(step.nodeId(), step.nodeName(),
-                        step.sequenceNo(), row.getWorkedMinutes(), null), (one, other) -> new WorkOrderLaborComparisonResponse.Step(
+                        step.sequenceNo(), row.getWorkedMinutes(), null, List.of()), (one, other) -> new WorkOrderLaborComparisonResponse.Step(
                         one.nodeId(), one.nodeName(), earlier(one.sequenceNo(), other.sequenceNo()),
-                        one.actualMinutes() + other.actualMinutes(), null));
+                        one.actualMinutes() + other.actualMinutes(), null, List.of()));
+                    // Who recorded it, so a split plan stands beside each person's minutes (LB29).
+                    stepActual.computeIfAbsent(step.nodeId(), id -> new LinkedHashMap<>())
+                        .merge(row.getUserId(), row.getWorkedMinutes(), Integer::sum);
                 }
             }
         }
@@ -102,15 +111,19 @@ public class WorkOrderLaborComparisonService {
         List<WorkOrderStepPlan> plan = stepPlans.findAllByWorkOrderIdOrderBySortOrderAsc(workOrderId);
         Map<String, WorkOrderStepPlan> stepPlan = plan.stream()
             .collect(Collectors.toMap(WorkOrderStepPlan::getNodeId, Function.identity()));
+        Map<String, List<WorkOrderStepPlanPerson>> split = plan.isEmpty() ? Map.of() : stepPlanPeople
+            .findAllByPlanIdInOrderBySortOrderAsc(plan.stream().map(WorkOrderStepPlan::getPlanId).toList()).stream()
+            .collect(Collectors.groupingBy(WorkOrderStepPlanPerson::getPlanId));
         List<WorkOrderLaborComparisonResponse.Step> steps = new ArrayList<>(byProcess.values().stream()
             .sorted(Comparator.comparing(WorkOrderLaborComparisonResponse.Step::sequenceNo,
                 Comparator.nullsLast(Comparator.naturalOrder())))
             .map(step -> new WorkOrderLaborComparisonResponse.Step(step.nodeId(), step.nodeName(), step.sequenceNo(),
-                step.actualMinutes(), stepPlan.containsKey(step.nodeId()) ? stepPlan.get(step.nodeId()).getPlannedMinutes() : null))
+                step.actualMinutes(), stepPlan.containsKey(step.nodeId()) ? stepPlan.get(step.nodeId()).getPlannedMinutes() : null,
+                people(stepPlan.get(step.nodeId()), split, stepActual.get(step.nodeId()))))
             .toList());
         plan.stream().filter(one -> !byProcess.containsKey(one.getNodeId()))
             .forEach(one -> steps.add(new WorkOrderLaborComparisonResponse.Step(one.getNodeId(), one.getNodeName(), null, 0,
-                one.getPlannedMinutes())));
+                one.getPlannedMinutes(), people(one, split, null))));
         Integer stepPlannedMinutes = plan.isEmpty() ? null : plan.stream().mapToInt(WorkOrderStepPlan::getPlannedMinutes).sum();
 
         Integer plannedMinutes = null;
@@ -137,6 +150,26 @@ public class WorkOrderLaborComparisonService {
         });
         return new WorkOrderLaborComparisonResponse(workOrderId, plannedMinutes, complete, runIds.size(), actualMinutes, people,
             steps, wholeRun, stepPlannedMinutes);
+    }
+
+    /** The people a process's plan names, in plan order, then anyone else who recorded time on it (LB29). */
+    private static List<WorkOrderLaborComparisonResponse.StepPerson> people(WorkOrderStepPlan plan,
+                                                                             Map<String, List<WorkOrderStepPlanPerson>> split,
+                                                                             Map<String, Integer> actual) {
+        Map<String, Integer> recorded = actual == null ? Map.of() : actual;
+        List<WorkOrderLaborComparisonResponse.StepPerson> people = new ArrayList<>();
+        Set<String> listed = new HashSet<>();
+        for (WorkOrderStepPlanPerson person : plan == null ? List.<WorkOrderStepPlanPerson>of() : split.getOrDefault(plan.getPlanId(), List.of())) {
+            people.add(new WorkOrderLaborComparisonResponse.StepPerson(person.getUserId(), person.getPlannedMinutes(),
+                recorded.getOrDefault(person.getUserId(), 0)));
+            listed.add(person.getUserId());
+        }
+        recorded.forEach((userId, minutes) -> {
+            if (listed.add(userId)) {
+                people.add(new WorkOrderLaborComparisonResponse.StepPerson(userId, null, minutes));
+            }
+        });
+        return List.copyOf(people);
     }
 
     private static Integer earlier(Integer one, Integer other) {

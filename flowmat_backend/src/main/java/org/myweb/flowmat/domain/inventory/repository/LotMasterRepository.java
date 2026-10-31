@@ -17,6 +17,14 @@ public interface LotMasterRepository extends JpaRepository<LotMaster, String> {
 
     List<LotMaster> findAllByProjectIdAndItemIdOrderByCreatedAtDesc(String projectId, String itemId);
 
+    /** Stock writers share this transaction lock; a lifecycle change must exclude every one of them. */
+    @Query(value = "select pg_try_advisory_xact_lock_shared(hashtext('flowmat-lot-lifecycle'), hashtext(:lotId))", nativeQuery = true)
+    boolean tryStockLifecycleLock(@Param("lotId") String lotId);
+
+    /** Try rather than wait: callers may already hold stock rows that the lifecycle change needs. */
+    @Query(value = "select pg_try_advisory_xact_lock(hashtext('flowmat-lot-lifecycle'), hashtext(:lotId))", nativeQuery = true)
+    boolean tryExclusiveLifecycleLock(@Param("lotId") String lotId);
+
     /** Locks the LOT row until the transaction ends, so two re-checks of its status take turns (LotStatusResync). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select l from LotMaster l where l.lotId = :lotId")

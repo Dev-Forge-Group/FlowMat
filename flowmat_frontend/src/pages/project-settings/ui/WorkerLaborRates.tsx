@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { useWorkerLaborRateMutations, useWorkerLaborRatesQuery } from '../../../entities/workforce/api/useWorkerLaborRates'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { rateLineText } from '../../runs/model/laborCostModel'
+import { WorkerAttendancePay } from './WorkerAttendancePay'
+import { WorkerLaborPremiums } from './WorkerLaborPremiums'
 
 /**
  * A worker's hourly rate in this project, for the project owner only (docs/architecture/adr/ADR-025-worker-labor-cost.md). A
@@ -75,6 +77,8 @@ export function WorkerLaborRates({ projectId, userId }: { projectId: string; use
       {set.isError && <p role="alert">{errorMessage(set.error, 'Failed to save the rate.')}</p>}
       {remove.isError && <p role="alert">{errorMessage(remove.error, 'Failed to remove the rate.')}</p>}
       <p className="inspector-hint">Only the project owner sees rates and labor cost. Leave Applies from empty for today.</p>
+      {data && <WorkerAttendancePay projectId={projectId} userId={userId} />}
+      {data && <WorkerLaborPremiums projectId={projectId} userId={userId} />}
     </details>
   )
 }

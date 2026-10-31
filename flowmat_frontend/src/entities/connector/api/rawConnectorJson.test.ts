@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { httpClient } from '../../../shared/api/httpClient'
 import { refreshAccessToken } from '../../auth/lib/authSession'
 
-vi.mock('../../auth/lib/authSession', () => ({ tokenStorage: { getAccess: () => 'access' }, refreshAccessToken: vi.fn() }))
+vi.mock('../../auth/lib/authSession', () => ({ tokenStorage: { getAccess: () => 'access', getSessionVersion: () => 0 }, refreshAccessToken: vi.fn() }))
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 

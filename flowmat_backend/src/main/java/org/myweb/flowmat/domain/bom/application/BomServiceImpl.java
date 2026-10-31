@@ -148,6 +148,8 @@ public class BomServiceImpl implements BomService {
         CatalogItemView target = findProjectItem(request.targetItemId(), projectId);
         requireActive(target, "give it a BOM");
         revisionLock.lockItem(projectId, target.itemId());
+        target = lockReferenceItem(request.targetItemId(), projectId);
+        requireActive(target, "give it a BOM");
         if (bomHeaderRepository.findTopByProjectIdAndTargetItemIdAndDeletedYnOrderByBomVersionDesc(
             projectId, target.itemId(), NOT_DELETED).isPresent()) {
             throw new BusinessException(ErrorCode.CONFLICT,
@@ -205,6 +207,7 @@ public class BomServiceImpl implements BomService {
     public BomResponse addLine(String bomId, BomLineCreateRequest request) {
         BomHeader header = findEditableBom(bomId);
         CatalogItemView child = findProjectItem(request.childItemId(), header.getProjectId());
+        child = lockReferenceItem(request.childItemId(), header.getProjectId());
         requireActive(child, "use it in a BOM");
         requirePositive(request.quantity(), "Material quantity");
 
@@ -470,6 +473,11 @@ public class BomServiceImpl implements BomService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Item " + item.itemCode() + " belongs to another project.");
         }
         return item;
+    }
+
+    private CatalogItemView lockReferenceItem(String itemId, String projectId) {
+        return catalogQuery.lockProjectItemForReference(projectId, itemId == null ? "" : itemId.trim())
+            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Item " + itemId + " does not exist."));
     }
 
     /** Opaque 48-character key, scoped to source and request, within the existing varchar(50) primary key. */

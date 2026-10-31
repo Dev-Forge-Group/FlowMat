@@ -4,6 +4,7 @@ import { unwrapApiResponse, unwrapApiVoidResponse } from '../../../shared/api/un
 import type { ApiEnvelope } from '../../../shared/types/api'
 import { requireJson } from '../model/connectorForms'
 import type { HttpExecution, HttpProfile, HttpProfileVersion, HttpRequestPreview, ProcessHttpBinding } from '../model/types'
+import { httpAttentionKey } from './useHttpExecutionAttention'
 
 export const httpProfilesKey = (projectId: string) => ['http-profiles', projectId] as const
 const profilePath = (projectId: string, profileId?: string) => `/projects/${encodeURIComponent(projectId)}/http-profiles`
@@ -23,6 +24,7 @@ async function reconcileRunViews(client: QueryClient, runId: string): Promise<vo
     { queryKey: ['flow-runs'], predicate: (query) => Array.isArray(query.state.data) && query.state.data.some((run: unknown) =>
       run !== null && typeof run === 'object' && 'flowRunId' in run && run.flowRunId === runId) },
     ...['flow-run-steps', 'flow-run-attempts', 'flow-run-events', 'flow-run-lineage'].map((kind) => ({ queryKey: [kind, runId] })),
+    { queryKey: httpAttentionKey },
   ]
   // An older read must not restore a pre-execution step after durable HTTP evidence is recovered.
   await Promise.all(filters.map((filter) => client.cancelQueries(filter)))
@@ -120,6 +122,7 @@ export function useHttpExecutionMutations(runId: string, stepId: string) {
       client.invalidateQueries({ queryKey: ['flow-run-attempts', runId] }),
       client.invalidateQueries({ queryKey: ['flow-run-events', runId] }),
       client.invalidateQueries({ queryKey: ['flow-run-lineage', runId] }),
+      client.invalidateQueries({ queryKey: httpAttentionKey }),
     ])
   }
   const execute = useMutation({ mutationFn: async (requestId: string) =>

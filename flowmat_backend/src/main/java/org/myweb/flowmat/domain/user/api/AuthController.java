@@ -7,7 +7,6 @@ import jakarta.validation.Valid;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.user.api.dto.request.EmailCodeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.EmailCodeVerifyRequest;
@@ -33,6 +32,7 @@ import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.myweb.flowmat.global.security.AuthUser;
+import org.myweb.flowmat.global.security.JwtProvider;
 import org.myweb.flowmat.global.security.RefreshTokenCookieService;
 import org.myweb.flowmat.global.security.oauth.OAuthExchangeStore;
 import org.springframework.http.ResponseCookie;
@@ -54,7 +54,6 @@ public class AuthController {
 
     private static final String GUEST_SID_COOKIE_NAME = "guest_sid";
     private static final int GUEST_SID_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
-    private static final Pattern GUEST_SID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{16,128}$");
     private static final int EMAIL_CODE_IP_LIMIT = 10;
     private static final int EMAIL_CODE_EMAIL_LIMIT = 5;
     private static final int DORMANT_REQUEST_IP_LIMIT = 8;
@@ -68,6 +67,7 @@ public class AuthController {
     private final LoginRateLimitProperties loginRateLimitProperties;
     private final RefreshTokenCookieService refreshTokenCookieService;
     private final OAuthExchangeStore oauthExchangeStore;
+    private final JwtProvider jwtProvider;
 
     @PostMapping("/email/send-code")
     public ApiResponse<Void> sendEmailCode(HttpServletRequest httpRequest, @Valid @RequestBody EmailCodeRequest request) {
@@ -137,8 +137,9 @@ public class AuthController {
     @PostMapping("/guest-token")
     public ApiResponse<UserTokenResponse> guestToken(HttpServletRequest request, HttpServletResponse response) {
         String guestSid = resolveOrCreateGuestSid(request);
+        UserTokenResponse token = authService.issueGuestToken(guestSid, extractBearer(request.getHeader(HttpHeaders.AUTHORIZATION)));
         setGuestSidCookie(response, guestSid, isSecureRequest(request));
-        return ApiResponse.ok(authService.issueGuestToken(guestSid, extractBearer(request.getHeader(HttpHeaders.AUTHORIZATION))));
+        return ApiResponse.ok(token);
     }
 
     @PostMapping("/refresh")
@@ -288,10 +289,9 @@ public class AuthController {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
             for (Cookie cookie : cookies) {
-                if (GUEST_SID_COOKIE_NAME.equals(cookie.getName())
-                    && cookie.getValue() != null
-                    && GUEST_SID_PATTERN.matcher(cookie.getValue().trim()).matches()) {
-                    return cookie.getValue().trim();
+                if (GUEST_SID_COOKIE_NAME.equals(cookie.getName()) && cookie.getValue() != null) {
+                    String sid = jwtProvider.resolveGuestSessionId(cookie.getValue());
+                    if (sid != null) return sid;
                 }
             }
         }
@@ -299,7 +299,8 @@ public class AuthController {
     }
 
     private void setGuestSidCookie(HttpServletResponse response, String guestSid, boolean secure) {
-        ResponseCookie cookie = ResponseCookie.from(GUEST_SID_COOKIE_NAME, guestSid)
+        ResponseCookie cookie = ResponseCookie.from(GUEST_SID_COOKIE_NAME,
+                jwtProvider.generateGuestSessionToken(guestSid, GUEST_SID_MAX_AGE_SECONDS * 1000L))
             .httpOnly(true)
             .secure(secure)
             .path("/")

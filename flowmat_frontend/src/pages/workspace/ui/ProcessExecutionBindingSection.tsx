@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useHttpBinding, useHttpProfiles, useHttpProfileVersions, useJsonMappingPreview, usePinnedHttpProfileVersion, useSaveHttpBinding } from '../../../entities/connector/api/useHttpConnectors'
 import { bindingBody, type BindingForm } from '../../../entities/connector/model/connectorForms'
 import { useProjectRole } from '../../../entities/project/api/useProjectRole'
 import type { CanvasPortViewModel } from '../../../entities/workflow/model/types'
-import { errorMessage } from '../../../shared/lib/errorMessage'
+import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 
 const field = { display: 'grid', gap: 4, minWidth: 0 } as const
 const control = { minWidth: 0, width: '100%', boxSizing: 'border-box' } as const
@@ -25,6 +25,9 @@ export function ProcessExecutionBindingSection({ processId, projectId, outputs }
   const [previewResult, setPreviewResult] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [readRefusal, setReadRefusal] = useState<string | null>(null)
+  const [recovering, setRecovering] = useState(false)
+  const editGeneration = useRef(0)
   const binding = query.data
   const profileOptions = (profiles.data ?? []).filter((profile) => profile.enabled)
   const pinned = usePinnedHttpProfileVersion(projectId, form?.profileVersionId ?? '')
@@ -40,13 +43,49 @@ export function ProcessExecutionBindingSection({ processId, projectId, outputs }
   const selectedVersion = versionOptions.find((version) => version.profileVersionId === form?.profileVersionId)
   const operations = selectedVersion?.operations ?? []
   const locked = save.isPending || preview.isPending
+  const refusedRead = [query, profiles].find((read) => [401, 403, 404].includes(errorStatus(read.error) ?? 0))
+    ?? [pinned, history].find((read) => [401, 403].includes(errorStatus(read.error) ?? 0))
+  const accessDenied = readRefusal !== null || Boolean(refusedRead)
+  const refusalMessage = refusedRead ? errorMessage(refusedRead.error, 'HTTP binding access is unavailable.') : readRefusal
+
+  useEffect(() => {
+    if (!refusalMessage) return
+    editGeneration.current += 1
+    setReadRefusal(refusalMessage)
+    setSource('{}'); setPreviewResult(null); setProblem(null); setSaved(false)
+  }, [refusalMessage])
+
+  useEffect(() => () => { editGeneration.current += 1 }, [])
+
+  async function refreshAccess() {
+    if (save.isPending || recovering) return
+    setRecovering(true)
+    try {
+      // Keep the hidden editor's query keys until every refused read has been checked again.
+      const reads = await Promise.all([
+        query.refetch().then((read) => ({ read, optional: false })),
+        profiles.refetch().then((read) => ({ read, optional: false })),
+        ...(form?.profileVersionId ? [pinned.refetch().then((read) => ({ read, optional: true }))] : []),
+        ...(selectedProfile?.enabled ? [history.refetch().then((read) => ({ read, optional: true }))] : []),
+      ])
+      const failed = reads.find(({ read, optional }) => read.isError && !(optional && errorStatus(read.error) === 404))
+      if (failed) {
+        setReadRefusal(errorMessage(failed.read.error, 'Could not refresh HTTP binding access.'))
+        return
+      }
+      editGeneration.current += 1
+      setForm(null); setProfileId(null); setSource('{}'); setPreviewResult(null)
+      setProblem(null); setSaved(false); setReadRefusal(null)
+    } finally { setRecovering(false) }
+  }
   const set = (patch: Partial<BindingForm>) => {
     setForm((current) => current ? { ...current, ...patch } : null)
     setPreviewResult(null)
   }
 
   function edit() {
-    if (!binding) return
+    if (!binding || accessDenied) return
+    editGeneration.current += 1
     setForm({ profileVersionId: binding.profileVersionId ?? '', operationId: binding.operationId ?? '',
       outputPortId: binding.outputPortId ?? '', requestMapping: binding.requestMappingJson ?? '{"from":""}',
       responseMapping: binding.responseMappingJson ?? '{"from":""}', expectedVersion: binding.version })
@@ -56,7 +95,8 @@ export function ProcessExecutionBindingSection({ processId, projectId, outputs }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!form || locked) return
+    if (!form || locked || accessDenied) return
+    const generation = editGeneration.current
     setProblem(null)
     try {
       if (!form.profileVersionId || !form.operationId || !form.outputPortId) throw new Error('Select a profile revision, operation and output port.')
@@ -64,30 +104,41 @@ export function ProcessExecutionBindingSection({ processId, projectId, outputs }
         throw new Error('Select an enabled profile revision and one of its approved operations.')
       }
       await save.mutateAsync(bindingBody(form))
+      if (generation !== editGeneration.current) return
       setForm(null); setSaved(true)
-    } catch (error) { setProblem(errorMessage(error, 'Could not save the HTTP binding.')) }
+    } catch (error) {
+      if (generation === editGeneration.current) setProblem(errorMessage(error, 'Could not save the HTTP binding.'))
+    }
   }
 
   async function showPreview(kind: 'request' | 'response') {
-    if (!form || locked) return
+    if (!form || locked || accessDenied) return
+    const generation = editGeneration.current
     setProblem(null); setPreviewResult(null)
     try {
       const result = await preview.mutateAsync({ source, mapping: kind === 'request' ? form.requestMapping : form.responseMapping })
+      if (generation !== editGeneration.current) return
       setPreviewResult(result.resultJson ?? 'Exact preview JSON is unavailable. Reload after updating the server.')
-    } catch (error) { setProblem(errorMessage(error, 'Could not preview the mapping.')) }
+    } catch (error) {
+      if (generation === editGeneration.current) setProblem(errorMessage(error, 'Could not preview the mapping.'))
+    }
   }
 
   return <section aria-label="HTTP execution binding" className="inspector__section" style={{ marginTop: 16 }}>
     <h4 style={{ marginTop: 0 }}>HTTP execution</h4>
     {query.isPending && <p>Loading HTTP binding...</p>}
-    {query.isError && <p role="alert">{errorMessage(query.error, 'Could not load the HTTP binding.')}</p>}
-    {binding && !form && <>
+    {!accessDenied && query.isError && <p role="alert">{errorMessage(query.error, 'Could not load the HTTP binding.')}</p>}
+    {accessDenied && <>
+      <p role="alert">{refusalMessage}</p>
+      <button type="button" disabled={save.isPending || recovering} onClick={() => { void refreshAccess() }}>Refresh HTTP binding</button>
+    </>}
+    {!accessDenied && binding && !form && <>
       <p>{binding.profileVersionId ? `Operation ${binding.operationId} · profile revision ${binding.profileVersionId}` : 'No HTTP operation bound.'}</p>
       {mayEdit && <button type="button" onClick={edit}>Edit HTTP binding</button>}
       {!mayEdit && <p>Editors and the project owner can change this binding.</p>}
     </>}
-    {saved && !form && <p role="status">Saved. Publish a revision to use this binding in new runs.</p>}
-    {form && mayEdit && <form aria-label="Edit HTTP binding" onSubmit={submit}>
+    {!accessDenied && saved && !form && <p role="status">Saved. Publish a revision to use this binding in new runs.</p>}
+    {!accessDenied && form && mayEdit && <form aria-label="Edit HTTP binding" onSubmit={submit}>
       <fieldset disabled={locked} style={{ display: 'grid', gap: 8, minWidth: 0, border: 0, padding: 0, margin: 0 }}>
         <legend>Bind an approved HTTP operation</legend>
         <label style={field}>HTTP profile<select style={control} value={selectedProfileId} onChange={(event) => {
@@ -149,15 +200,21 @@ export function ProcessExecutionBindingSection({ processId, projectId, outputs }
             || !operations.some((operation) => operation.operationId === form.operationId)}>{save.isPending ? 'Saving...' : 'Save HTTP binding'}</button>
           <button type="button" onClick={() => { setForm(null); setProblem(null); setPreviewResult(null) }}>Cancel HTTP edit</button>
           {binding?.profileVersionId && <button type="button" onClick={async () => {
+            if (locked || accessDenied) return
+            const generation = editGeneration.current
             setProblem(null)
-            try { await save.mutateAsync(bindingBody(null, form.expectedVersion)); setForm(null); setSaved(true) }
-            catch (error) { setProblem(errorMessage(error, 'Could not clear the HTTP binding.')) }
+            try {
+              await save.mutateAsync(bindingBody(null, form.expectedVersion))
+              if (generation === editGeneration.current) { setForm(null); setSaved(true) }
+            } catch (error) {
+              if (generation === editGeneration.current) setProblem(errorMessage(error, 'Could not clear the HTTP binding.'))
+            }
           }}>Clear HTTP binding</button>}
         </div>
       </fieldset>
     </form>}
-    {previewResult !== null && <pre aria-label="Mapping preview result" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{previewResult}</pre>}
-    {problem && <p role="alert">{problem}</p>}
+    {!accessDenied && mayEdit && previewResult !== null && <pre aria-label="Mapping preview result" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{previewResult}</pre>}
+    {!accessDenied && problem && <p role="alert">{problem}</p>}
     <p className="inspector-hint">External requests require an actual graph run and an explicit action by the project owner.</p>
   </section>
 }

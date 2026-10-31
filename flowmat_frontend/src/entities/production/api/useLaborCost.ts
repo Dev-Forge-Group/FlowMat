@@ -10,6 +10,9 @@ export interface LaborCostPerson {
   /** The known amounts; costComplete is false when some of their time has no rate on its day. */
   cost: number
   costComplete: boolean
+  /** The known amounts with the pay premiums (ADR-028); premiumsComplete is false when a day with a rate had no attendance. */
+  premiumCost?: number
+  premiumsComplete?: boolean
 }
 
 export interface RunLaborCostDto {
@@ -17,12 +20,18 @@ export interface RunLaborCostDto {
   workedMinutes: number
   cost: number
   costComplete: boolean
+  premiumCost?: number
+  premiumsComplete?: boolean
   people: LaborCostPerson[]
   lines: {
     runLaborId: string; userId: string; workedMinutes: number; rateDate: string
-    /** recorded: the day it was recorded; run_end: added by a correction, the run's original end. */
-    rateBasis: 'recorded' | 'run_end'
+    /** recorded: the day it was recorded; run_end: added by a correction, the run's original end; worked: the day its clock times start. */
+    rateBasis: 'recorded' | 'run_end' | 'worked'
     hourlyRate: number | null; cost: number | null
+    /** The worker's paid over attended minutes that day; null without attendance, when premiumCost is the cost. */
+    premiumFactor?: number | null; premiumCost?: number | null
+    /** Its clock times when recorded (LB31); its premiums are then those in force at those times. */
+    workedFrom?: string | null; workedTo?: string | null
   }[]
 }
 
@@ -32,6 +41,8 @@ export interface WorkOrderLaborCostDto {
   workedMinutes: number
   cost: number
   costComplete: boolean
+  premiumCost?: number
+  premiumsComplete?: boolean
   people: LaborCostPerson[]
 }
 

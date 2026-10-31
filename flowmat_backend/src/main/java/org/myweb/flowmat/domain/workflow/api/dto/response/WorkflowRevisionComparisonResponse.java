@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.workflow.api.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 
@@ -18,5 +19,12 @@ public record WorkflowRevisionComparisonResponse(
      * path is a JSON pointer relative to that member/section; empty means the whole value. kind is added, removed or
      * modified, distinguishing an absent field from an explicit JSON null. An added/removed member counts as one change.
      */
-    public record Change(String section, String entityId, String path, String kind, JsonNode before, JsonNode after) {}
+    public record Change(String section, String entityId, String path, String kind, JsonNode before, JsonNode after) {
+        /** JSON text keeps number precision when a client parses ordinary JSON numbers as doubles. */
+        @JsonProperty("beforeJson")
+        public String beforeJson() { return before == null ? null : before.toString(); }
+
+        @JsonProperty("afterJson")
+        public String afterJson() { return after == null ? null : after.toString(); }
+    }
 }

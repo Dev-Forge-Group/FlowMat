@@ -11,8 +11,9 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -46,6 +47,7 @@ import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.io.CloseMode;
 import org.apache.hc.core5.ssl.SSLContexts;
 import org.apache.hc.core5.util.Timeout;
+import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpCancellation;
 import org.springframework.stereotype.Component;
 
 /** Bounded one-shot transport. Address validation is evaluated inside the same total deadline as I/O. */
@@ -75,40 +77,62 @@ public class ConnectorHttpTransport implements AutoCloseable {
     }
 
     public TransportResponse exchange(TransportRequest request) {
+        return exchange(request, new ConnectorHttpCancellation());
+    }
+
+    public TransportResponse exchange(TransportRequest request, ConnectorHttpCancellation cancellation) {
         if (request == null || !METHODS.contains(request.method()) || request.target() == null
-            || request.address() == null || request.body() != null && request.body().length > MAX_BYTES) {
+            || request.address() == null || cancellation == null
+            || request.body() != null && request.body().length > MAX_BYTES) {
             throw new TransportFailure("INVALID_REQUEST", false, null);
         }
+        if (cancellation.isCancelled()) throw new TransportFailure("CANCELLED", false, null);
         HttpUriRequestBase outgoing = new HttpUriRequestBase(request.method(), request.target());
         AtomicBoolean mayHaveBeenSent = new AtomicBoolean();
-        Future<TransportResponse> pending;
-        try {
-            pending = workers.submit(() -> perform(request, outgoing, mayHaveBeenSent));
-        } catch (RejectedExecutionException exception) {
-            throw new TransportFailure("BUSY", false, null);
-        }
-        try {
-            return pending.get(totalTimeout.toNanos(), TimeUnit.NANOSECONDS);
-        } catch (TimeoutException exception) {
+        FutureTask<TransportResponse> pending = new FutureTask<>(
+            () -> perform(request, outgoing, mayHaveBeenSent, cancellation));
+        // Register against the already-created future before it can run, including cancel-before-submit.
+        try (var registration = cancellation.onCancel(() -> {
             outgoing.cancel();
             pending.cancel(true);
-            throw new TransportFailure("TOTAL_TIMEOUT", mayHaveBeenSent.get(), null);
-        } catch (InterruptedException exception) {
-            outgoing.cancel();
-            pending.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new TransportFailure("CANCELLED", mayHaveBeenSent.get(), null);
-        } catch (ExecutionException exception) {
-            outgoing.cancel();
-            if (exception.getCause() instanceof TransportFailure failure) throw failure;
-            throw new TransportFailure("POLICY_REJECTED", mayHaveBeenSent.get(), null);
+        })) {
+            if (cancellation.isCancelled()) throw new TransportFailure("CANCELLED", false, null);
+            try {
+                workers.execute(pending);
+            } catch (RejectedExecutionException exception) {
+                outgoing.cancel();
+                pending.cancel(true);
+                throw new TransportFailure(cancellation.isCancelled() ? "CANCELLED" : "BUSY", false, null);
+            }
+            try {
+                return pending.get(totalTimeout.toNanos(), TimeUnit.NANOSECONDS);
+            } catch (TimeoutException exception) {
+                outgoing.cancel();
+                pending.cancel(true);
+                throw new TransportFailure("TOTAL_TIMEOUT", mayHaveBeenSent.get(), null);
+            } catch (InterruptedException exception) {
+                outgoing.cancel();
+                pending.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new TransportFailure("CANCELLED", mayHaveBeenSent.get(), null);
+            } catch (CancellationException exception) {
+                throw new TransportFailure("CANCELLED", mayHaveBeenSent.get(), null);
+            } catch (ExecutionException exception) {
+                outgoing.cancel();
+                if (cancellation.isCancelled()) throw new TransportFailure("CANCELLED", mayHaveBeenSent.get(), null);
+                if (exception.getCause() instanceof TransportFailure failure) throw failure;
+                throw new TransportFailure("POLICY_REJECTED", mayHaveBeenSent.get(), null);
+            }
         }
     }
 
     private TransportResponse perform(TransportRequest request, HttpUriRequestBase outgoing,
-                                      AtomicBoolean mayHaveBeenSent) {
+                                      AtomicBoolean mayHaveBeenSent, ConnectorHttpCancellation cancellation) {
+        if (cancellation.isCancelled() || outgoing.isCancelled() || Thread.currentThread().isInterrupted()) {
+            throw new TransportFailure("CANCELLED", false, null);
+        }
         InetAddress address = request.address().get();
-        if (address == null || outgoing.isCancelled() || Thread.currentThread().isInterrupted()) {
+        if (address == null || cancellation.isCancelled() || outgoing.isCancelled() || Thread.currentThread().isInterrupted()) {
             throw new TransportFailure("CANCELLED", false, null);
         }
         DnsResolver pinned = new DnsResolver() {
@@ -151,7 +175,7 @@ public class ConnectorHttpTransport implements AutoCloseable {
             .disableCookieManagement().disableAuthCaching().disableContentCompression().disableConnectionState().build();
         Integer status = null;
         try {
-            if (outgoing.isCancelled() || Thread.currentThread().isInterrupted()) {
+            if (cancellation.isCancelled() || outgoing.isCancelled() || Thread.currentThread().isInterrupted()) {
                 throw new TransportFailure("CANCELLED", false, null);
             }
             for (var header : request.headers().entrySet()) outgoing.setHeader(header.getKey(), header.getValue());

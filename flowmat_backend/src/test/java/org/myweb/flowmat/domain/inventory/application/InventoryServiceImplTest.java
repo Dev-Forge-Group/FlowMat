@@ -156,6 +156,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsMaximumBelowMinimum() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.lockItemForStock("project-1", "item-1")).thenReturn(Optional.of(item()));
         when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(
@@ -172,6 +173,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsReservingMoreThanOnHand() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.lockItemForStock("project-1", "item-1")).thenReturn(Optional.of(item()));
         when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(
@@ -188,6 +190,7 @@ class InventoryServiceImplTest {
     @Test
     void rejectsNegativeQuantity() {
         when(catalogReferences.item("item-1")).thenReturn(Optional.of(item()));
+        when(catalogReferences.lockItemForStock("project-1", "item-1")).thenReturn(Optional.of(item()));
         when(catalogReferences.itemRuleFacts("item-1")).thenReturn(Optional.of(Map.of()));
 
         BusinessException exception = assertThrows(

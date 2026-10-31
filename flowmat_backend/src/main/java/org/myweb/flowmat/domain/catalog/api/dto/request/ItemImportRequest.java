@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.catalog.api.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
@@ -9,7 +10,7 @@ import java.util.List;
  *
  * @param dryRun only check and say what would happen
  */
-public record ItemImportRequest(@NotBlank String projectId, boolean dryRun, List<Row> rows) {
+public record ItemImportRequest(@NotBlank String projectId, boolean dryRun, List<@NotNull(message = "rows must not contain null entries.") Row> rows) {
 
     /**
      * One line of the file. A blank value leaves an existing item's field as it is; a new item gets the usual defaults.

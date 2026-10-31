@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useIsProjectOwner } from '../../../entities/project/api/useIsProjectOwner'
 import { useHttpProfiles, useHttpProfileMutations, useHttpProfileVersions } from '../../../entities/connector/api/useHttpConnectors'
 import { emptyProfileForm, profileForm, profileBody, type ProfileForm } from '../../../entities/connector/model/connectorForms'
 import { compareHttpProfileVersions, defaultHttpProfileComparison } from '../../../entities/connector/model/httpProfileHistory'
 import type { HttpOperation, HttpProfileVersion } from '../../../entities/connector/model/types'
-import { errorMessage } from '../../../shared/lib/errorMessage'
+import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { HTTPProfileReadinessCheck } from './HTTPProfileReadinessCheck'
 
 const field = { display: 'grid', gap: 4 } as const
@@ -17,13 +17,23 @@ export function HTTPProfilesPanel({ projectId }: { projectId: string }) {
   const [historyId, setHistoryId] = useState('')
   const history = useHttpProfileVersions(projectId, historyId)
   const [problem, setProblem] = useState<string | null>(null)
-  const profiles = Array.isArray(query.data) ? query.data : []
+  const accessDenied = [401, 403, 404].includes(errorStatus(query.error) ?? 0)
+    || [401, 403].includes(errorStatus(history.error) ?? 0)
+  const historyUnavailable = errorStatus(history.error) === 404
+  const profiles = !accessDenied && Array.isArray(query.data) ? query.data : []
   const pending = save.isPending || status.isPending || remove.isPending
   const set = (patch: Partial<ProfileForm>) => setForm((current) => current ? { ...current, ...patch } : null)
 
+  useEffect(() => {
+    if (accessDenied) {
+      setForm(null)
+      setProblem(null)
+    }
+  }, [accessDenied])
+
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!form || pending) return
+    if (!form || pending || accessDenied) return
     setProblem(null)
     try {
       await save.mutateAsync({ profileId: form.profileId, body: profileBody(form) })
@@ -36,11 +46,17 @@ export function HTTPProfilesPanel({ projectId }: { projectId: string }) {
     <h2 style={{ margin: 0 }}>HTTP profiles</h2>
     <p style={{ margin: 0 }}>Choose approved destinations and operations for workflow steps. Profile edits create a new revision;
       published workflows keep the revision they selected.</p>
-    {owner ? <button type="button" disabled={pending || Boolean(form)} onClick={() => {
+    {!accessDenied && (owner ? <button type="button" disabled={pending || Boolean(form)} onClick={() => {
       setForm(emptyProfileForm()); setProblem(null)
-    }}>Add HTTP profile</button> : <p>Only the project owner can create or change profiles.</p>}
+    }}>Add HTTP profile</button> : <p>Only the project owner can create or change profiles.</p>)}
     {query.isPending && <p>Loading HTTP profiles...</p>}
     {query.isError && <p role="alert">{errorMessage(query.error, 'Could not load HTTP profiles.')}</p>}
+    {accessDenied && <>
+      {!query.isError && <p role="alert">{errorMessage(history.error, 'Could not load HTTP profile revisions.')}</p>}
+      <button type="button" disabled={query.isFetching || history.isFetching || pending} onClick={() => {
+        void Promise.all([query.refetch(), ...(historyId ? [history.refetch()] : [])])
+      }}>Refresh HTTP profiles</button>
+    </>}
     {!query.isPending && !query.isError && profiles.length === 0 && <p>No HTTP profiles yet.</p>}
     {profiles.map((profile) => <article key={profile.profileId} style={{ borderTop: '1px solid var(--border)', paddingTop: 12,
       display: 'grid', gap: 6, minWidth: 0 }}>
@@ -77,11 +93,11 @@ export function HTTPProfilesPanel({ projectId }: { projectId: string }) {
       {historyId === profile.profileId && <div aria-label={`Revisions for ${profile.name}`}>
         {history.isPending && <p>Loading revisions...</p>}
         {history.isError && <p role="alert">{errorMessage(history.error, 'Could not load revisions.')}</p>}
-        {history.data && <ProfileRevisionComparison key={profile.profileId}
+        {!historyUnavailable && history.data && <ProfileRevisionComparison key={profile.profileId}
           profileId={profile.profileId} currentVersionId={profile.profileVersionId} versions={history.data} />}
       </div>}
     </article>)}
-    {form && owner && <form aria-label="Edit HTTP profile" onSubmit={submit}>
+    {form && owner && !accessDenied && <form aria-label="Edit HTTP profile" onSubmit={submit}>
       <fieldset disabled={pending} style={{ display: 'grid', gap: 10, minWidth: 0, margin: 0, padding: 0, border: 0 }}>
         <legend>{form.profileId ? 'Edit profile' : 'New profile'}</legend>
         <label style={field}>Profile name<input required maxLength={120} value={form.name} onChange={(event) => set({ name: event.target.value })} /></label>
@@ -101,7 +117,7 @@ export function HTTPProfilesPanel({ projectId }: { projectId: string }) {
         </div>
       </fieldset>
     </form>}
-    {problem && <p role="alert">{problem}</p>}
+    {!accessDenied && problem && <p role="alert">{problem}</p>}
     <small>Disabling a profile blocks new requests from all of its revisions. It cannot undo a request already sent.</small>
   </section>
 }

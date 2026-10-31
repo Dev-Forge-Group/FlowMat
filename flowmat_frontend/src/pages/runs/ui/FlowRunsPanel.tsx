@@ -1,13 +1,17 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { delayText, heldText } from '../model/delayText'
+import { flowRunNumberDisplay, rawFlowRunJsonBody } from '../model/flowRunJson'
+import type { FlowRunEvent } from '../model/flowRunEventsJson'
 import { pinnedHttpBinding } from '../../../entities/connector/model/httpExecutionState'
 import { rawRunInputBody } from '../../../entities/connector/model/connectorForms'
 import { FlowRunHttpExecutionPanel } from './FlowRunHttpExecutionPanel'
+import { FlowRunEventLog } from './FlowRunEventLog'
+import { FlowRunJsonValue } from './FlowRunJsonValue'
 import type { ApiEnvelope, WorkflowDto, WorkflowRevisionDetailDto, WorkflowRevisionDto } from '../../../shared/types/api'
 
 type FlowRun = {
@@ -19,6 +23,8 @@ type FlowRun = {
   status: string
   inputPayload: unknown | null
   outputPayload: unknown | null
+  inputPayloadJson?: string | null
+  outputPayloadJson?: string | null
   startedAt: string
   endedAt: string | null
 }
@@ -35,6 +41,8 @@ type FlowRunStep = {
   errorMessage: string | null
   inputSnapshot: unknown
   outputSnapshot: unknown
+  inputSnapshotJson?: string | null
+  outputSnapshotJson?: string | null
   /** A Join step's branches that can still bring something, 0 once passed; absent for other steps (ADR-007). */
   joinWaiting?: number | null
 }
@@ -81,17 +89,6 @@ type FlowRunAttempt = {
   overdueAt?: string | null
 }
 
-type FlowRunEvent = {
-  eventId: string
-  eventType: string
-  stepId: string | null
-  payload: unknown
-  requestId: string | null
-  occurredAt: string
-  actorType: string
-  actorId: string
-}
-
 type NodeOption = { processId: string; processName: string }
 
 /**
@@ -115,17 +112,25 @@ type ConnectionOption = { connectionId: string; label: string; failurePolicy: st
  * decision 11) and what its connection lost on the way (docs/architecture/adr/ADR-009-connection-loss-rate.md decision 10).
  * A Join's arrivals have their own line.
  */
-function receivedLine(step: FlowRunStep, connections: ConnectionOption[], events: FlowRunEvent[]): string | null {
+function receivedLine(step: FlowRunStep, connections: ConnectionOption[], events: FlowRunEvent[]): {
+  text: string; legacy: boolean; unavailable: boolean
+} | null {
   if (step.joinWaiting != null) return null
-  const loss = events.find((event) => event.eventType === 'transfer_loss' && event.stepId === step.sourceStepId
+  const lossEvent = events.find((event) => event.eventType === 'transfer_loss' && event.stepId === step.sourceStepId
     && (event.payload as { connectionId?: unknown } | null)?.connectionId === step.sourceConnectionId)
-    ?.payload as { lost?: unknown } | undefined
+  const loss = lossEvent?.payload as { lost?: unknown } | undefined
   const split = connections.find((connection) => connection.connectionId === step.sourceConnectionId)?.splitKind
   if (!split && !loss) return null
   const input = step.inputSnapshot as { quantity?: unknown; unit?: unknown } | null
   if (typeof input?.quantity !== 'number') return null
   const unit = typeof input.unit === 'string' ? ` ${input.unit}` : ''
-  return `received ${input.quantity}${unit}${typeof loss?.lost === 'number' ? ` · lost ${loss.lost}${unit}` : ''}`
+  const received = flowRunNumberDisplay(step.inputSnapshotJson, 'quantity', input.quantity)
+  const lost = typeof loss?.lost === 'number'
+    ? flowRunNumberDisplay(lossEvent?.payloadJson, 'lost', loss.lost) : undefined
+  const receivedText = received.text === null ? 'received quantity unavailable' : `received ${received.text}${unit}`
+  const lostText = lost ? lost.text === null ? 'lost quantity unavailable' : `lost ${lost.text}${unit}` : null
+  return { text: `${receivedText}${lostText ? ` · ${lostText}` : ''}`, legacy: received.legacy || Boolean(lost?.legacy),
+    unavailable: received.text === null || lost?.text === null }
 }
 
 function revisionNodes(snapshot: unknown): NodeOption[] {
@@ -153,20 +158,16 @@ function revisionConnections(snapshot: unknown): ConnectionOption[] {
   })
 }
 
-function filteredConnectionDetail(event: FlowRunEvent, connections: ConnectionOption[]): string {
-  if (event.eventType !== 'connection_filtered' || !event.payload
-    || typeof event.payload !== 'object' || !('connectionId' in event.payload)
-    || typeof event.payload.connectionId !== 'string') return ''
-  const id = event.payload.connectionId
-  return ` · ${connections.find((connection) => connection.connectionId === id)?.label ?? id.slice(0, 8)} (condition false)`
-}
-
 async function getData<T>(path: string): Promise<T> {
   return unwrapApiResponse(await httpClient.get<ApiEnvelope<T>>(path))
 }
 
 async function postData<T>(path: string, body?: unknown): Promise<T> {
   return unwrapApiResponse(await httpClient.post<ApiEnvelope<T>>(path, body))
+}
+
+async function postJsonData<T>(path: string, json: string): Promise<T> {
+  return unwrapApiResponse(await httpClient.postJson<ApiEnvelope<T>>(path, json))
 }
 
 async function putData<T>(path: string, body: unknown): Promise<T> {
@@ -187,6 +188,10 @@ function scheduledAtIso(value: string): string | null {
   return date.toISOString()
 }
 
+type FlowRunAction = { runId: string } & (
+  { path: string; body?: unknown; json?: never } | { path: string; json: string; body?: never }
+)
+
 export function FlowRunsPanel({
   projectId,
   workflowId,
@@ -201,7 +206,16 @@ export function FlowRunsPanel({
   onSelectWorkflow: (workflowId: string) => void
 }) {
   const queryClient = useQueryClient()
-  const [runId, setRunId] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedRunId = searchParams.get('flowRunId') ?? ''
+  const requestedStepId = searchParams.get('stepId') ?? ''
+  const stepElements = useRef(new Map<string, HTMLDivElement>())
+  const mounted = useRef(false)
+  const selectionVersion = useRef(0)
+  const activeRunId = useRef('')
+  const stepDraftVersion = useRef(0)
+  const scheduleEditVersion = useRef(0)
+  const previewVersion = useRef(0)
   const [revisionId, setRevisionId] = useState('')
   const [runType, setRunType] = useState('test')
   const [executionMode, setExecutionMode] = useState<'manual' | 'graph'>('manual')
@@ -225,16 +239,24 @@ export function FlowRunsPanel({
   const [eventTypeFilter, setEventTypeFilter] = useState('')
   const [eventStepFilter, setEventStepFilter] = useState('')
 
+  const invalidatePreview = useCallback(() => {
+    previewVersion.current += 1
+    setRoutePreview(null)
+    setPreviewPending(false)
+  }, [])
+
   const published = revisions.filter((revision) => revision.status === 'published')
   const selectedRevisionId = published.some((revision) => revision.workflowRevisionId === revisionId)
     ? revisionId : published[0]?.workflowRevisionId ?? ''
   const runsQuery = useQuery({
     queryKey: ['flow-runs', workflowId],
     queryFn: () => getData<FlowRun[]>(`/flow-runs?workflowId=${encodeURIComponent(workflowId)}`),
-    enabled: Boolean(workflowId),
+    enabled: Boolean(workflowId && workflows.some((workflow) => workflow.workflowId === workflowId)),
   })
-  const runs = runsQuery.data ?? []
-  const selectedRunId = runs.some((run) => run.flowRunId === runId) ? runId : runs[0]?.flowRunId ?? ''
+  const runs = !runsQuery.isError ? runsQuery.data ?? [] : []
+  const selectedRunId = requestedRunId
+    ? runs.some((run) => run.flowRunId === requestedRunId) ? requestedRunId : ''
+    : runs[0]?.flowRunId ?? ''
   const selectedRun = runs.find((run) => run.flowRunId === selectedRunId)
   const basePath = `/flow-runs/${encodeURIComponent(selectedRunId)}`
   const stepsQuery = useQuery({
@@ -254,22 +276,21 @@ export function FlowRunsPanel({
     ),
     enabled: Boolean(workflowId && selectedRun?.workflowRevisionId),
   })
-  const nodes = revisionNodes(revisionQuery.data?.snapshot)
-  const connections = revisionConnections(revisionQuery.data?.snapshot)
+  const nodes = revisionNodes(!revisionQuery.isError ? revisionQuery.data?.snapshot : undefined)
+  const connections = useMemo(() => revisionConnections(!revisionQuery.isError ? revisionQuery.data?.snapshot : undefined),
+    [revisionQuery.isError, revisionQuery.data?.snapshot])
   const selectedNodeId = nodes.some((node) => node.processId === nodeId) ? nodeId : nodes[0]?.processId ?? ''
-  const steps = stepsQuery.data ?? []
-  const events = eventsQuery.data ?? []
-  const eventTypes = [...new Set(events.map((event) => event.eventType))].sort()
-  const selectedEventTypeFilter = eventTypes.includes(eventTypeFilter) ? eventTypeFilter : ''
-  const selectedEventStepFilter = steps.some((step) => step.stepId === eventStepFilter) ? eventStepFilter : ''
-  const visibleEvents = events.filter((event) =>
-    (!selectedEventTypeFilter || event.eventType === selectedEventTypeFilter)
-    && (!selectedEventStepFilter || event.stepId === selectedEventStepFilter))
+  const steps = useMemo(() => !stepsQuery.isError ? stepsQuery.data ?? [] : [],
+    [stepsQuery.isError, stepsQuery.data])
+  const events = useMemo(() => !eventsQuery.isError ? eventsQuery.data ?? [] : [],
+    [eventsQuery.isError, eventsQuery.data])
+  const transferSummaries = useMemo(() => new Map(steps.map((step) =>
+    [step.stepId, receivedLine(step, connections, events)] as const)), [steps, connections, events])
   const outputForStep = (stepId: string) => outputJsonByStep[`${selectedRunId}:${stepId}`] ?? '{}'
   const outputForRun = runOutputJsonByRun[selectedRunId] ?? '{}'
   const errorCodeForStep = (stepId: string) => errorCodeByStep[`${selectedRunId}:${stepId}`] ?? 'MANUAL_FAILURE'
   const errorMessageForStep = (stepId: string) => errorMessageByStep[`${selectedRunId}:${stepId}`] ?? ''
-  const [expandedStepId, setExpandedStepId] = useState('')
+  const expandedStepId = steps.some((step) => step.stepId === requestedStepId) ? requestedStepId : ''
   const attemptsQuery = useQuery({
     queryKey: ['flow-run-attempts', selectedRunId, expandedStepId],
     queryFn: () => getData<FlowRunAttempt[]>(`${basePath}/steps/${encodeURIComponent(expandedStepId)}/attempts`),
@@ -280,6 +301,43 @@ export function FlowRunsPanel({
     queryFn: () => getData<FlowRunStepLineage>(`${basePath}/steps/${encodeURIComponent(expandedStepId)}/lineage`),
     enabled: Boolean(selectedRunId && expandedStepId && selectedRun?.executionMode === 'graph'),
   })
+
+  function setRunId(id: string) {
+    const params = new URLSearchParams(searchParams)
+    params.set('flowRunId', id)
+    params.delete('stepId')
+    setSearchParams(params, { replace: true })
+  }
+
+  function setExpandedStepId(id: string) {
+    const params = new URLSearchParams(searchParams)
+    if (id) params.set('stepId', id)
+    else params.delete('stepId')
+    setSearchParams(params, { replace: true })
+  }
+
+  useEffect(() => {
+    if (expandedStepId) stepElements.current.get(expandedStepId)?.scrollIntoView({ block: 'nearest' })
+  }, [selectedRunId, expandedStepId])
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  useEffect(() => {
+    selectionVersion.current += 1
+  }, [searchParams])
+
+  useEffect(() => {
+    activeRunId.current = selectedRunId
+    scheduleEditVersion.current += 1
+    invalidatePreview()
+  }, [searchParams, selectedRunId, invalidatePreview])
+
+  function isCurrentRun(runId: string, version: number) {
+    return mounted.current && activeRunId.current === runId && selectionVersion.current === version
+  }
 
   async function refreshRun(id: string) {
     await Promise.all([
@@ -292,78 +350,91 @@ export function FlowRunsPanel({
   }
 
   const startMutation = useMutation({
+    onMutate: () => ({ selectionVersion: selectionVersion.current }),
     mutationFn: async () => unwrapApiResponse(await httpClient.postJson<ApiEnvelope<FlowRun>>(
       executionMode === 'graph' ? '/flow-runs/graph' : '/flow-runs',
       rawRunInputBody({ workflowId, workflowRevisionId: selectedRevisionId, runType }, runInputJson),
     )),
-    onSuccess: async (run) => {
-      setRunId(run.flowRunId)
-      setScheduleEditStepId('')
-      setEventTypeFilter('')
-      setEventStepFilter('')
+    onSuccess: async (run, _, context) => {
+      if (mounted.current && context?.selectionVersion === selectionVersion.current) {
+        setRunId(run.flowRunId)
+        setScheduleEditStepId('')
+        setEventTypeFilter('')
+        setEventStepFilter('')
+      }
       await refreshRun(run.flowRunId)
     },
   })
   const actionMutation = useMutation({
-    mutationFn: ({ path, body }: { path: string; body?: unknown }) => postData<unknown>(path, body),
-    onSuccess: async () => { await refreshRun(selectedRunId) },
+    mutationFn: (action: FlowRunAction) => action.json === undefined
+      ? postData<unknown>(action.path, action.body) : postJsonData<unknown>(action.path, action.json),
+    onSuccess: async (_, variables) => { await refreshRun(variables.runId) },
   })
   const scheduleMutation = useMutation({
-    mutationFn: ({ runId, stepId, scheduledAt }: { runId: string; stepId: string; scheduledAt: string | null }) =>
+    mutationFn: ({ runId, stepId, scheduledAt }: {
+      runId: string; stepId: string; scheduledAt: string | null; editVersion: number; selectionVersion: number
+    }) =>
       putData<FlowRunStep>(`/flow-runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}/schedule`,
         { scheduledAt }),
     onSuccess: async (_, variables) => {
-      setScheduleEditStepId('')
+      if (isCurrentRun(variables.runId, variables.selectionVersion)
+        && variables.editVersion === scheduleEditVersion.current) setScheduleEditStepId('')
       await refreshRun(variables.runId)
     },
   })
 
-  function parseJson(value: string): unknown {
-    try {
-      return JSON.parse(value) as unknown
-    } catch {
-      throw new Error('Enter valid JSON.')
-    }
-  }
-
   async function createStep(event: FormEvent) {
     event.preventDefault()
+    const runId = selectedRunId
+    const selection = selectionVersion.current
+    const draftVersion = stepDraftVersion.current
     setFormError('')
     try {
-      const inputSnapshot = parseJson(inputJson)
-      await actionMutation.mutateAsync({ path: `${basePath}/steps`, body: {
-        nodeId: selectedNodeId, inputSnapshot, scheduledAt: scheduledAtIso(stepScheduledAt),
-      } })
-      setInputJson('{}')
-      setStepScheduledAt('')
+      await actionMutation.mutateAsync({ runId, path: `${basePath}/steps`, json: rawFlowRunJsonBody(
+        'inputSnapshot', inputJson, { nodeId: selectedNodeId, scheduledAt: scheduledAtIso(stepScheduledAt) },
+      ) })
+      if (isCurrentRun(runId, selection) && draftVersion === stepDraftVersion.current) {
+        setInputJson('{}')
+        setStepScheduledAt('')
+      }
     } catch (error) {
-      setFormError(errorMessage(error, 'Could not create the step.'))
+      if (isCurrentRun(runId, selection) && draftVersion === stepDraftVersion.current) {
+        setFormError(errorMessage(error, 'Could not create the step.'))
+      }
     }
   }
 
   function saveSchedule(stepId: string) {
     setFormError('')
     try {
-      scheduleMutation.mutate({ runId: selectedRunId, stepId, scheduledAt: scheduledAtIso(scheduleEditValue) })
+      const scheduledAt = scheduledAtIso(scheduleEditValue)
+      invalidatePreview()
+      scheduleMutation.mutate({ runId: selectedRunId, stepId, scheduledAt,
+        editVersion: scheduleEditVersion.current, selectionVersion: selectionVersion.current })
     } catch (error) {
       setFormError(errorMessage(error, 'Could not save the schedule.'))
     }
   }
 
   async function act(path: string, body?: unknown) {
+    await performAction({ runId: selectedRunId, path, body })
+  }
+
+  async function performAction(action: FlowRunAction) {
+    const version = selectionVersion.current
     setFormError('')
-    setRoutePreview(null)
+    invalidatePreview()
     try {
-      await actionMutation.mutateAsync({ path, body })
+      await actionMutation.mutateAsync(action)
     } catch (error) {
-      setFormError(errorMessage(error, 'Could not update the run.'))
+      if (isCurrentRun(action.runId, version)) setFormError(errorMessage(error, 'Could not update the run.'))
     }
   }
 
   async function completeStep(stepId: string) {
     try {
-      await act(`${basePath}/steps/${encodeURIComponent(stepId)}/complete`,
-        { outputSnapshot: parseJson(outputForStep(stepId)) })
+      await performAction({ runId: selectedRunId, path: `${basePath}/steps/${encodeURIComponent(stepId)}/complete`,
+        json: rawFlowRunJsonBody('outputSnapshot', outputForStep(stepId)) })
     } catch (error) {
       setFormError(errorMessage(error, 'Enter valid JSON before completing the step.'))
     }
@@ -371,43 +442,34 @@ export function FlowRunsPanel({
 
   async function finishRun() {
     try {
-      await act(`${basePath}/finish`, { outputPayload: parseJson(outputForRun) })
+      await performAction({ runId: selectedRunId, path: `${basePath}/finish`, json: rawFlowRunJsonBody('outputPayload', outputForRun) })
     } catch (error) {
       setFormError(errorMessage(error, 'Enter valid JSON before finishing the run.'))
     }
   }
 
-  function downloadVisibleEvents() {
-    const content = JSON.stringify({
-      flowRunId: selectedRunId,
-      workflowRevisionId: selectedRun?.workflowRevisionId,
-      events: visibleEvents,
-    }, null, 2)
-    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `flow-run-${selectedRunId}-events.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-
   async function previewStep(stepId: string) {
+    const runId = selectedRunId
+    const selection = selectionVersion.current
     setFormError('')
-    setRoutePreview(null)
+    invalidatePreview()
+    const version = previewVersion.current
     setPreviewPending(true)
     try {
       const value = outputForStep(stepId)
-      const decisions = await postData<FlowRunRoutePreview[]>(
+      const decisions = await postJsonData<FlowRunRoutePreview[]>(
         `${basePath}/steps/${encodeURIComponent(stepId)}/preview`,
-        { outputSnapshot: parseJson(value) },
+        rawFlowRunJsonBody('outputSnapshot', value),
       )
-      setRoutePreview({ runId: selectedRunId, stepId, outputJson: value, decisions })
+      if (isCurrentRun(runId, selection) && version === previewVersion.current) {
+        setRoutePreview({ runId, stepId, outputJson: value, decisions })
+      }
     } catch (error) {
-      setFormError(errorMessage(error, 'Could not preview the route.'))
+      if (isCurrentRun(runId, selection) && version === previewVersion.current) {
+        setFormError(errorMessage(error, 'Could not preview the route.'))
+      }
     } finally {
-      setPreviewPending(false)
+      if (mounted.current && version === previewVersion.current) setPreviewPending(false)
     }
   }
 
@@ -455,14 +517,17 @@ export function FlowRunsPanel({
 
       {runsQuery.isLoading && <p>Loading Flow Runs...</p>}
       {runsQuery.isError && <p role="alert">{errorMessage(runsQuery.error, 'Could not load Flow Runs.')}</p>}
+      {requestedRunId && !selectedRunId && !runsQuery.isPending && !runsQuery.isFetching && !runsQuery.isError
+        && <p role="alert">Requested Flow Run is unavailable.</p>}
       {runs.length === 0 && !runsQuery.isLoading && <p className="inspector-hint">No Flow Runs for this workflow.</p>}
       {runs.length > 0 && (
         <label style={{ display: 'grid', gap: 4, maxWidth: 480 }}>Flow Run
           <select value={selectedRunId} onChange={(event) => {
-            setRunId(event.target.value); setExpandedStepId(''); setRoutePreview(null)
+            setRunId(event.target.value); invalidatePreview()
             setEventTypeFilter(''); setEventStepFilter('')
             setScheduleEditStepId('')
           }}>
+            {!selectedRunId && <option value="">Requested Flow Run is unavailable</option>}
             {runs.map((run) => (
               <option key={run.flowRunId} value={run.flowRunId}>
                 {run.flowRunId.slice(0, 8)} · {run.executionMode ?? 'manual'} · {run.runType} · {run.status} · {new Date(run.startedAt).toLocaleString()}
@@ -480,32 +545,31 @@ export function FlowRunsPanel({
               <> · <Link to={`/projects/${projectId}/runs/${selectedRun.productionRunId}`}>Open production run</Link></>
             )}
           </div>
-          {selectedRun.inputPayload != null && <div>
-            <strong>Run input</strong>
-            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-              {JSON.stringify(selectedRun.inputPayload, null, 2)}
-            </pre>
-          </div>}
-          {selectedRun.outputPayload != null && <div>
-            <strong>Final run output</strong>
-            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-              {JSON.stringify(selectedRun.outputPayload, null, 2)}
-            </pre>
-          </div>}
+          <FlowRunJsonValue label="Run input" json={selectedRun.inputPayloadJson} value={selectedRun.inputPayload} />
+          <FlowRunJsonValue label="Final run output" json={selectedRun.outputPayloadJson} value={selectedRun.outputPayload} />
           {selectedRun.status === 'running' && !selectedRun.productionRunId && selectedRun.executionMode !== 'graph' && (
             <>
               <form onSubmit={(event) => void createStep(event)} style={{ display: 'grid', gap: 8, maxWidth: 560 }}>
                 <label>Node in pinned revision
-                  <select value={selectedNodeId} onChange={(event) => setNodeId(event.target.value)}>
+                  <select value={selectedNodeId} onChange={(event) => {
+                    stepDraftVersion.current += 1
+                    setNodeId(event.target.value)
+                  }}>
                     {nodes.map((node) => <option key={node.processId} value={node.processId}>{node.processName}</option>)}
                   </select>
                 </label>
                 <label>Input snapshot (JSON)
-                  <textarea value={inputJson} onChange={(event) => setInputJson(event.target.value)} rows={2} />
+                  <textarea value={inputJson} onChange={(event) => {
+                    stepDraftVersion.current += 1
+                    setInputJson(event.target.value)
+                  }} rows={2} />
                 </label>
                 <label>Scheduled start (optional)
                   <input type="datetime-local" value={stepScheduledAt}
-                    onChange={(event) => setStepScheduledAt(event.target.value)} />
+                    onChange={(event) => {
+                      stepDraftVersion.current += 1
+                      setStepScheduledAt(event.target.value)
+                    }} />
                 </label>
                 <button type="submit" disabled={!selectedNodeId || actionMutation.isPending}>Add planned step</button>
               </form>
@@ -517,12 +581,22 @@ export function FlowRunsPanel({
           <h3 style={{ marginBottom: 0 }}>Steps</h3>
           {stepsQuery.isLoading && <p>Loading steps...</p>}
           {stepsQuery.isError && <p role="alert">{errorMessage(stepsQuery.error, 'Could not load steps.')}</p>}
+          {requestedStepId && !expandedStepId && !stepsQuery.isPending && !stepsQuery.isFetching && !stepsQuery.isError
+            && <p role="alert">Requested step is unavailable.</p>}
           {steps.length === 0 && !stepsQuery.isLoading && <p className="inspector-hint">No steps recorded.</p>}
           {steps.map((step) => {
-            const httpBinding = selectedRun.executionMode === 'graph' && selectedRun.runType === 'actual'
-              && !selectedRun.productionRunId ? pinnedHttpBinding(revisionQuery.data?.snapshot, step.nodeId) : null
+            const requiresBindingCheck = selectedRun.executionMode === 'graph' && selectedRun.runType === 'actual'
+              && !selectedRun.productionRunId
+            const bindingVerified = !requiresBindingCheck || (revisionQuery.isSuccess && !revisionQuery.isFetching
+              && nodes.some((node) => node.processId === step.nodeId))
+            const httpBinding = requiresBindingCheck && bindingVerified ? pinnedHttpBinding(revisionQuery.data?.snapshot, step.nodeId) : null
+            const mayReportManually = bindingVerified && !httpBinding
+            const transfer = transferSummaries.get(step.stepId)
             return (
-            <div key={step.stepId} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
+            <div key={step.stepId} role="group" aria-label={`Flow step ${step.sequenceNo}`} ref={(node) => {
+              if (node) stepElements.current.set(step.stepId, node)
+              else stepElements.current.delete(step.stepId)
+            }} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, minWidth: 0 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <strong>#{step.sequenceNo} {nodes.find((node) => node.processId === step.nodeId)?.processName ?? step.nodeId}</strong>
                 <span>{step.status}</span>
@@ -540,7 +614,13 @@ export function FlowRunsPanel({
                   {' · '}on failure: {connections.find((connection) => connection.connectionId === step.sourceConnectionId)?.failurePolicy
                     ?? 'stop'}
                 </span>}
-                {receivedLine(step, connections, events) && <span>{receivedLine(step, connections, events)}</span>}
+                {transfer && <>
+                  <span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>{transfer.text}</span>
+                  {transfer.legacy && <small className="inspector-hint">Legacy transfer JSON: numeric precision may be inaccurate.</small>}
+                  {!transfer.legacy && transfer.unavailable && <small className="inspector-hint">
+                    Exact transfer quantities are unavailable here. Check the input snapshot and loss event JSON details.
+                  </small>}
+                </>}
                 {step.errorCode && <span role="alert">{step.errorCode}</span>}
                 <button type="button" onClick={() => setExpandedStepId(expandedStepId === step.stepId ? '' : step.stepId)}>
                   {expandedStepId === step.stepId ? 'Hide attempts' : 'Show attempts'}
@@ -552,6 +632,7 @@ export function FlowRunsPanel({
                     {step.status === 'planned' && step.joinWaiting == null && <button type="button" disabled={scheduleMutation.isPending}
                       onClick={() => {
                         scheduleMutation.reset()
+                        scheduleEditVersion.current += 1
                         setScheduleEditStepId(step.stepId)
                         setScheduleEditValue(localSchedule(step.scheduledAt))
                       }}>Edit schedule</button>}
@@ -561,8 +642,8 @@ export function FlowRunsPanel({
                       {selectedRun.executionMode === 'graph' && <button type="button"
                         disabled={actionMutation.isPending || previewPending}
                         onClick={() => void previewStep(step.stepId)}>Preview routes</button>}
-                      {!httpBinding && <button type="button" disabled={actionMutation.isPending} onClick={() => void completeStep(step.stepId)}>Complete</button>}
-                      {!httpBinding && <button type="button" disabled={actionMutation.isPending || !errorCodeForStep(step.stepId).trim()}
+                      {mayReportManually && <button type="button" disabled={actionMutation.isPending} onClick={() => void completeStep(step.stepId)}>Complete</button>}
+                      {mayReportManually && <button type="button" disabled={actionMutation.isPending || !errorCodeForStep(step.stepId).trim()}
                         onClick={() => void act(`${basePath}/steps/${encodeURIComponent(step.stepId)}/fail`,
                           { errorCode: errorCodeForStep(step.stepId),
                             errorMessage: errorMessageForStep(step.stepId) || null })}>Fail</button>}
@@ -570,29 +651,41 @@ export function FlowRunsPanel({
                   </>
                 )}
               </div>
+              {requiresBindingCheck && !bindingVerified && <p role={revisionQuery.isFetching || revisionQuery.isPending ? 'status' : 'alert'}>
+                {revisionQuery.isFetching || revisionQuery.isPending
+                  ? 'Checking the pinned revision before HTTP or manual reporting.'
+                  : 'The pinned revision is unavailable. HTTP and manual reporting are blocked until this step can be verified.'}
+              </p>}
               {step.status === 'planned' && scheduleEditStepId === step.stepId
                 && <div style={{ display: 'grid', gap: 6, maxWidth: 560, marginTop: 8 }}>
                 <label>Scheduled start for step #{step.sequenceNo}
                   <input type="datetime-local" value={scheduleEditValue}
-                    onChange={(event) => setScheduleEditValue(event.target.value)} />
+                    onChange={(event) => {
+                      scheduleEditVersion.current += 1
+                      setScheduleEditValue(event.target.value)
+                    }} />
                 </label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="button" disabled={scheduleMutation.isPending}
                     onClick={() => saveSchedule(step.stepId)}>Save schedule</button>
-                  <button type="button" onClick={() => setScheduleEditStepId('')}>Cancel edit</button>
+                  <button type="button" onClick={() => {
+                    scheduleEditVersion.current += 1
+                    setScheduleEditStepId('')
+                  }}>Cancel edit</button>
                 </div>
-                {scheduleMutation.isError && <p role="alert">
+                {scheduleMutation.isError && scheduleMutation.variables?.editVersion === scheduleEditVersion.current
+                  && isCurrentRun(scheduleMutation.variables.runId, scheduleMutation.variables.selectionVersion) && <p role="alert">
                   {errorMessage(scheduleMutation.error, 'Could not save the schedule.')}
                 </p>}
               </div>}
-              {selectedRun.status === 'running' && !selectedRun.productionRunId && step.status === 'running' && !httpBinding && <div
+              {selectedRun.status === 'running' && !selectedRun.productionRunId && step.status === 'running' && mayReportManually && <div
                 style={{ display: 'grid', gap: 6, maxWidth: 560, marginTop: 8 }}>
                 <label>Output snapshot for step #{step.sequenceNo} (JSON)
                   <textarea value={outputForStep(step.stepId)} onChange={(event) => {
                     setOutputJsonByStep((current) => ({
                       ...current, [`${selectedRunId}:${step.stepId}`]: event.target.value,
                     }))
-                    if (routePreview?.stepId === step.stepId) setRoutePreview(null)
+                    invalidatePreview()
                   }} rows={2} />
                 </label>
                 <label>Failure code for step #{step.sequenceNo}
@@ -610,7 +703,8 @@ export function FlowRunsPanel({
                   completion checks it again.
                 </p>}
               </div>}
-              {routePreview?.runId === selectedRunId && routePreview.stepId === step.stepId
+              {selectedRun.status === 'running' && step.status === 'running'
+                && routePreview?.runId === selectedRunId && routePreview.stepId === step.stepId
                 && routePreview.outputJson === outputForStep(step.stepId) && <div role="status" style={{ marginTop: 8 }}>
                   <strong>Route preview</strong>
                   {routePreview.decisions.length === 0 && <div>No outgoing connections.</div>}
@@ -627,16 +721,9 @@ export function FlowRunsPanel({
                 runStatus={selectedRun.status} stepStatus={step.status} binding={httpBinding} />}
               {expandedStepId === step.stepId && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
-                  <div>Input snapshot</div>
-                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                    {JSON.stringify(step.inputSnapshot ?? null, null, 2)}
-                  </pre>
-                  {step.outputSnapshot != null && <>
-                    <div>Output snapshot</div>
-                    <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                      {JSON.stringify(step.outputSnapshot, null, 2)}
-                    </pre>
-                  </>}
+                  <FlowRunJsonValue label="Input snapshot" json={step.inputSnapshotJson}
+                    value={step.inputSnapshot} showAbsent />
+                  <FlowRunJsonValue label="Output snapshot" json={step.outputSnapshotJson} value={step.outputSnapshot} />
                   {step.errorMessage && <p role="alert">{step.errorMessage}</p>}
                   {selectedRun.executionMode === 'graph' && <div>
                     <strong>Execution path</strong>
@@ -644,7 +731,7 @@ export function FlowRunsPanel({
                     {lineageQuery.isError && <p role="alert">
                       {errorMessage(lineageQuery.error, 'Could not load the execution path.')}
                     </p>}
-                    {lineageQuery.data && <>
+                    {!lineageQuery.isError && lineageQuery.data && <>
                       <div>Upstream: {lineageQuery.data.ancestors.length === 0 ? 'none' :
                         lineageQuery.data.ancestors.map((ancestor) => `#${ancestor.sequenceNo}`).join(' → ')}</div>
                       <div>Downstream: {lineageQuery.data.descendants.length === 0 ? 'none' :
@@ -652,7 +739,7 @@ export function FlowRunsPanel({
                     </>}
                   </div>}
                   {attemptsQuery.isLoading && <span>Loading attempts...</span>}
-                  {(attemptsQuery.data ?? []).map((attempt) => (
+                  {(!attemptsQuery.isError ? attemptsQuery.data ?? [] : []).map((attempt) => (
                     <div key={attempt.attemptId} style={{ marginTop: 6 }}>
                       <strong>Attempt {attempt.attemptNo}: {attempt.status}{attempt.errorCode ? ` (${attempt.errorCode})` : ''}</strong>
                       {attempt.startedAt && <div>Started: {new Date(attempt.startedAt).toLocaleString()}</div>}
@@ -697,43 +784,11 @@ export function FlowRunsPanel({
           )}
           {formError && <p role="alert">{formError}</p>}
 
-          <h3 style={{ marginBottom: 0 }}>Events</h3>
-          {eventsQuery.isLoading && <p>Loading events...</p>}
-          {eventsQuery.isError && <p role="alert">{errorMessage(eventsQuery.error, 'Could not load events.')}</p>}
-          {events.length > 0 && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <label>Event type
-              <select value={selectedEventTypeFilter} onChange={(event) => setEventTypeFilter(event.target.value)}>
-                <option value="">All types</option>
-                {eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </label>
-            <label>Event step
-              <select value={selectedEventStepFilter} onChange={(event) => setEventStepFilter(event.target.value)}>
-                <option value="">All steps</option>
-                {steps.map((step) => <option key={step.stepId} value={step.stepId}>
-                  Step {step.sequenceNo} · {nodes.find((node) => node.processId === step.nodeId)?.processName ?? step.nodeId}
-                </option>)}
-              </select>
-            </label>
-            <span role="status">{visibleEvents.length} of {events.length} events</span>
-            <button type="button" disabled={visibleEvents.length === 0}
-              onClick={downloadVisibleEvents}>Download visible events (JSON)</button>
-          </div>}
-          <ol style={{ marginTop: 0 }}>
-            {visibleEvents.map((event) => (
-              <li key={event.eventId}><details>
-                <summary>{new Date(event.occurredAt).toLocaleString()} · {event.eventType}
-                  {filteredConnectionDetail(event, connections)}
-                  {event.stepId ? ` · step #${steps.find((step) => step.stepId === event.stepId)?.sequenceNo
-                    ?? event.stepId.slice(0, 8)}` : ''} · {event.actorId}</summary>
-                <div>Actor: {event.actorType ?? 'unknown'} · {event.actorId}</div>
-                {event.requestId && <div>Request ID: {event.requestId}</div>}
-                <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                  {JSON.stringify(event.payload ?? null, null, 2)}
-                </pre>
-              </details></li>
-            ))}
-          </ol>
+          <FlowRunEventLog runId={selectedRunId} workflowRevisionId={selectedRun.workflowRevisionId}
+            events={events} steps={steps} nodes={nodes} connections={connections}
+            eventTypeFilter={eventTypeFilter} eventStepFilter={eventStepFilter}
+            onEventTypeFilterChange={setEventTypeFilter} onEventStepFilterChange={setEventStepFilter}
+            isLoading={eventsQuery.isLoading} isError={eventsQuery.isError} error={eventsQuery.error} />
         </>
       )}
     </section>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useHttpExecutions, useHttpExecutionMutations, useHttpRequestPreview, usePinnedHttpProfileVersion } from '../../../entities/connector/api/useHttpConnectors'
 import { blocksHttpTransmission, canApplyHttpExecution, executionSummary, isUnresolved, savedRequestId } from '../../../entities/connector/model/httpExecutionState'
@@ -7,7 +7,7 @@ import { useIsProjectOwner } from '../../../entities/project/api/useIsProjectOwn
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import type { ApiEnvelope } from '../../../shared/types/api'
-import { errorMessage } from '../../../shared/lib/errorMessage'
+import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 
 export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo, runStatus, stepStatus, binding }: {
   projectId: string; runId: string; stepId: string; sequenceNo: number; runStatus: string; stepStatus: string; binding: PinnedHttpBinding
@@ -27,7 +27,10 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
   const [confirmed, setConfirmed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  const rows = query.data ?? []
+  const accessDenied = [query.error, attempts.error].some((error) => [401, 403, 404].includes(errorStatus(error) ?? 0))
+    || [401, 403].includes(errorStatus(profileVersion.error) ?? 0)
+  const profileUnavailable = errorStatus(profileVersion.error) === 404
+  const rows = accessDenied ? [] : query.data ?? []
   const latestAttempt = attempts.data?.[attempts.data.length - 1]
   const blockedTransmission = rows.some(blocksHttpTransmission)
   const unappliedTransmission = rows.some((row) => blocksHttpTransmission(row) && !isUnresolved(row))
@@ -36,12 +39,19 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
   const currentClaim = latestAttempt && latestAttempt.status === 'running'
     ? rows.some((row) => row.attemptId === latestAttempt.attemptId) : false
   const active = runStatus === 'running' && (stepStatus === 'planned' || stepStatus === 'running')
-  const operation = profileVersion.data?.profileVersionId === binding.profileVersionId
+  const operation = !accessDenied && !profileUnavailable && profileVersion.data?.profileVersionId === binding.profileVersionId
     ? profileVersion.data.operations.find((candidate) => candidate.operationId === binding.operationId) : undefined
-  const maySend = owner && active && !blockedTransmission && !currentClaim && !query.isPending && !query.isError
+  const maySend = !accessDenied && owner && active && !blockedTransmission && !currentClaim && !query.isPending && !query.isError
     && !attempts.isPending && !attempts.isError && Boolean(operation) && !profileVersion.isError
   const pending = execute.isPending || apply.isPending || refreshing
   const checking = query.isFetching || attempts.isFetching || profileVersion.isFetching
+
+  useEffect(() => {
+    if (accessDenied) {
+      setConfirmed(false)
+      setProblem(null)
+    }
+  }, [accessDenied])
 
   async function refreshResults() {
     if (pending || checking) return
@@ -71,16 +81,16 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
 
   return <section aria-label={`HTTP execution for step ${sequenceNo}`} style={{ display: 'grid', gap: 8, marginTop: 12,
     borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-    <h4 style={{ margin: 0 }}>HTTP operation: {binding.operationId}</h4>
-    <span style={{ overflowWrap: 'anywhere' }}>Pinned profile revision: {binding.profileVersionId}</span>
+    <h4 style={{ margin: 0 }}>{accessDenied ? 'HTTP execution' : `HTTP operation: ${binding.operationId}`}</h4>
+    {!accessDenied && <span style={{ overflowWrap: 'anywhere' }}>Pinned profile revision: {binding.profileVersionId}</span>}
     {profileVersion.isPending && <p>Checking the pinned HTTP destination...</p>}
     {profileVersion.isError && <p role="alert">{errorMessage(profileVersion.error, 'Could not verify the HTTP destination. Sending is blocked.')}</p>}
     {operation && <strong style={{ overflowWrap: 'anywhere' }}>{operation.method} {profileVersion.data!.baseOrigin}{operation.relativePath}</strong>}
-    {!profileVersion.isPending && !profileVersion.isError && !operation && <p role="alert">The pinned HTTP operation is unavailable. Sending is blocked.</p>}
+    {!accessDenied && !profileVersion.isPending && !profileVersion.isError && !operation && <p role="alert">The pinned HTTP operation is unavailable. Sending is blocked.</p>}
     {query.isPending && <p>Loading HTTP results...</p>}
     {query.isError && <p role="alert">{errorMessage(query.error, 'Could not load HTTP results. Sending is blocked until results can be checked.')}</p>}
     {attempts.isError && <p role="alert">{errorMessage(attempts.error, 'Could not check the current attempt.')}</p>}
-    {owner && active && <HttpRequestPreview key={JSON.stringify([projectId, runId, stepId, binding.processId,
+    {!accessDenied && !profileUnavailable && owner && active && <HttpRequestPreview key={JSON.stringify([projectId, runId, stepId, binding.processId,
       binding.profileVersionId, binding.operationId, runStatus, stepStatus, pending])}
       runId={runId} stepId={stepId} disabled={pending} />}
     {rows.map((row) => <article key={row.executionId} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
@@ -111,7 +121,7 @@ export function FlowRunHttpExecutionPanel({ projectId, runId, stepId, sequenceNo
       </button>
     </>}
     <button type="button" disabled={checking || pending} onClick={() => { void refreshResults() }}>Refresh saved results</button>
-    {problem && <p role="alert">{problem}</p>}
+    {!accessDenied && problem && <p role="alert">{problem}</p>}
   </section>
 }
 

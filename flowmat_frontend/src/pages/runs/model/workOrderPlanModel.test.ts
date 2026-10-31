@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { WorkOrderPlanSuggestionDto } from '../../../entities/production/api/useWorkOrderPlan'
 import type { WorkOrderDto } from '../../../shared/types/api'
 import {
-  batchApproved, batchDrafts, batchPlannable, defaultPlanFrom, localInput, orderSummary, planInput, planStamp, planSummary,
+  batchApproved, batchDrafts, batchPlannable, defaultPlanFrom, localInput, orderSummary, planInput, planSchedule, planStamp, planSummary,
   rescheduleInput,
 } from './workOrderPlanModel'
 
@@ -124,5 +124,20 @@ describe('planInput', () => {
     expect(bare.workflowId).toBeUndefined()
     expect(bare.targetQuantity).toBeUndefined()
     expect(bare.instructionUrl).toBeUndefined()
+  })
+})
+
+describe('who works when', () => {
+  it('puts each process with its people and their times', () => {
+    const at = (hour: number) => new Date(2041, 4, 6, hour).toISOString()
+    expect(planSchedule({ schedule: [
+      { nodeId: 'p1', nodeName: 'Mix', userId: 'kim', from: at(9), to: at(14) },
+      { nodeId: 'p1', nodeName: 'Mix', userId: 'lee', from: at(9), to: at(10) },
+      { nodeId: 'p2', nodeName: 'Bake', userId: 'lee', from: at(14), to: at(15) }] }))
+      .toEqual(['Mix: kim Mon 2041-05-06 09:00–14:00, lee Mon 2041-05-06 09:00–10:00', 'Bake: lee Mon 2041-05-06 14:00–15:00'])
+    expect(planSchedule({ schedule: [{ nodeId: 'p1', nodeName: null, userId: 'kim', from: at(22), to: new Date(2041, 4, 7, 2).toISOString() }] }))
+      .toEqual(['p1: kim Mon 2041-05-06 22:00–Tue 2041-05-07 02:00'])
+    expect(planSchedule({ schedule: [] })).toEqual([])
+    expect(planSchedule({})).toEqual([])
   })
 })

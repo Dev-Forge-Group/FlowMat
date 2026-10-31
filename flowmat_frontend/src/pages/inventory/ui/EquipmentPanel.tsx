@@ -120,7 +120,7 @@ export function EquipmentPanel({ projectId }: { projectId: string }) {
     save.mutate()
   }
 
-  return <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 24 }}>
+  return <div className="equipment-panel-layout" style={{ display: 'grid', gap: 24 }}>
     <section style={{ overflowX: 'auto' }}>
       <h2>Equipment</h2>
       {equipmentQuery.isPending && <p>Loading equipment...</p>}

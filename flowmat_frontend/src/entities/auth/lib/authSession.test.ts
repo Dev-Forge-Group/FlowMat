@@ -28,6 +28,21 @@ afterEach(() => {
 })
 
 describe('refreshAccessToken', () => {
+  it.each([200, 401])('ignores a previous account refresh completion with status %i', async (status) => {
+    let finish!: (response: Response) => void
+    const { session } = await load(() => new Promise<Response>((done) => { finish = done }))
+    session.tokenStorage.setAccessToken('fixture.owner.session', { cookieBacked: true })
+    const pending = session.refreshAccessToken()
+    await vi.waitFor(() => expect(typeof finish).toBe('function'))
+    session.tokenStorage.clear()
+    session.tokenStorage.setAccessToken('fixture.viewer.session', { cookieBacked: true })
+    const viewer = session.tokenStorage.getAccess()
+    finish(new Response(JSON.stringify({ success: true, data: { accessToken: 'fixture.owner.refreshed' } }), { status }))
+    expect(await pending).toBe(false)
+    expect(session.tokenStorage.getAccess() === viewer).toBe(true)
+    expect(session.tokenStorage.hasCookieBackedSession()).toBe(true)
+  })
+
   it('forgets the session when the server rejects the refresh cookie', async () => {
     const { session, localStorage } = await load(async () => new Response('{}', { status: 401 }))
     expect(await session.refreshAccessToken()).toBe(false)

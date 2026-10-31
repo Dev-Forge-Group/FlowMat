@@ -11,7 +11,16 @@ import org.myweb.flowmat.global.util.WholeNumberDeserializer;
  */
 public record WorkOrderStepPlanRequest(List<Step> steps) {
 
-    /** @param plannedMinutes whole worker minutes from 1 to 100000, for everyone on the process together */
-    public record Step(String nodeId, @JsonDeserialize(using = WholeNumberDeserializer.class) Integer plannedMinutes) {
+    /**
+     * @param plannedMinutes whole worker minutes from 1 to 100000, for everyone on the process together; with {@code people} it
+     *                       may be left out, or else must be their sum
+     * @param people         the process's minutes split among people of the project (LB29), each once
+     */
+    public record Step(String nodeId, @JsonDeserialize(using = WholeNumberDeserializer.class) Integer plannedMinutes,
+                       List<Person> people) {
+    }
+
+    /** @param plannedMinutes whole worker minutes from 1 to 100000 for this person on the process */
+    public record Person(String userId, @JsonDeserialize(using = WholeNumberDeserializer.class) Integer plannedMinutes) {
     }
 }

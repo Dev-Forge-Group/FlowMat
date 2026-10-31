@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,8 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Who worked on a run and for how long (docs/domain/worker-calendar.md LB1-LB5, docs/architecture/adr/ADR-019-run-labor.md).
  * Like equipment running time (docs/domain/equipment-setup-cost.md ER1-ER4) it is recorded on open runs, kept apart from
  * material cost and cancelled rather than deleted; there are no worker rates, so it has no cost. The crew's shifts during the
- * run suggest how much to record. A record can name a process step of the run (LB13-LB15). A finished run's worked time
- * changes only through a run correction (LB9-LB10).
+ * run suggest how much to record. A record can name a process step of the run (LB13-LB15) and carry its clock times (LB31).
+ * A finished run's worked time changes only through a run correction (LB9-LB10).
  */
 @Service
 @RequiredArgsConstructor
@@ -49,6 +50,10 @@ public class RunLaborService {
 
     private static final int MAX_MINUTES = 10_080;
     private static final int MAX_TEXT = 500;
+    /** Worked time with clock times lies within a day, as a stretch of attendance does (LB31). */
+    private static final Duration LONGEST_TIMED = Duration.ofHours(24);
+    /** Clocks of phones and terminals run a little apart. */
+    private static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
     private static final String NOT_DELETED = "N";
     private static final BigDecimal SECONDS_OF_A_FULL_SHARE = BigDecimal.valueOf(60L * WorkOrderCrewService.FULL_SHARE);
 
@@ -77,7 +82,21 @@ public class RunLaborService {
         if (request == null || request.requestId() == null) {
             throw bad("requestId is required.");
         }
+        // Clock times are optional; with them the minutes may be left out, and are at most the time between (LB31).
+        OffsetDateTime workedFrom = time(request.workedFrom(), "workedFrom");
+        OffsetDateTime workedTo = time(request.workedTo(), "workedTo");
+        if ((workedFrom == null) != (workedTo == null)) {
+            throw bad("Give both workedFrom and workedTo, or neither.");
+        }
         Integer minutes = request.workedMinutes();
+        if (workedFrom != null) {
+            long between = between(workedFrom, workedTo);
+            if (minutes == null) {
+                minutes = (int) between;
+            } else if (minutes > between) {
+                throw bad("workedMinutes cannot be more than the " + between + " minutes from workedFrom to workedTo.");
+            }
+        }
         if (minutes == null || minutes < 1 || minutes > MAX_MINUTES) {
             throw bad("workedMinutes must be whole minutes from 1 to " + MAX_MINUTES + ".");
         }
@@ -92,7 +111,8 @@ public class RunLaborService {
             // The same author sending the same record again after a lost reply gets the run as it is now.
             boolean same = actor.equals(previous.getRecordedBy()) && userId.equals(previous.getUserId())
                 && minutes.equals(previous.getWorkedMinutes()) && Objects.equals(note, previous.getNote())
-                && Objects.equals(stepId, previous.getStepId());
+                && Objects.equals(stepId, previous.getStepId()) && sameTime(workedFrom, previous.getWorkedFrom())
+                && sameTime(workedTo, previous.getWorkedTo());
             if (!same) {
                 throw new BusinessException(ErrorCode.CONFLICT, "requestId already belongs to different worked time.");
             }
@@ -105,6 +125,9 @@ public class RunLaborService {
         if (stepId != null && processSteps(runId).stream().noneMatch(step -> step.stepId().equals(stepId))) {
             throw bad("stepId is not a process step of this run.");
         }
+        if (workedTo != null && run.getCreatedAt() != null && !workedTo.isAfter(run.getCreatedAt())) {
+            throw bad("The worked time ends before " + run.getRunNumber() + " started at " + run.getCreatedAt() + ".");
+        }
 
         ProductionRunLabor row = new ProductionRunLabor();
         row.setRunLaborId(ids.generate());
@@ -115,6 +138,8 @@ public class RunLaborService {
         row.setRequestId(request.requestId());
         row.setNote(note);
         row.setStepId(stepId);
+        row.setWorkedFrom(workedFrom);
+        row.setWorkedTo(workedTo);
         row.setRecordedBy(actor);
         row.setRecordedAt(OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS));
         row.setCancelledYn("N");
@@ -238,7 +263,8 @@ public class RunLaborService {
             }
             lines.add(new RunLaborResponse.Line(row.getRunLaborId(), row.getUserId(), row.getWorkedMinutes(), row.getNote(),
                 row.getRecordedBy(), row.getRecordedAt(), row.isCancelled(), row.getCancelledBy(), row.getCancelledAt(),
-                row.getCancelReason(), row.getStepId(), row.getStepId() == null ? null : stepNames.get(row.getStepId())));
+                row.getCancelReason(), row.getStepId(), row.getStepId() == null ? null : stepNames.get(row.getStepId()),
+                row.getWorkedFrom(), row.getWorkedTo()));
         }
         List<WorkOrderCrew> team = run.getWorkOrderId() == null ? List.of()
             : crew.findAllByWorkOrderIdOrderByAddedAtAscCrewIdAsc(run.getWorkOrderId());
@@ -298,6 +324,40 @@ public class RunLaborService {
             result.put(member.getUserId(), new Suggestion(left < 1 ? null : (int) Math.min(left, MAX_MINUTES), shifts ? "shifts" : "run"));
         }
         return result;
+    }
+
+    /** Whole minutes from {@code from} to {@code to}: later, within a day, not in the future and at least a minute (LB31). */
+    private static long between(OffsetDateTime from, OffsetDateTime to) {
+        if (!to.isAfter(from)) {
+            throw bad("workedTo must be after workedFrom.");
+        }
+        Duration length = Duration.between(from, to);
+        if (length.compareTo(LONGEST_TIMED) > 0) {
+            throw bad("Worked time with clock times can be at most 24 hours; record the days apart.");
+        }
+        if (to.isAfter(OffsetDateTime.now().plus(CLOCK_SKEW))) {
+            throw bad("workedTo cannot be in the future.");
+        }
+        if (length.toMinutes() < 1) {
+            throw bad("workedFrom and workedTo must be at least a minute apart.");
+        }
+        return length.toMinutes();
+    }
+
+    private static OffsetDateTime time(String value, String field) {
+        String trimmed = ProductionText.trimToNull(value, field);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(trimmed).truncatedTo(ChronoUnit.MICROS);
+        } catch (DateTimeParseException exception) {
+            throw bad(field + " is a date and time with an offset, like 2041-09-01T08:00:00+09:00.");
+        }
+    }
+
+    private static boolean sameTime(OffsetDateTime one, OffsetDateTime other) {
+        return one == null ? other == null : other != null && one.isEqual(other);
     }
 
     private static String text(String value, String field) {

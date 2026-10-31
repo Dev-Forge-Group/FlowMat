@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.production.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -22,4 +23,8 @@ public interface ProductionRunRepository extends JpaRepository<ProductionRun, St
     Optional<ProductionRun> findByProductionRunIdAndDeletedYn(String productionRunId, String deletedYn);
 
     List<ProductionRun> findAllByWorkOrderIdInAndDeletedYn(Collection<String> workOrderIds, String deletedYn);
+
+    /** A project's runs that ended in [from, to) (ADR-028 decision 28). */
+    List<ProductionRun> findAllByProjectIdAndDeletedYnAndActualEndAtGreaterThanEqualAndActualEndAtLessThan(
+        String projectId, String deletedYn, OffsetDateTime from, OffsetDateTime to);
 }

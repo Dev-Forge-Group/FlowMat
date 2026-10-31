@@ -3,6 +3,7 @@ import type { ApiEnvelope } from '../../../shared/types/api'
 const COOKIE_SESSION_KEY = 'flowmat_refresh_cookie'
 const AUTH_CHANGE_EVENT = 'flowmat-auth-changed'
 let accessToken: string | null = null
+let sessionVersion = 0
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -34,6 +35,7 @@ export function parseJwtUserId(token: string): string | null {
 
 export const tokenStorage = {
   getAccess: () => accessToken,
+  getSessionVersion: () => sessionVersion,
   getRefresh: () => null,
   hasCookieBackedSession: () => isBrowser() && window.localStorage.getItem(COOKIE_SESSION_KEY) === '1',
   hasRefreshSessionHint: () => {
@@ -42,6 +44,9 @@ export const tokenStorage = {
   },
   set: (access: string, _refresh?: string | null, options?: { cookieBacked?: boolean }) => {
     if (!isBrowser()) return
+    const currentUser = accessToken ? parseJwtUserId(accessToken) : null
+    const sameSession = accessToken === access || (currentUser !== null && currentUser === parseJwtUserId(access))
+    if (!sameSession) sessionVersion += 1
     accessToken = access
     if (options?.cookieBacked === true) {
       window.localStorage.setItem(COOKIE_SESSION_KEY, '1')
@@ -55,15 +60,17 @@ export const tokenStorage = {
   },
   clear: () => {
     if (!isBrowser()) return
+    if (accessToken !== null || tokenStorage.hasRefreshSessionHint()) sessionVersion += 1
     accessToken = null
     window.localStorage.removeItem(COOKIE_SESSION_KEY)
     notifyAuthChanged()
   },
 }
 
-let refreshPromise: Promise<boolean> | null = null
+let refreshPromise: { version: number; promise: Promise<boolean> } | null = null
 
-async function performRefresh(): Promise<boolean> {
+async function performRefresh(version: number): Promise<boolean> {
+  if (version !== sessionVersion) return false
   const cookieBacked = tokenStorage.hasCookieBackedSession()
   if (!cookieBacked) {
     tokenStorage.clear()
@@ -72,6 +79,7 @@ async function performRefresh(): Promise<boolean> {
 
   try {
     const csrfToken = await getCsrfToken()
+    if (version !== sessionVersion) return false
 
     const res = await fetch('/api/auth/refresh', {
       method: 'POST',
@@ -81,6 +89,7 @@ async function performRefresh(): Promise<boolean> {
         'X-XSRF-TOKEN': csrfToken,
       },
     })
+    if (version !== sessionVersion) return false
     if (!res.ok) {
       // Only a 401 says the refresh cookie is gone or was rejected. A rate limit, a server error or a CSRF hiccup says
       // nothing about the session, so keep the hint and let the next attempt restore it instead of forcing a new login.
@@ -89,6 +98,7 @@ async function performRefresh(): Promise<boolean> {
     }
 
     const json = (await res.json()) as ApiEnvelope<{ accessToken: string; refreshToken?: string | null }>
+    if (version !== sessionVersion) return false
     if (!json.success || !json.data?.accessToken) {
       tokenStorage.clear()
       return false
@@ -119,23 +129,31 @@ async function getCsrfToken(): Promise<string> {
 }
 
 export async function refreshAccessToken(): Promise<boolean> {
-  if (refreshPromise) {
-    return refreshPromise
+  const version = sessionVersion
+  if (refreshPromise?.version === version) {
+    return refreshPromise.promise
   }
 
-  const refresh = withRefreshCookieLock(performRefresh)
-  refreshPromise = refresh.finally(() => {
-    refreshPromise = null
+  const refresh = withRefreshCookieLock(() => performRefresh(version))
+  const promise = refresh.finally(() => {
+    if (refreshPromise?.promise === promise) refreshPromise = null
   })
+  refreshPromise = { version, promise }
 
-  return refreshPromise
+  return promise
 }
 
 /** Serialize operations that consume or revoke the shared refresh cookie across tabs. */
+let refreshCookieQueue: Promise<void> = Promise.resolve()
+
 export function withRefreshCookieLock<T>(operation: () => Promise<T>): Promise<T> {
-  return isBrowser() && navigator.locks
-    ? navigator.locks.request('flowmat-refresh', { mode: 'exclusive' }, operation)
-    : operation()
+  if (isBrowser() && navigator.locks) {
+    return navigator.locks.request('flowmat-refresh', { mode: 'exclusive' }, operation)
+  }
+  // Keep login, logout and refresh ordered within this tab when Web Locks is unavailable.
+  const pending = refreshCookieQueue.then(operation)
+  refreshCookieQueue = pending.then(() => undefined, () => undefined)
+  return pending
 }
 
 export { getCsrfToken }

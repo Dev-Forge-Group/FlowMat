@@ -21,6 +21,30 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
 
     List<Inventory> findAllByLotIdAndDeletedYn(String lotId, String deletedYn);
 
+    interface LotStockTotals {
+        BigDecimal getQuantityOnHand();
+        BigDecimal getQuantityReserved();
+        long getStockRows();
+        long getQuarantinedRows();
+    }
+
+    /** Scalar sums read committed quantities even when the caller has old Inventory entities cached. */
+    @Query("""
+        select coalesce(sum(i.quantity), 0) as quantityOnHand,
+               coalesce(sum(i.reservedQuantity), 0) as quantityReserved,
+               count(i) as stockRows,
+               coalesce(sum(case when i.inventoryStatus = 'quarantined' then 1 else 0 end), 0) as quarantinedRows
+          from Inventory i where i.lotId = :lotId and i.deletedYn = 'N'
+        """)
+    LotStockTotals lotStockTotals(@Param("lotId") String lotId);
+
+    @Query("""
+        select i.inventoryId from Inventory i
+         where i.lotId = :lotId and i.deletedYn = 'N'
+           and (i.inventoryStatus is null or i.inventoryStatus <> 'quarantined')
+        """)
+    List<String> findInventoryIdsToHoldForLot(@Param("lotId") String lotId);
+
     /** The active records of several LOTs at once (LOT recall). */
     List<Inventory> findAllByLotIdInAndDeletedYn(Collection<String> lotIds, String deletedYn);
 

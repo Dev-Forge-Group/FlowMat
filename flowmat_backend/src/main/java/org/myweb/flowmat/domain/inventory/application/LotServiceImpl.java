@@ -114,10 +114,11 @@ public class LotServiceImpl implements LotService {
     public LotResponse reopenLot(String lotId) {
         LotMaster lot = findLot(lotId);
         projectAccessService.requireProjectOwnerAccess(lot.getProjectId());
+        inventoryCommandService.lockLot(lot);
         if (!LotStatus.CLOSED.code().equals(lot.getLotStatus())) {
             throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.getLotNo() + " is not closed.");
         }
-        List<Inventory> stock = inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED);
+        InventoryRepository.LotStockTotals stock = inventoryRepository.lotStockTotals(lotId);
         // The reopening comes before the holds it causes, so the history lists them in that order (R9).
         OffsetDateTime at = OffsetDateTime.now();
         String actor = projectAccessService.requireCurrentUserId();
@@ -128,17 +129,18 @@ public class LotServiceImpl implements LotService {
             // Checks that passed before still count, so Release LOT clears it at once (docs/domain/lot-release.md R6).
             inventoryCommandService.holdForReceiptChecks(lotId, lot.getLotNo(), actor);
             lot.setLotStatus(LotStatus.INSPECTION_PENDING.code());
-            stock = inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED);
-        } else if (stock.stream().anyMatch(row -> InventoryCommandService.QUARANTINED.equals(row.getInventoryStatus()))) {
+            stock = inventoryRepository.lotStockTotals(lotId);
+        } else if (stock.getQuarantinedRows() > 0) {
             // Its records are still held, so the LOT is too; unquarantine releases them.
             lot.setLotStatus(LotStatus.QUARANTINED.code());
         } else {
             // A closed LOT held nothing, so it comes back as its stock says: consumed, or available with no stock record.
-            lot.setLotStatus(stock.isEmpty() ? LotStatus.AVAILABLE.code() : InventoryCommandService.lotStatusFor(stock));
+            lot.setLotStatus(stock.getStockRows() == 0 ? LotStatus.AVAILABLE.code()
+                : InventoryCommandService.lotStatusFor(stock.getQuantityOnHand(), stock.getQuantityReserved()));
         }
-        LotMaster saved = lotMasterRepository.save(lot);
+        LotMaster saved = lotMasterRepository.saveAndFlush(lot);
         recordStatusEvent(saved, LotStatusEvent.REOPENED, LotStatus.CLOSED.code(), at, actor);
-        return toResponse(saved, stock);
+        return toResponse(saved, stock.getQuantityOnHand(), stock.getQuantityReserved());
     }
 
     @Override
@@ -146,8 +148,9 @@ public class LotServiceImpl implements LotService {
     public LotResponse closeLot(String lotId) {
         LotMaster lot = findLot(lotId);
         projectAccessService.requireProjectOwnerAccess(lot.getProjectId());
-        List<Inventory> stock = inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED);
-        BigDecimal onHand = sum(stock, Inventory::getQuantity);
+        inventoryCommandService.lockLot(lot);
+        InventoryRepository.LotStockTotals stock = inventoryRepository.lotStockTotals(lotId);
+        BigDecimal onHand = stock.getQuantityOnHand();
         if (onHand.signum() != 0) {
             throw new BusinessException(ErrorCode.CONFLICT,
                 "LOT " + lot.getLotNo() + " still holds " + InventoryCommandService.plain(onHand) + ". Issue it before closing.");
@@ -159,7 +162,7 @@ public class LotServiceImpl implements LotService {
             // Closing moves no stock, so the event is kept on its own; closing a closed LOT again adds none (R9).
             recordStatusEvent(saved, LotStatusEvent.CLOSED, before, OffsetDateTime.now(), projectAccessService.requireCurrentUserId());
         }
-        return toResponse(saved, stock);
+        return toResponse(saved, onHand, stock.getQuantityReserved());
     }
 
     private void recordStatusEvent(LotMaster lot, String action, String fromStatus, OffsetDateTime at, String actor) {
@@ -224,6 +227,7 @@ public class LotServiceImpl implements LotService {
         if (!itemId.equals(lot.getItemId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.getLotNo() + " is for a different item.");
         }
+        inventoryCommandService.lockLotForStock(lot);
         LotStatus status = LotStatus.fromCode(lot.getLotStatus());
         if (status == LotStatus.CLOSED || status == LotStatus.QUARANTINED) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "LOT " + lot.getLotNo() + " is " + status.code() + ".");
@@ -265,6 +269,7 @@ public class LotServiceImpl implements LotService {
     @Transactional
     public void markProducedBy(String lotId, String productionRunId) {
         lotMasterRepository.findById(lotId).ifPresent(lot -> {
+            inventoryCommandService.lockLot(lot);
             if (lot.getProductionRunId() == null) {
                 lot.setProductionRunId(productionRunId);
                 lot.setProducedAt(OffsetDateTime.now());
@@ -277,6 +282,7 @@ public class LotServiceImpl implements LotService {
     @Transactional
     public void clearProducedBy(String lotId, String productionRunId) {
         lotMasterRepository.findById(lotId).ifPresent(lot -> {
+            inventoryCommandService.lockLot(lot);
             if (productionRunId.equals(lot.getProductionRunId())) {
                 lot.setProductionRunId(null);
                 lot.setProducedAt(null);
@@ -300,6 +306,10 @@ public class LotServiceImpl implements LotService {
     }
 
     private LotResponse toResponse(LotMaster lot, List<Inventory> stock) {
+        return toResponse(lot, sum(stock, Inventory::getQuantity), sum(stock, Inventory::getReservedQuantity));
+    }
+
+    private LotResponse toResponse(LotMaster lot, BigDecimal onHand, BigDecimal reserved) {
         return new LotResponse(
             lot.getLotId(),
             lot.getProjectId(),
@@ -311,8 +321,8 @@ public class LotServiceImpl implements LotService {
             lot.getProducedAt(),
             lot.getExpiryDate(),
             lot.getProductionRunId(),
-            sum(stock, Inventory::getQuantity),
-            sum(stock, Inventory::getReservedQuantity),
+            onHand,
+            reserved,
             lot.isExpiredOn(projectCalendar.today(lot.getProjectId()))
         );
     }

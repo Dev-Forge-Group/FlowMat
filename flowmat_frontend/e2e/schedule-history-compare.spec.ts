@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
-async function fixture(page: Page, kind: 'worker' | 'equipment', single = false) {
+async function fixture(page: Page, kind: 'worker' | 'equipment', single = false, longLabels = false) {
   await page.clock.install()
   const projectId = 'prj-history-access'
   let denied = false
@@ -20,7 +20,8 @@ async function fixture(page: Page, kind: 'worker' | 'equipment', single = false)
     later,
     { ...later, historyId: 'h-old', scheduleId: 'v-old', effectiveFrom: null, reason: 'Day shifts',
       shifts: [{ ...shift, shiftStart: '09:00', shiftEnd: '17:00' }], rota: null, savedAt: '2041-09-01T09:00:00Z' },
-  ].slice(0, single ? 1 : 4)
+  ].slice(0, single ? 1 : 4).map((entry) => longLabels
+    ? { ...entry, savedBy: 'Operations review team '.repeat(8) + entry.savedBy } : entry)
   const worker = { projectId, userId: 'kim', owner: false, calendarSet: true, weeklyHours: 45, daysOff: [], days: [],
     rota: null, shifts: [shift], schedules: [{ scheduleId: 'version-1', effectiveFrom: null, current: true }] }
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
@@ -116,3 +117,38 @@ for (const kind of ['worker', 'equipment'] as const) {
   })
 }
 
+
+for (const kind of ['worker', 'equipment'] as const) {
+  test(`${kind} history keeps long revision selectors within the phone viewport`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    const f = await fixture(page, kind, false, true)
+    await f.details.locator(':scope > summary').click()
+    await f.details.getByRole('button', { name: 'Compare changes', exact: true }).click()
+    const comparison = f.details.getByRole('group', { name: 'History comparison', exact: true })
+    await comparison.getByLabel('Compare from', { exact: true }).selectOption('h-old')
+    await comparison.getByLabel('Compare to', { exact: true }).selectOption('h-new')
+    const bounds = await comparison.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { left: rect.left, right: rect.right, width: rect.width, viewport: window.innerWidth,
+        controls: [...element.querySelectorAll('select')].map((select) => {
+          const control = select.getBoundingClientRect()
+          return { left: control.left, right: control.right, width: control.width }
+        }) }
+    })
+    expect(bounds.width).toBeLessThanOrEqual(bounds.viewport)
+    expect(bounds.left).toBeGreaterThanOrEqual(0)
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport)
+    expect(bounds.controls).toHaveLength(2)
+    for (const control of bounds.controls) {
+      expect(control.width).toBeGreaterThan(0)
+      expect(control.left).toBeGreaterThanOrEqual(bounds.left)
+      expect(control.right).toBeLessThanOrEqual(bounds.right)
+    }
+    await expect(comparison.getByRole('row', { name: /^Shifts/ })).toContainText('09:00–17:00')
+    await expect(comparison.getByRole('row', { name: /^Shifts/ })).toContainText('14:00–20:00')
+    await comparison.getByRole('button', { name: 'Swap entries', exact: true }).click()
+    await expect(comparison.getByLabel('Compare from', { exact: true })).toHaveValue('h-new')
+    await expect(comparison.getByLabel('Compare to', { exact: true })).toHaveValue('h-old')
+    expect(f.reads()).toBe(1)
+  })
+}

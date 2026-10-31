@@ -18,11 +18,11 @@ FlowMat은 업종이 아니라 흐름을 모델링하고 실행한다. 제조·�
 
 | 묶음 | ADR | 상태 |
 |---|---|---|
-| A1–A3 조직 경계 | [ADR-001](adr/ADR-001-organization-project-boundary.md) | **Proposed.** A1 문장 자체는 사용자가 확정했지만, 권한 의미(멤버십 분리, cross-project deny-by-default, 조직 OWNER·ADMIN override, 마이그레이션 호환성 불변식)가 닫혀야 Accepted다. 그 전에는 조직 마이그레이션을 시작하지 않는다 |
+| A1–A3 조직 경계 | [ADR-001](adr/ADR-001-organization-project-boundary.md) | **Accepted**(2026-10-05 사용자 최종 결정). Phase 1(V64 조직 표, `project.organization_id` NULL 허용)과 Phase 2(V65 개인 조직 backfill)가 들어갔다. NOT NULL 전환은 §3 |
 | M1–M2 모듈 경계 | [ADR-002](adr/ADR-002-module-dependency.md) | **Accepted** |
 | R1–R5, E1–E2 Port 계약·실행 | [ADR-003](adr/ADR-003-resource-port-contract.md) | 원칙 **Accepted**. 정확한 `resourceType` 값 목록은 **Experimental** registry |
 | P1–P2 금지 | 원문 §39·§48·§54 | 확정 |
-| FM-RUN-005 실행 정책 | [ADR-004](adr/ADR-004-flow-run-execution-policy.md) | **Proposed**(2026-10-03 Agent 초안, 의사결정자 검토 전). 아래 Freeze 밖에서 더한 것이다. 수용 기준 5개가 닫히기 전에는 구현하지 않는다 |
+| FM-RUN-005 실행 정책 | [ADR-004](adr/ADR-004-flow-run-execution-policy.md) | **Accepted**(2026-10-05 사용자 최종 결정) |
 
 ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 결정(D2)은 별개의 결정 트랙이다. D2가 남아 있어도 아키텍처 결정을 막지 않는다([WORKBOARD](../status/WORKBOARD.md) §3).
 
@@ -51,11 +51,11 @@ ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 �
 |---|---|---|
 | 조직 역할의 프로젝트 접근 상속(조직 ADMIN이 조직의 모든 프로젝트를 보는가) | 상속 없음(A1) | 별도 ADR, 사용자 결정 |
 | Tenant 격리 정책(조직 간 격리 수준, 조직 단위 조회) | 없음 | 여러 조직 운영이 확정될 때(원문 §51) |
-| `project.organization_id` NOT NULL 전환 | 계획상 Phase 3에서 "검토" | backfill 결과 확인 후 |
+| `project.organization_id` NOT NULL 전환 | NULL 허용 그대로. 새 프로젝트는 `OrganizationService.forNewProject`가 늘 조직을 채우고(개인 조직을 찾거나 만들고, 속하지 않은 조직은 403), 기존 프로젝트는 V65가 채웠다. 테스트 8개 파일이 조직 없이 프로젝트를 직접 넣는다 | **2026-10-31 사용자 위임 결정("의사결정 최적으로 내려봐" → "ㄱ"): 지금은 하지 않는다.** 제약이 막는 것은 raw SQL뿐이고, 접근 판정은 A1대로 프로젝트 멤버십만 본다. 조직 단위로 데이터를 가르는 첫 기능(조직 목록·과금·테넌트 격리)이 들어올 때, 실제 DB에서 OR8 점검 쿼리(null 0건)를 돌리고 한 마이그레이션에서 남은 null을 V65 방식으로 채운 뒤 NOT NULL로 바꾸며 직접 넣는 테스트도 함께 고친다 |
 | Site·BusinessPartner·project_site·project_partner 테이블 | 없음 | 실제 ERP/CRM/SCM 요구가 생길 때(원문 Phase 6). 첫 후보: 출고 거래에 거래처가 없어 LOT 리콜에서 출고처를 못 보여주는 문제([현재 기능](../status/CURRENT_CAPABILITIES.md) "LOT 리콜" 행) |
 | Port binding 저장 구조(`bindingType`/`bindingId`, polymorphic 테이블) | 개념만 있음 | 비제조 실사용 검증 후(원문 §42) |
 | 데이터·파일·API 포트의 `quantity`·`unit` | 둘 다 필수라 의미 없는 값(`quantity 0`, `ea`)을 넣는다 | 데이터 흐름을 실제로 쓰기 시작할 때(ADR-003 결정하지 않은 것) |
-| FlowRun 범용성을 "검증됨"으로 바꿀지 | 9-(a) 통합 테스트 통과(2026-10-03). 결정 8은 아직 "목표" | 사용자 결정. 화면까지 포함한 vertical slice를 더 요구할지 함께 정한다 |
+| FlowRun 범용성을 "검증됨"으로 바꿀지 | 9-(a) 통합 테스트 통과(2026-10-03, 외부 실행자가 결과를 보고하는 방식). 실제 기능은 모두 제조이고 노드 실행기는 없다. 결정 8은 "목표" | **2026-10-31 사용자 위임 결정("의사결정 최적으로 내려봐" → "ㄱ"): "목표"로 둔다.** E1 문장이 비제조 vertical slice 검증을 조건으로 달았고, 올려도 기능상 얻는 것이 없다. 전환 기준: 비제조 흐름 하나(예: 문서 승인, 데이터 변환)를 편집기에서 정의·발행하고 화면에서 단계 시작·완료까지 실제로 돌려 결과를 확인하면 "검증됨"으로 올린다 |
 | 공통 Resource contract | 없음(R5) | 두 종류 이상의 비제조 흐름에서 같은 검증·lifecycle이 반복될 때(원문 §51) |
 | 노드 실행기(Flow Run이 노드를 스스로 실행)와 실행 정책(시간 제한·재시도 간격·동시 실행 제한, FM-RUN-005) | 외부 보고 방식만 있음, 연결 실패 시 고정 3회 즉시 재시도 | 실행 정책은 [ADR-004](adr/ADR-004-flow-run-execution-policy.md) **Proposed**(2026-10-03): 정책은 노드에, 기본값은 지금 동작, 재시도 간격은 외부 보고 모델 위에서, 시간 제한만 서버 감시. 수용 기준 5개를 의사결정자가 닫아야 구현한다. 노드 실행기는 여전히 별도 결정(원문 §45 보완 (b), 2026-09-24 인계의 D7) |
 | 노드 종류(Operation Type)·배타 선택·합류(FM-PLAN-001) | Exclusive 게이트웨이(2eb, V85 로컬 검증, [연결 계약](../domain/process-port-connection-contract.md) GR-13–GR-20). Join 게이트웨이(2ef, V88 로컬 검증, GR-21–GR-28). Split 게이트웨이(2eh, V89 로컬 검증, GR-29–GR-36). 그 밖의 노드는 통과한 연결마다 별도 단계(GR-04) | [ADR-006](adr/ADR-006-operation-types.md) **Accepted**(2026-10-17 사용자 결정): 게이트웨이 노드, 1단계 Exclusive. Join은 [ADR-007](adr/ADR-007-join-gateway.md) **Accepted**(2026-10-17 사용자 결정): 도달 가능성 기준 한 번 합류. 2ef 로컬 구현(V88). 수량 분할은 [ADR-008](adr/ADR-008-quantity-split.md) **Accepted**(2026-10-17 사용자 결정): Split 게이트웨이. 2eh 로컬 구현(V89) |
@@ -82,7 +82,7 @@ ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 �
 | 작업지시 순서 제안·실사 계획의 위치 잠금 | 2026-10-12 사용자 결정: 순서는 설비별 전환 최소로 제안(구현 2dq, [P13–P16](../domain/equipment-schedule.md)). 실사 계획의 위치 잠금(실사 결정 메모의 C)은 넣지 않는다 | 정해짐. 납기·부하를 함께 보는 최적화는 따로 정할 일 |
 | 승인 요청·결정 알림 | 2026-10-13 사용자 결정: BOM 제출·완료 실행 보정 요청은 소유자에게, 승인·반려는 제출·요청한 사람에게 앱 안 알림(구현 2dr, [NT8](../domain/notification.md)) | 정해짐. 구독 설정이 필요한 퍼지는 알림은 여전히 정하지 않았다 |
 | 퍼지는 알림의 구독 | 2026-10-13 사용자 결정: 각자 프로젝트마다 고른다(재고 경보, 지난 NCR 효과 확인, N일 안에 마감되는 작업지시). 구현 2dt, [NS1–NS9](../domain/notification.md) | 정해짐. 메일·Slack·남의 선택 바꾸기는 정하지 않았다 |
-| 다른 도메인 Entity import 금지(ArchUnit Stage C) | **동결로 켬(2026-10-19, 로컬).** 기준선 39줄(21클래스, import 37곳 20파일과 import 없는 2줄). 새 의존은 실패 | [ADR-018](adr/ADR-018-entity-boundary.md) **Accepted**(2026-10-19, 사용자 지시). 줄여 가기(view로 치환)의 시작 시점은 미정 |
+| 다른 도메인 Entity import 금지(ArchUnit Stage C) | **0줄, 동결 해제(2026-10-25).** 기준선 39줄(2026-10-19)을 공개 view로 바꿔 줄였다. `archunit_store`가 없어 repository·엔티티 두 규칙 모두 새 위반에서 바로 실패한다 | [ADR-018](adr/ADR-018-entity-boundary.md) **Accepted**(2026-10-19) |
 | Domain Event 발행 방식과 Outbox | 없음 | 첫 비동기 외부 연동 때(원문 Phase 7) |
 | 편집 협업 충돌 모델(문서 단위 409 / 요소 patch / CRDT) | 문서 단위 409 | 사용자 결정(2026-09-24 D1, [C5 비교](../archive/2026-09-handoff/reports/C-collab-model-comparison.md)) |
 | 권한 매트릭스 확정 | 초안 | 사용자 결정(2026-09-24 D3, [C4 초안](../archive/2026-09-handoff/reports/C-permission-matrix.md)). 조직 ADR과 함께 보는 것이 좋다 |
@@ -109,6 +109,7 @@ ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 �
   - ADR-012(2026-10-18, 2eq): 남은 7줄 → `WorkflowAccessService`와 공개 API `WorkflowAccess`, `ProjectWorkflowCommand`, `UserQuery`. 동결 0줄, freeze 해제
 - ArchUnit(테스트 의존성 1.5.1)과 `ModuleBoundaryTest`가 있다. 동결 목록은 2026-10-18에 0줄이 되어 지웠다([ADR-012](adr/ADR-012-workflow-access-boundary.md)). 이제 테스트는 동결 없이 모든 위반에서 실패한다.
 - (2026-10-19) 단계 C 규칙 `entitiesStayInsideTheirBoundedContext`가 더해졌다. 다른 도메인 엔티티 의존 39줄을 `src/test/resources/archunit_store`에 동결하고 새 의존은 실패한다([ADR-018](adr/ADR-018-entity-boundary.md)). repository 규칙은 그대로 동결 없이 실패한다.
+- (2026-10-25) 엔티티 의존을 0줄로 줄여 동결을 풀었다([ADR-018](adr/ADR-018-entity-boundary.md)). 두 규칙 모두 동결 없이 실패한다.
 - 포트의 Item은 선택이다(V42, 2026-10-03). 생성 API의 `itemId`는 선택이고, 수정 API의 `clearItem: true`가 연결을 지운다. Item 없는 포트에 생산 실행의 투입·산출을 기록하면 400이다(`itemId does not match the selected processIoId.`). `quantity`·`unit`은 여전히 필수다.
 - `ProcessIo` 필드: `itemId`, `ioName`, `direction`, `ioType`, `role`, `resourceType`, `quantity`, `unit`, `formula`, `schemaJson`, `validationRule`, `colorScheme`, `requiredYn`, `allowShortageYn`. `resourceType`은 자유 문자열이고 비우면 `ioType`(기본 `material`)이 들어간다. 세션 DB의 포트 14개는 모두 `material`이었다. `Item`에도 `resourceCategory`·`resourceType` 열이 있지만 포트의 `resourceType`과는 별개다.
 - Flow Run은 발행 revision을 고정하고, Step·Attempt·Event를 기록하며, 수동·그래프 단계 라우팅, 연결 조건·용량, 포트 스키마·검증식, stop/skip/retry 정책을 가진다. **노드를 스스로 실행하지는 않는다.** 외부가 단계를 `start`/`complete`하며 결과를 보고해야 진행된다. 상세: [포트·연결 계약](../domain/process-port-connection-contract.md).

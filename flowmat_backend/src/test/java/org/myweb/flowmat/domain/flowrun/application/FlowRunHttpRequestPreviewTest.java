@@ -67,7 +67,7 @@ class FlowRunHttpRequestPreviewTest {
     @BeforeEach
     void setup() throws Exception {
         service = new FlowRunHttpExecutionService(runs, steps, attempts, executions, access, workflow,
-            profiles, mapping, gateway, stepService, ids, mapper, new TestTransactions());
+            profiles, mapping, gateway, stepService, ids, mapper, new TestTransactions(), new FlowRunHttpInFlightRequests());
         run = new FlowRun();
         run.setFlowRunId("run"); run.setProjectId("project"); run.setWorkflowId("workflow");
         run.setWorkflowRevisionId("published-revision"); run.setStatus("running");

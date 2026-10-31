@@ -1,15 +1,24 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { subscribeAuthChange, tokenStorage } from '../../entities/auth/lib/authSession'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      retry: 1,
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        retry: 1,
+      },
     },
-  },
-})
+  })
+}
 
 export function QueryProvider({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  const sessionVersion = useSyncExternalStore(subscribeAuthChange, tokenStorage.getSessionVersion, tokenStorage.getSessionVersion)
+  const queryClient = useMemo(createQueryClient, [sessionVersion])
+
+  // Retire pending queries and their callbacks together with the previous session's subtree.
+  useEffect(() => () => queryClient.clear(), [queryClient])
+
+  return <QueryClientProvider key={sessionVersion} client={queryClient}>{children}</QueryClientProvider>
 }

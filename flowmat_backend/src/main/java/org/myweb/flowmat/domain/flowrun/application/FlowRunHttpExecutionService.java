@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpGateway;
+import org.myweb.flowmat.domain.connector.application.publicapi.CancellableConnectorHttpGateway;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorHttpOutcome;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorMappingQuery;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorProfileOperation;
@@ -70,17 +71,19 @@ public class FlowRunHttpExecutionService {
     private final IdGenerator ids;
     private final ObjectMapper mapper;
     private final TransactionTemplate transaction;
+    private final FlowRunHttpInFlightRequests inFlight;
 
     public FlowRunHttpExecutionService(FlowRunRepository runs, FlowRunStepRepository steps,
         FlowRunStepAttemptRepository attempts, FlowRunHttpExecutionRepository executions, ProjectAccessService access,
         WorkflowProductionQuery workflow, ConnectorProfileQuery profiles, ConnectorMappingQuery mapping,
         ConnectorHttpGateway gateway, FlowRunStepService stepService, IdGenerator ids, ObjectMapper mapper,
-        PlatformTransactionManager transactionManager) {
+        PlatformTransactionManager transactionManager, FlowRunHttpInFlightRequests inFlight) {
         this.runs = runs; this.steps = steps; this.attempts = attempts; this.executions = executions;
         this.access = access; this.workflow = workflow; this.profiles = profiles; this.mapping = mapping;
         this.gateway = gateway; this.stepService = stepService; this.ids = ids; this.mapper = mapper;
         this.transaction = new TransactionTemplate(transactionManager);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.inFlight = inFlight;
     }
 
     /** Reads the same frozen request as claim without starting a step or resolving credentials. */
@@ -124,31 +127,36 @@ public class FlowRunHttpExecutionService {
         // A second authorization/status check limits the cancel/disable window; an external side effect remains irreversible.
         boolean current;
         RuntimeException preflightRefusal = null;
-        try {
-            current = Boolean.TRUE.equals(transaction.execute(status -> stillCurrent(claim.execution(), true)));
-        } catch (RuntimeException refused) {
-            // No gateway has been entered; a failed database recheck is known not to have sent anything.
-            current = false;
-            preflightRefusal = refused;
-        }
-        if (!current) {
-            outcome = new ConnectorHttpOutcome("TRANSPORT_FAILED", null, null, "RUN_NO_LONGER_ACTIVE", false);
-        } else {
+        // Register before the locked recheck, so a stop cannot commit between the check and registration.
+        try (var active = inFlight.track(runId, claim.execution().getExecutionId())) {
             try {
-                ConnectorProfileOperation operation;
+                current = Boolean.TRUE.equals(transaction.execute(status -> stillCurrent(claim.execution(), true)));
+            } catch (RuntimeException refused) {
+                // No gateway has been entered; a failed database recheck is known not to have sent anything.
+                current = false;
+                preflightRefusal = refused;
+            }
+            if (!current) {
+                outcome = new ConnectorHttpOutcome("TRANSPORT_FAILED", null, null, "RUN_NO_LONGER_ACTIVE", false);
+            } else {
                 try {
-                    operation = profiles.requireOperation(claim.projectId(), claim.execution().getProfileVersionId(), claim.execution().getOperationId());
-                } catch (RuntimeException refused) {
-                    // Operation lookup is local. Only failures after entering the gateway can be uncertain.
-                    operation = null;
+                    ConnectorProfileOperation operation;
+                    try {
+                        operation = profiles.requireOperation(claim.projectId(), claim.execution().getProfileVersionId(), claim.execution().getOperationId());
+                    } catch (RuntimeException refused) {
+                        // Operation lookup is local. Only failures after entering the gateway can be uncertain.
+                        operation = null;
+                    }
+                    outcome = operation == null
+                        ? new ConnectorHttpOutcome("TRANSPORT_FAILED", null, null, "CONNECTOR_REFUSED", false)
+                        : gateway instanceof CancellableConnectorHttpGateway cancellable
+                            ? cancellable.execute(operation, claim.request(), active.cancellation())
+                            : gateway.execute(operation, claim.request());
+                    if (outcome == null) outcome = unknown();
+                } catch (RuntimeException failed) {
+                    // The provider may have committed before a client failure; never infer that a resend is safe.
+                    outcome = unknown();
                 }
-                outcome = operation == null
-                    ? new ConnectorHttpOutcome("TRANSPORT_FAILED", null, null, "CONNECTOR_REFUSED", false)
-                    : gateway.execute(operation, claim.request());
-                if (outcome == null) outcome = unknown();
-            } catch (RuntimeException failed) {
-                // The provider may have committed before a client failure; never infer that a resend is safe.
-                outcome = unknown();
             }
         }
         ConnectorHttpOutcome result = outcome;
@@ -286,10 +294,11 @@ public class FlowRunHttpExecutionService {
         access.requireProjectOwnerAccess(run.getProjectId());
         FlowRunHttpExecution execution = requireExecution(runId, stepId, executionId);
         if (Set.of("APPLIED", "LATE").contains(execution.getApplyStatus())) return response(execution);
-        if (Set.of("PENDING", "OUTCOME_UNKNOWN").contains(execution.getTransportStatus())) return response(execution);
+        if ("PENDING".equals(execution.getTransportStatus())) return response(execution);
         if (!stillCurrent(execution, false)) {
             execution.setApplyStatus("LATE"); executions.saveAndFlush(execution); return response(execution);
         }
+        if ("OUTCOME_UNKNOWN".equals(execution.getTransportStatus())) return response(execution);
         FlowRunStep step = requireStep(runId, stepId);
         FlowRunStepAttempt attempt = attempts.findTopByStepIdOrderByAttemptNoDesc(stepId).orElseThrow();
         if ("SUCCEEDED".equals(execution.getTransportStatus())) {

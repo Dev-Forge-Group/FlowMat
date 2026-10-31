@@ -22,6 +22,20 @@ public interface CatalogQuery {
      */
     Optional<CatalogItemView> findActiveItem(String itemId);
 
+    /**
+     * Keeps the project's nondeleted item stable until the caller's transaction ends. The shared lock permits other
+     * receipts, but an ongoing item write is a conflict rather than a wait. Requires an existing write transaction;
+     * callers check access before taking the lock.
+     */
+    Optional<CatalogItemView> lockProjectItemForStock(String projectId, String itemId);
+
+    /**
+     * Keeps a project's nondeleted item stable while the caller saves a reference to it. Shares the row with other
+     * references and receipts; an ongoing item write is a conflict without waiting. Requires the caller's write
+     * transaction and prior project access check, and returns the freshly loaded item for the caller's validation.
+     */
+    Optional<CatalogItemView> lockProjectItemForReference(String projectId, String itemId);
+
     /** Whether a unit with this code exists, ignoring case. */
     boolean isKnownUnitCode(String unitCode);
 

@@ -10,7 +10,7 @@ import { useSaveWorkOrderMutation } from '../../../entities/production/api/useWo
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { WorkOrderDto } from '../../../shared/types/api'
 import {
-  batchApproved, batchDrafts, batchPlannable, defaultPlanFrom, orderSummary, planInput, planSummary, rescheduleInput,
+  batchApproved, batchDrafts, batchPlannable, defaultPlanFrom, orderSummary, planInput, planSchedule, planSummary, rescheduleInput,
 } from '../model/workOrderPlanModel'
 
 /**
@@ -173,6 +173,11 @@ export function WorkOrderBatchPlan({ projectId, orders }: { projectId: string; o
                 {line.suggestion ? planSummary(line.suggestion) : <span style={{ color: '#b45309' }}>{line.problem}</span>}
                 {line.suggestion && line.workOrderStatus !== 'draft' && (
                   <span className="inspector-hint"> · keeps its dates until the project owner reschedules it</span>
+                )}
+                {line.suggestion && planSchedule(line.suggestion).length > 0 && (
+                  <div role="group" aria-label={`Who works when for ${line.workOrderNumber}`} style={{ paddingLeft: 12 }}>
+                    {planSchedule(line.suggestion).map((text) => <div key={text}>{text}</div>)}
+                  </div>
                 )}
               </li>
             ))}

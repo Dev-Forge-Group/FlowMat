@@ -20,6 +20,7 @@ class FlowRunTermination {
     private final FlowRunStepRepository stepRepository;
     private final FlowRunStepAttemptRepository attemptRepository;
     private final FlowRunEventRecorder eventRecorder;
+    private final FlowRunHttpInFlightRequests httpRequests;
 
     void stop(FlowRun run, String terminalStatus, String errorCode, String errorMessage, JsonNode payload, String actor) {
         String flowRunId = run.getFlowRunId();
@@ -55,5 +56,6 @@ class FlowRunTermination {
         run.setEndedAt(now);
         flowRunRepository.save(run);
         eventRecorder.record(flowRunId, null, "run_" + terminalStatus, payload, actor);
+        httpRequests.cancelAfterCommit(flowRunId);
     }
 }

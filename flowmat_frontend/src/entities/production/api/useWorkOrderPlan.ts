@@ -37,6 +37,8 @@ export interface WorkOrderPlanSuggestionDto {
   /** What is left of the step plan in worker minutes, and that shared by the crew with shifts (LB25); null when not known. */
   laborMinutes?: number | null
   laborHours?: number | null
+  /** Who works on which process when, for a step plan split among people (LB35); empty or left out otherwise. */
+  schedule?: { nodeId: string; nodeName: string | null; userId: string; from: string; to: string }[]
 }
 
 /** Suggestions for several orders, in the order asked (docs/domain/equipment-schedule.md P8-P11). Nothing is saved. */

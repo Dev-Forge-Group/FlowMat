@@ -543,3 +543,168 @@ test('a POST null preview is a body and a late preview cannot return after the s
   await expect(panel).not.toContainText('{"late":true}')
   expect(writes).toEqual([])
 })
+
+for (const deniedResource of ['binding', 'profiles', 'pinned metadata', 'history'] as const) {
+  test(`a denied ${deniedResource} revalidation removes the open HTTP binding editor and its private preview`, async ({ page }) => {
+    await page.clock.install()
+    const privateOrigin = 'https://private-binding.example.com'
+    const privateMapping = '{"literal":{"customer":"private-binding-map-479"}}'
+    const privateSource = '{"customer":"private-binding-source-479"}'
+    const privatePreview = '{"customer":"private-binding-preview-479"}'
+    const currentProfile = { ...profile, baseOrigin: privateOrigin }
+    const oldProfile = { ...pinnedProfile, baseOrigin: privateOrigin }
+    const reads = { binding: 0, profiles: 0, 'pinned metadata': 0, history: 0 }
+    const writes: string[] = []
+    let previewReads = 0
+    let revoked = false
+    let deniedReads = 0
+    let bindingVersion = pinnedBinding.version
+    let savedBinding: Record<string, unknown> | null = null
+    await setup(page, async (pathname, method, route) => {
+      if (pathname.endsWith('/json-mapping/preview') && method === 'POST') {
+        previewReads += 1
+        await ok(route, { version: 1, result: { customer: 'private-binding-preview-479' }, resultJson: privatePreview })
+        return true
+      }
+      if (pathname.endsWith('/execution-binding') && method === 'PUT') {
+        writes.push(`${method} ${pathname}`)
+        savedBinding = route.request().postDataJSON()
+        await ok(route, { ...pinnedBinding, requestMappingJson: privateMapping, version: bindingVersion + 1 })
+        return true
+      }
+      if (method !== 'GET') { writes.push(`${method} ${pathname}`); return false }
+      const resource = pathname.endsWith('/execution-binding') ? 'binding'
+        : pathname === `/api/projects/${projectId}/http-profiles` ? 'profiles'
+          : pathname.endsWith('/by-version/profile-v1/metadata') ? 'pinned metadata'
+            : pathname.endsWith('/profile-http/versions') ? 'history' : null
+      if (!resource) return false
+      reads[resource] += 1
+      if (revoked && resource === deniedResource) {
+        deniedReads += 1
+        await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false,
+          data: null, message: `HTTP ${deniedResource} read access was revoked.` }) })
+        return true
+      }
+      if (resource === 'binding') await ok(route, { ...pinnedBinding, requestMappingJson: privateMapping, version: bindingVersion })
+      else if (resource === 'profiles') await ok(route, [currentProfile])
+      else if (resource === 'pinned metadata') await ok(route, oldProfile)
+      else await ok(route, [{ ...currentProfile, revision: 3 }, oldProfile])
+      return true
+    }, 'editor')
+    const panel = await openHttpBinding(page)
+    await expect(panel.getByLabel('Request mapping (JSON)')).toHaveValue(privateMapping)
+    await expect(panel.getByLabel('Profile revision')).toHaveValue('profile-v1')
+    await expect(panel.getByLabel('Profile revision').getByRole('option', { name: /Revision 1.*private-binding/ })).toHaveCount(1)
+    await expect.poll(() => reads.history).toBeGreaterThan(0)
+    await expect.poll(() => reads['pinned metadata']).toBeGreaterThan(0)
+    await panel.getByLabel('Preview source (JSON)').fill(privateSource)
+    await panel.getByRole('button', { name: 'Preview request mapping', exact: true }).click()
+    await expect(panel.getByLabel('Mapping preview result')).toHaveText(privatePreview)
+    await expect(panel.getByRole('button', { name: 'Save HTTP binding', exact: true })).toBeEnabled()
+    await expect(panel.getByRole('button', { name: 'Clear HTTP binding', exact: true })).toBeEnabled()
+
+    // Only this resource denies its background revalidation. The cached editor role stays unchanged.
+    revoked = true
+    const refusal = page.waitForResponse((response) => response.status() === 403
+      && response.url().includes(deniedResource === 'binding' ? '/execution-binding'
+        : deniedResource === 'profiles' ? `/projects/${projectId}/http-profiles`
+          : deniedResource === 'pinned metadata' ? '/by-version/profile-v1/metadata' : '/profile-http/versions'))
+    await page.clock.fastForward(31_000)
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
+    await refusal
+    await expect.poll(() => deniedReads).toBeGreaterThan(0)
+    await expect(panel.getByRole('alert').first()).toContainText('read access was revoked.')
+    await expect(panel.getByRole('form', { name: 'Edit HTTP binding', exact: true })).toHaveCount(0)
+    await expect(panel.getByLabel('Request mapping (JSON)')).toHaveCount(0)
+    await expect(panel.getByLabel('Preview source (JSON)')).toHaveCount(0)
+    await expect(panel.getByLabel('Mapping preview result')).toHaveCount(0)
+    await expect(panel).not.toContainText(privateOrigin)
+    await expect(panel).not.toContainText('private-binding-map-479')
+    await expect(panel).not.toContainText('private-binding-source-479')
+    await expect(panel).not.toContainText('private-binding-preview-479')
+    await expect(panel.getByRole('button', { name: /^(Edit HTTP binding|Save HTTP binding|Clear HTTP binding|Preview request mapping|Preview response mapping)$/ })).toHaveCount(0)
+    expect(previewReads).toBe(1)
+    expect(writes).toEqual([])
+
+    revoked = false
+    bindingVersion = 8
+    const readsBeforeRecovery = reads.binding
+    await panel.getByRole('button', { name: 'Refresh HTTP binding', exact: true }).click()
+    await expect.poll(() => reads.binding).toBeGreaterThan(readsBeforeRecovery)
+    await expect(panel.getByRole('button', { name: 'Edit HTTP binding', exact: true })).toBeEnabled()
+    await expect(panel.getByRole('alert')).toHaveCount(0)
+    await expect(panel.getByRole('form', { name: 'Edit HTTP binding', exact: true })).toHaveCount(0)
+    await expect(panel.getByLabel('Mapping preview result')).toHaveCount(0)
+    expect(previewReads).toBe(1)
+    expect(writes).toEqual([])
+    await panel.getByRole('button', { name: 'Edit HTTP binding', exact: true }).click()
+    await expect(panel.getByLabel('Preview source (JSON)')).toHaveValue('{}')
+    await expect(panel.getByLabel('Request mapping (JSON)')).toHaveValue(privateMapping)
+    await expect(panel.getByLabel('Mapping preview result')).toHaveCount(0)
+    await panel.getByRole('button', { name: 'Save HTTP binding', exact: true }).click()
+    await expect(panel).toContainText('Saved. Publish a revision')
+    expect(savedBinding).toMatchObject({ expectedVersion: 8, profileVersionId: 'profile-v1' })
+    expect(writes).toEqual([`PUT /api/processes/${process.processId}/execution-binding`])
+    expect(previewReads).toBe(1)
+  })
+}
+
+test('a late mapping preview cannot restore private data after binding denial, recovery and a fresh edit', async ({ page }) => {
+  await page.clock.install()
+  let revoked = false
+  let deniedReads = 0
+  let previewReads = 0
+  let release!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const writes: string[] = []
+  await setup(page, async (pathname, method, route) => {
+    if (pathname.endsWith('/json-mapping/preview') && method === 'POST') {
+      previewReads += 1
+      const isOld = previewReads === 1
+      if (isOld) await held
+      await ok(route, { version: 1, result: {}, resultJson: isOld ? '{"private":"late-binding-preview-573"}' : '{"fresh":true}' })
+      return true
+    }
+    if (method !== 'GET') { writes.push(`${method} ${pathname}`); return false }
+    if (pathname.endsWith('/execution-binding')) {
+      if (revoked) {
+        deniedReads += 1
+        await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false,
+          data: null, message: 'HTTP binding read access was revoked.' }) })
+      } else await ok(route, pinnedBinding)
+      return true
+    }
+    if (pathname.endsWith('/by-version/profile-v1/metadata')) { await ok(route, pinnedProfile); return true }
+    if (pathname.endsWith('/profile-http/versions')) { await ok(route, [{ ...profile, revision: 3 }, pinnedProfile]); return true }
+    return false
+  }, 'editor')
+  const panel = await openHttpBinding(page)
+  try {
+    await expect(panel.getByLabel('Approved operation')).toHaveValue('send')
+    await panel.getByLabel('Preview source (JSON)').fill('{"private":"old-binding-source-573"}')
+    await panel.getByRole('button', { name: 'Preview request mapping', exact: true }).click()
+    await expect.poll(() => previewReads).toBe(1)
+    revoked = true
+    const refusal = page.waitForResponse((response) => response.status() === 403 && response.url().endsWith('/execution-binding'))
+    await page.clock.fastForward(31_000)
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
+    await refusal
+    await expect.poll(() => deniedReads).toBeGreaterThan(0)
+    await expect(panel.getByRole('form', { name: 'Edit HTTP binding', exact: true })).toHaveCount(0)
+    revoked = false
+    await panel.getByRole('button', { name: 'Refresh HTTP binding', exact: true }).click()
+    await panel.getByRole('button', { name: 'Edit HTTP binding', exact: true }).click()
+    await expect(panel.getByLabel('Preview source (JSON)')).toHaveValue('{}')
+    const lateResponse = page.waitForResponse((response) => response.url().endsWith('/json-mapping/preview'))
+    release()
+    await (await lateResponse).finished()
+    await expect(panel.getByRole('button', { name: 'Preview request mapping', exact: true })).toBeEnabled()
+    await expect(panel.getByLabel('Mapping preview result')).toHaveCount(0)
+    await expect(panel).not.toContainText('late-binding-preview-573')
+    await expect(panel).not.toContainText('old-binding-source-573')
+    await panel.getByRole('button', { name: 'Preview request mapping', exact: true }).click()
+    await expect(panel.getByLabel('Mapping preview result')).toHaveText('{"fresh":true}')
+    expect(previewReads).toBe(2)
+    expect(writes).toEqual([])
+  } finally { release() }
+})

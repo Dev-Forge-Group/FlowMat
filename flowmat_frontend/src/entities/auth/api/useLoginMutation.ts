@@ -61,8 +61,11 @@ async function requestDormant(): Promise<void> {
 
 export function useLoginMutation() {
   return useMutation({
-    mutationFn: login,
-    onSuccess: (data) => tokenStorage.setAccessToken(data.accessToken, { cookieBacked: true }),
+    mutationFn: (request: LoginRequest) => withRefreshCookieLock(async () => {
+      const data = await login(request)
+      tokenStorage.setAccessToken(data.accessToken, { cookieBacked: true })
+      return data
+    }),
   })
 }
 

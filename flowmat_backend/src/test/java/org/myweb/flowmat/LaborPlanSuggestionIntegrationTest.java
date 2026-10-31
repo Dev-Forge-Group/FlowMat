@@ -65,9 +65,12 @@ class LaborPlanSuggestionIntegrationTest extends IntegrationTestSupport {
         suggestion(loose, at(6, 9))
             .andExpect(jsonPath("$.data.laborHours").value(4.67))
             .andExpect(jsonPath("$.data.plannedEndAt").value("2041-05-06T13:41:00+09:00"));
-        // Lee alone, for half of their time, fixes nothing.
+        // Lee alone, for half of their time, does it at half pace in their own time (LB27): 14 h of Monday and Tuesday.
         crew(loose, Map.of("userId", lee, "sharePercent", 50));
-        callAs(get("/work-orders/" + loose + "/plan-suggestion").param("from", at(6, 9)), null).andExpect(status().isConflict());
+        suggestion(loose, at(6, 9))
+            .andExpect(jsonPath("$.data.laborHours").value(14.0))
+            .andExpect(jsonPath("$.data.plannedStartAt").value(at(6, 9)))
+            .andExpect(jsonPath("$.data.plannedEndAt").value(at(7, 15)));
 
         // With equipment the longer decides: 10 at 10 an hour is 1 h, the plan 7 h with kim.
         String press = data(callAs(post("/equipments"), json(Map.of("projectId", DEMO_PROJECT, "equipmentCode", "LBP-" + tag,

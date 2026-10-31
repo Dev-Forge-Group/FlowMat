@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { useCurrentUserQuery } from '../../../entities/auth/api/useCurrentUserQuery'
+import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { Link, useParams } from 'react-router-dom'
 import { useProjectMembersQuery } from '../../../entities/project/api/useProjectMembersQuery'
 import { useProjectInvitesQuery } from '../../../entities/project/api/useProjectInvitesQuery'
@@ -11,6 +13,7 @@ import type { ProjectMemberDto, ProjectInviteDto } from '../../../shared/types/a
 import { ProjectTimeZonePanel } from './ProjectTimeZonePanel'
 import { NotificationSubscriptionsPanel } from './NotificationSubscriptionsPanel'
 import { WorkerCalendarsPanel } from './WorkerCalendarsPanel'
+import { LaborPremiumsPanel } from './LaborPremiumsPanel'
 import { HTTPProfilesPanel } from './HTTPProfilesPanel'
 
 const ROLES = ['viewer', 'editor'] as const
@@ -69,14 +72,18 @@ function RoleBadge({ role }: { role: string }) {
   )
 }
 
-function MembersPanel({ projectId }: { projectId: string }) {
-  const { data: members = [], isLoading } = useProjectMembersQuery(projectId)
+function MembersPanel({ projectId, owner }: { projectId: string; owner: boolean }) {
+  const query = useProjectMembersQuery(projectId)
+  const { isLoading } = query
+  const accessDenied = [401, 403, 404].includes(errorStatus(query.error) ?? 0)
+  const members = accessDenied ? [] : query.data ?? []
   const updateRoleMutation = useUpdateMemberRoleMutation(projectId)
   const removeMutation = useRemoveMemberMutation(projectId)
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({})
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function handleRoleChange(member: ProjectMemberDto) {
+    if (!owner) return
     const newRole = roleSelections[member.projectMemberId] ?? member.projectRole
     setActionError(null)
     try {
@@ -87,6 +94,7 @@ function MembersPanel({ projectId }: { projectId: string }) {
   }
 
   async function handleRemove(member: ProjectMemberDto) {
+    if (!owner) return
     if (!confirm(`Remove ${member.userId} from this project?`)) return
     setActionError(null)
     try {
@@ -101,7 +109,8 @@ function MembersPanel({ projectId }: { projectId: string }) {
       <h2 style={{ margin: 0 }}>Members</h2>
       {actionError && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{actionError}</p>}
       {isLoading && <p style={{ opacity: 0.5 }}>Loading members…</p>}
-      {!isLoading && members.length === 0 && <p style={{ opacity: 0.5 }}>No members found.</p>}
+      {query.isError && <p role="alert">{errorMessage(query.error, 'Failed to load members.')}</p>}
+      {!isLoading && !query.isError && members.length === 0 && <p style={{ opacity: 0.5 }}>No members found.</p>}
       {members.length > 0 && (
         <table style={tableStyle}>
           <thead>
@@ -117,8 +126,8 @@ function MembersPanel({ projectId }: { projectId: string }) {
               <tr key={m.projectMemberId}>
                 <td style={tdStyle}>{m.userId}</td>
                 <td style={tdStyle}>
-                  {m.projectRole === 'owner' ? (
-                    <RoleBadge role="owner" />
+                  {!owner || m.projectRole === 'owner' ? (
+                    <RoleBadge role={m.projectRole} />
                   ) : (
                     <select
                       value={roleSelections[m.projectMemberId] ?? m.projectRole}
@@ -137,7 +146,7 @@ function MembersPanel({ projectId }: { projectId: string }) {
                   {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : '—'}
                 </td>
                 <td style={tdStyle}>
-                  {m.projectRole !== 'owner' && (
+                  {owner && m.projectRole !== 'owner' && (
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         type="button"
@@ -168,7 +177,10 @@ function MembersPanel({ projectId }: { projectId: string }) {
 }
 
 function InvitesPanel({ projectId }: { projectId: string }) {
-  const { data: invites = [], isLoading } = useProjectInvitesQuery(projectId)
+  const query = useProjectInvitesQuery(projectId)
+  const { isLoading } = query
+  const accessDenied = [401, 403, 404].includes(errorStatus(query.error) ?? 0)
+  const invites = accessDenied ? [] : query.data ?? []
   const createMutation = useCreateInviteMutation(projectId)
   const cancelMutation = useCancelInviteMutation(projectId)
   const [email, setEmail] = useState('')
@@ -178,6 +190,7 @@ function InvitesPanel({ projectId }: { projectId: string }) {
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault()
+    if (accessDenied) return
     setFormError(null)
     try {
       await createMutation.mutateAsync({ projectId, invitedEmail: email, projectRole: role })
@@ -188,6 +201,7 @@ function InvitesPanel({ projectId }: { projectId: string }) {
   }
 
   async function handleCancel(invite: ProjectInviteDto) {
+    if (accessDenied) return
     setActionError(null)
     try {
       await cancelMutation.mutateAsync(invite.inviteId)
@@ -202,7 +216,7 @@ function InvitesPanel({ projectId }: { projectId: string }) {
     <div style={sectionStyle}>
       <h2 style={{ margin: 0 }}>Invitations</h2>
 
-      <form
+      {!accessDenied && <form
         onSubmit={(e) => void handleInvite(e)}
         style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}
       >
@@ -230,13 +244,14 @@ function InvitesPanel({ projectId }: { projectId: string }) {
         >
           {createMutation.isPending ? 'Sending…' : 'Send Invite'}
         </button>
-      </form>
+      </form>}
 
       {formError && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{formError}</p>}
       {actionError && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{actionError}</p>}
 
       {isLoading && <p style={{ opacity: 0.5 }}>Loading invitations…</p>}
-      {!isLoading && pending.length === 0 && <p style={{ opacity: 0.5 }}>No pending invitations.</p>}
+      {query.isError && <p role="alert">{errorMessage(query.error, 'Failed to load invitations.')}</p>}
+      {!isLoading && !query.isError && pending.length === 0 && <p style={{ opacity: 0.5 }}>No pending invitations.</p>}
       {pending.length > 0 && (
         <table style={tableStyle}>
           <thead>
@@ -276,6 +291,11 @@ function InvitesPanel({ projectId }: { projectId: string }) {
 
 export function ProjectSettingsRoute() {
   const { projectId } = useParams<{ projectId: string }>()
+  const members = useProjectMembersQuery(projectId ?? '')
+  const user = useCurrentUserQuery()
+  const owner = !members.isError && !user.isError && Boolean(user.data?.userId)
+    && (members.data ?? []).some((member) => member.userId === user.data?.userId
+      && member.memberStatus === 'active' && member.projectRole === 'owner')
 
   if (!projectId) return null
 
@@ -285,8 +305,11 @@ export function ProjectSettingsRoute() {
         minHeight: '100svh',
         padding: '32px',
         maxWidth: 900,
+        width: '100%',
+        minWidth: 0,
         margin: '0 auto',
         display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr)',
         gap: 24,
         boxSizing: 'border-box',
       }}
@@ -301,8 +324,9 @@ export function ProjectSettingsRoute() {
       <HTTPProfilesPanel key={`http-${projectId}`} projectId={projectId} />
       <NotificationSubscriptionsPanel key={`notifications-${projectId}`} projectId={projectId} />
       <WorkerCalendarsPanel key={`workers-${projectId}`} projectId={projectId} />
-      <MembersPanel projectId={projectId} />
-      <InvitesPanel projectId={projectId} />
+      <LaborPremiumsPanel key={`premiums-${projectId}`} projectId={projectId} />
+      <MembersPanel projectId={projectId} owner={owner} />
+      {owner && <InvitesPanel key={`invites-${projectId}`} projectId={projectId} />}
     </div>
   )
 }

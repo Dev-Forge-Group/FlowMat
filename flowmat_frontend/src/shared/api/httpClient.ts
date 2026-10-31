@@ -22,7 +22,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, rawJ
     try { if (typeof body !== 'string') throw new Error(); JSON.parse(body) }
     catch { throw new Error('Enter valid JSON.') }
   }
-  return requestInternal<T>(method, path, body, false, rawJson)
+  return requestInternal<T>(method, path, body, false, rawJson, tokenStorage.getSessionVersion())
 }
 
 async function readResponseBody(res: Response): Promise<unknown> {
@@ -36,20 +36,28 @@ async function readResponseBody(res: Response): Promise<unknown> {
   }
 }
 
-async function requestInternal<T>(method: HttpMethod, path: string, body: unknown, retried: boolean, rawJson = false): Promise<T> {
+function assertCurrentSession(version: number) {
+  if (version !== tokenStorage.getSessionVersion()) throw new Error('Your session changed. Please try again.')
+}
+
+async function requestInternal<T>(method: HttpMethod, path: string, body: unknown, retried: boolean, rawJson: boolean, sessionVersion: number): Promise<T> {
+  assertCurrentSession(sessionVersion)
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: buildHeaders(),
     credentials: 'same-origin',
     body: rawJson ? body as string : body !== undefined ? JSON.stringify(body) : undefined,
   })
+  assertCurrentSession(sessionVersion)
 
   const payload = await readResponseBody(res)
+  assertCurrentSession(sessionVersion)
 
   if (!retried && res.status === 401 && !path.startsWith('/auth/')) {
     const refreshed = await refreshAccessToken()
+    assertCurrentSession(sessionVersion)
     if (refreshed) {
-      return requestInternal<T>(method, path, body, true, rawJson)
+      return requestInternal<T>(method, path, body, true, rawJson, sessionVersion)
     }
   }
 
