@@ -27,10 +27,12 @@ public record RunMaterialUsageResponse(
 
     /**
      * One input item in its own unit. An item used without being in the BOM has no plan, a standard of zero and no
-     * percentage.
+     * percentage. A substitute the BOM approves is in the BOM: it takes a share of its main material's standard (ADR-032).
      *
      * @param actual null when a recording's unit cannot be converted to the item's unit
      * @param variancePercent variance / standard × 100; null when the standard is zero or the actual is unknown
+     * @param substituteFor the main material this item stood in for; null for any other item
+     * @param optional an optional material of the run's BOM that its work order did not pick, so not planned (ADR-033)
      */
     public record Line(
         String itemId,
@@ -44,7 +46,9 @@ public record RunMaterialUsageResponse(
         BigDecimal variance,
         BigDecimal variancePercent,
         BigDecimal unitCost,
-        BigDecimal varianceCost
+        BigDecimal varianceCost,
+        String substituteFor,
+        boolean optional
     ) {
     }
 }

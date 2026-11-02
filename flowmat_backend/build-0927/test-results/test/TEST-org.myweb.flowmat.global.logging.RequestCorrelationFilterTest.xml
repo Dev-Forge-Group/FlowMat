@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.myweb.flowmat.global.logging.RequestCorrelationFilterTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-27T09:04:27.946Z" hostname="DESKTOP-852AG4Q" time="0.003">
-  <properties/>
-  <testcase name="keepsSafeClientIdAndReplacesOversizedOrUnsafeValues()" classname="org.myweb.flowmat.global.logging.RequestCorrelationFilterTest" time="0.003"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

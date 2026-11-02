@@ -75,6 +75,9 @@ async function revisitStaleSettings(page: Page) {
   await page.clock.fastForward(31_000)
   await page.getByRole('link', { name: 'Home', exact: false }).click()
   await expect(page).toHaveURL(/\/$/)
+  // The URL changes before React commits the Home transition. Going back before that keeps the settings page mounted,
+  // so nothing remounts and nothing refetches; wait until the page is really gone.
+  await expect(page.getByRole('heading', { name: 'Project Settings', exact: true })).toHaveCount(0)
   await page.goBack()
   await expect(page).toHaveURL(`/projects/${projectId}/settings`)
 }

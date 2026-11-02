@@ -31,6 +31,8 @@ public class FlowRuleExpressionEvaluator {
     private static final Pattern COMPARISON_PATTERN =
         Pattern.compile("^\\s*(.+?)\\s*(==|!=|>=|<=|>|<)\\s*(.+?)\\s*$");
 
+    private static final Object UNRESOLVED = new Object();
+
     private final ObjectMapper objectMapper;
 
     public FlowRuleExpressionEvaluator(ObjectMapper objectMapper) {
@@ -246,26 +248,32 @@ public class FlowRuleExpressionEvaluator {
         }
 
         Object resolved = resolvePath(facts, trimmed);
-        return resolved != null ? resolved : trimmed;
+        return resolved != UNRESOLVED ? resolved : trimmed;
     }
 
     private Object resolvePath(Map<String, Object> facts, String path) {
         String[] segments = path.split("\\.");
-        Object current = facts.get(segments[0]);
-        if (current == null) {
-            return null;
+        if (!facts.containsKey(segments[0])) {
+            return UNRESOLVED;
         }
+        Object current = facts.get(segments[0]);
 
         for (int i = 1; i < segments.length; i++) {
             if (current == null) {
-                return null;
+                return UNRESOLVED;
             }
             if (current instanceof Map<?, ?> map) {
+                if (!map.containsKey(segments[i])) {
+                    return UNRESOLVED;
+                }
                 current = map.get(segments[i]);
                 continue;
             }
             Map<String, Object> valueMap = objectMapper.convertValue(current, new TypeReference<Map<String, Object>>() {
             });
+            if (!valueMap.containsKey(segments[i])) {
+                return UNRESOLVED;
+            }
             current = valueMap.get(segments[i]);
         }
         return current;

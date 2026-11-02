@@ -23,6 +23,12 @@ FlowMat은 업종이 아니라 흐름을 모델링하고 실행한다. 제조·�
 | R1–R5, E1–E2 Port 계약·실행 | [ADR-003](adr/ADR-003-resource-port-contract.md) | 원칙 **Accepted**. 정확한 `resourceType` 값 목록은 **Experimental** registry |
 | P1–P2 금지 | 원문 §39·§48·§54 | 확정 |
 | FM-RUN-005 실행 정책 | [ADR-004](adr/ADR-004-flow-run-execution-policy.md) | **Accepted**(2026-10-05 사용자 최종 결정) |
+| 운영 관리 포트 | [ADR-029](adr/ADR-029-management-port.md) | **Accepted**(2026-11-01 사용자 최종 결정 D3) |
+| 얼굴 로그인 기본 OFF | [ADR-030](adr/ADR-030-face-login-off.md) | **Accepted**(2026-11-01 사용자 최종 결정 D4) |
+| BOM 줄 스크랩률 | [ADR-031](adr/ADR-031-bom-scrap-rate.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안) |
+| BOM 대체 자재 | [ADR-032](adr/ADR-032-bom-substitute-materials.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안) |
+| BOM 선택 자재 | [ADR-033](adr/ADR-033-bom-optional-materials.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안, V133 개발 DB 미적용) |
+| BOM 줄 실제 손실 집계 | [ADR-034](adr/ADR-034-bom-scrap-performance.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안) |
 
 ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 결정(D2)은 별개의 결정 트랙이다. D2가 남아 있어도 아키텍처 결정을 막지 않는다([WORKBOARD](../status/WORKBOARD.md) §3).
 

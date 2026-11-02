@@ -82,6 +82,7 @@ class ProductionRunServiceImplTest {
     @Mock private CatalogItemRuleFactsQuery ruleFacts;
     @Mock private StockViewQuery stockViews;
     @Mock private StockRuleFactsQuery stockRuleFacts;
+    @Mock private WorkOrderOptionalItems optionalItems;
     @Spy private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @BeforeEach

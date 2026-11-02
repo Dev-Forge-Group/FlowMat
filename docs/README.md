@@ -77,3 +77,5 @@ for f in $(find docs -name '*.md'); do git ls-files --error-unmatch "$f" >/dev/n
 ```
 
 2026-10-02 사용자 결정: `.gitignore`는 바꾸지 않는다. Agent는 `.gitignore`를 고치지 않고, git 밖 문서를 지우지 않는다(git 이력이 없어 되돌릴 수 없다). 이미 추적 중인 파일을 옮길 때는 `git mv`를 쓴다.
+
+2026-11-01 사용자 결정(D1): 재생성 가능한 빌드·테스트 산출물은 git에서 추적하지 않는다. 루트 `.gitignore`에 `/flowmat_backend/build-*/`, `/flowmat_frontend/*-results/`, `/flowmat_frontend/coverage/`, `*.tsbuildinfo`를 더했고, 커밋돼 있던 `flowmat_backend/build-0927`·`flowmat_frontend/bom-effectivity-e2e-results`·`flowmat_frontend/tsconfig.tsbuildinfo`는 `git rm --cached`로 색인에서만 뺐다(파일은 디스크에 남음). Flyway 마이그레이션, 픽스처, 소스 역할의 생성 파일은 대상이 아니다. 이 밖의 `.gitignore` 변경은 여전히 사용자 결정으로만 한다.

@@ -20,6 +20,8 @@ public interface ProductionRunRepository extends JpaRepository<ProductionRun, St
 
     List<ProductionRun> findAllByWorkflowIdAndDeletedYnOrderByCreatedAtDesc(String workflowId, String deletedYn);
 
+    List<ProductionRun> findAllByBomIdAndDeletedYn(String bomId, String deletedYn);
+
     Optional<ProductionRun> findByProductionRunIdAndDeletedYn(String productionRunId, String deletedYn);
 
     List<ProductionRun> findAllByWorkOrderIdInAndDeletedYn(Collection<String> workOrderIds, String deletedYn);

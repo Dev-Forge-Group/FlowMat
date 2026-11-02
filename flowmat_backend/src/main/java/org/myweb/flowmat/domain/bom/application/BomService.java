@@ -51,4 +51,12 @@ public interface BomService {
      */
     BomRequirementResponse requirementsForRun(String bomId, String projectId, String targetItemId, BigDecimal productionQuantity,
                                               java.time.LocalDate phantomDay);
+
+    /**
+     * As above, with the optional materials a work order picked (ADR-033): an optional line whose item is one of
+     * {@code optionalItemIds} is planned, here and inside phantoms; any other optional line is only listed in
+     * {@code optionals}. The other overloads pick none.
+     */
+    BomRequirementResponse requirementsForRun(String bomId, String projectId, String targetItemId, BigDecimal productionQuantity,
+                                              java.time.LocalDate phantomDay, java.util.Collection<String> optionalItemIds);
 }

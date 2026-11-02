@@ -119,6 +119,15 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
     private record Version(String scheduleId, LocalDate from, List<WorkerShift> shifts, RotaWeeks rota) {
     }
 
+    /** The calendars read once for a window, reused when counting each project date separately. */
+    private record TimeInputs(ZoneId zone, Map<String, List<Version>> versions, Map<String, List<WorkerDayOff>> offs,
+                              Set<LocalDate> holidayDays, Map<String, Map<LocalDate, String>> ownDays) {
+        WorkerTime between(String userId, Instant start, Instant end) {
+            return spans(versions.getOrDefault(userId, List.of()), offs.getOrDefault(userId, List.of()), holidayDays,
+                ownDays.getOrDefault(userId, Map.of()), zone, start, end);
+        }
+    }
+
     /** A version's shifts as shown, their hours in a week and its rota. */
     private record Lines(List<WorkerCalendarResponse.Shift> shifts, BigDecimal weeklyHours, WorkerCalendarResponse.Rota rota) {
     }
@@ -634,8 +643,33 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             return userIds.stream().distinct().collect(Collectors.toMap(id -> id, id -> new WorkerTime(false, List.of())));
         }
         ZoneId zone = calendars.zone(projectId);
-        LocalDate firstDay = from.atZoneSameInstant(zone).toLocalDate().minusDays(1);
-        LocalDate lastDay = to.atZoneSameInstant(zone).toLocalDate();
+        TimeInputs inputs = timeInputs(projectId, userIds, zone, from.atZoneSameInstant(zone).toLocalDate().minusDays(1),
+            to.atZoneSameInstant(zone).toLocalDate());
+        Map<String, WorkerTime> result = new HashMap<>();
+        for (String userId : new HashSet<>(userIds)) {
+            result.put(userId, inputs.between(userId, from.toInstant(), to.toInstant()));
+        }
+        return result;
+    }
+
+    /** Each project date's calendar knowledge and time, with all calendar inputs read once (decision 16). */
+    @Transactional(readOnly = true)
+    Map<LocalDate, WorkerTime> workingDays(String projectId, String userId, LocalDate first, LocalDate last) {
+        Map<LocalDate, WorkerTime> result = new HashMap<>();
+        if (last.isBefore(first)) {
+            return result;
+        }
+        ZoneId zone = calendars.zone(projectId);
+        TimeInputs inputs = timeInputs(projectId, List.of(userId), zone, first.minusDays(1), last);
+        for (LocalDate date = first; !date.isAfter(last); date = date.plusDays(1)) {
+            result.put(date, inputs.between(userId, date.atStartOfDay(zone).toInstant(),
+                date.plusDays(1).atStartOfDay(zone).toInstant()));
+        }
+        return result;
+    }
+
+    private TimeInputs timeInputs(String projectId, Collection<String> userIds, ZoneId zone, LocalDate firstDay,
+                                  LocalDate lastDay) {
         Map<String, List<Version>> versions = versions(projectId, userIds);
         Map<String, List<WorkerDayOff>> offs = dayOffRepository
             .findAllByProjectIdAndUserIdInAndLastDayGreaterThanEqualAndFirstDayLessThanEqual(projectId, userIds, firstDay, lastDay)
@@ -644,12 +678,9 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
         Map<String, List<WorkerDayShift>> days = dayShiftRepository
             .findAllByProjectIdAndUserIdInAndWorkDateBetween(projectId, userIds, firstDay, lastDay).stream()
             .collect(Collectors.groupingBy(WorkerDayShift::getUserId));
-        Map<String, WorkerTime> result = new HashMap<>();
-        for (String userId : new HashSet<>(userIds)) {
-            result.put(userId, spans(versions.getOrDefault(userId, List.of()), offs.getOrDefault(userId, List.of()), holidayDays,
-                ownDays(days.getOrDefault(userId, List.of())), zone, from.toInstant(), to.toInstant()));
-        }
-        return result;
+        Map<String, Map<LocalDate, String>> own = new HashMap<>();
+        days.forEach((userId, rows) -> own.put(userId, ownDays(rows)));
+        return new TimeInputs(zone, versions, offs, holidayDays, own);
     }
 
     /**
@@ -665,7 +696,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
             return new WorkerTime(false, List.of());
         }
         LocalDate first = start.atZone(zone).toLocalDate().minusDays(1);
-        LocalDate last = end.atZone(zone).toLocalDate();
+        LocalDate last = end.minusNanos(1).atZone(zone).toLocalDate();
         boolean set = false;
         List<Span> spans = new ArrayList<>();
         for (LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {

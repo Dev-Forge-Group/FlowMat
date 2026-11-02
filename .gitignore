@@ -80,3 +80,11 @@ flowmat_frontend/.playwright-browsers/
 .application/
 
 bin/
+
+# ===============================
+# 재생성 가능한 빌드·테스트 산출물 (2026-11-01 사용자 결정: git에서 추적하지 않고, CI가 필요한 것은 CI artifact로 남긴다)
+# ===============================
+/flowmat_backend/build-*/
+/flowmat_frontend/*-results/
+/flowmat_frontend/coverage/
+*.tsbuildinfo

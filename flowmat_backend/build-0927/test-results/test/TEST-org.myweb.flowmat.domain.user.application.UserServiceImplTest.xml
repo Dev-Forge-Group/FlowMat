@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.myweb.flowmat.domain.user.application.UserServiceImplTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-27T09:04:25.064Z" hostname="DESKTOP-852AG4Q" time="0.008">
-  <properties/>
-  <testcase name="withdrawnUserCannotBeRestored()" classname="org.myweb.flowmat.domain.user.application.UserServiceImplTest" time="0.002"/>
-  <testcase name="adminLockRevokesRefreshTokensAndWritesAuditLog()" classname="org.myweb.flowmat.domain.user.application.UserServiceImplTest" time="0.003"/>
-  <testcase name="requestDormantRevokesRefreshTokensAndMarksDormant()" classname="org.myweb.flowmat.domain.user.application.UserServiceImplTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -47,6 +47,8 @@ class WorkOrderServiceImplTest {
     @Mock private StockAllocationService stockAllocationService;
     @Mock private org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand notifications;
     @Mock private org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery projectMemberQuery;
+    @Mock private WorkOrderOptionalItems optionalItems;
+    @Mock private WorkOrderOptionalItemCheck optionalItemCheck;
 
     @InjectMocks
     private WorkOrderServiceImpl workOrderService;
@@ -61,7 +63,7 @@ class WorkOrderServiceImplTest {
         simulation.setRunStatus("finished");
         simulation.setActualOutputQty(BigDecimal.TEN);
 
-        WorkOrderResponse response = WorkOrderServiceImpl.toResponse(order, List.of(simulation));
+        WorkOrderResponse response = WorkOrderServiceImpl.toResponse(order, List.of(simulation), List.of());
 
         assertThat(response.producedQuantity()).isEqualByComparingTo(BigDecimal.ZERO);
     }

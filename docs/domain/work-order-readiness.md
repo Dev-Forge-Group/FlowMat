@@ -46,6 +46,11 @@
 
 - **남은 수량** = 목표 수량 − 이 작업지시의 끝난 실행들의 `actual_output_qty` 합. 작업지시 화면의 생산량과 같은 기준이다. 끝난 실행을 보정하면 바로 반영된다.
 - **필요량** = 남은 수량으로 계산한 BOM 소요량(`BomService.requirementsForRun`) − 이 작업지시의 **끝나지 않은 실행(pending·running)이 이미 기록한 투입**. 0보다 작아지지 않는다. 투입은 계획 행과 취소를 빼고 자재 단위로 바꿔 센다(`OpenRunInputs`). 그 재고는 이미 줄었으니 두 번 세지 않는다. 반올림은 계약서 §5와 같다(4자리, HALF_UP).
+- **선택 자재(2026-11-02, [ADR-033](../architecture/adr/ADR-033-bom-optional-materials.md) 결정 6):** 필요량과 자재 표에는 작업지시가 고른 선택 자재가 들어가고, 고르지 않은 것은 들어가지 않는다.
+- **대체 자재(2026-11-02, [ADR-032](../architecture/adr/ADR-032-bom-substitute-materials.md) 결정 6·7):**
+  - 끝나지 않은 실행이 투입한 대체 자재도 주 자재 몫으로 필요량에서 뺀다.
+  - 주 자재가 모자라도, 승인된 대체 자재의 가용량(같은 재고 조건, 주 자재로 환산)이 모자람을 덮으면 `materials`는 `warn`이다("Approved substitutes cover FLOUR (need 4 kg, available 2) with RYE 10 kg; put them in instead.").
+  - 못 덮으면 `fail`이고, 메시지에 대체 자재 재고를 함께 적는다. 자재 표의 부족은 주 자재 기준 그대로다.
 - **가용량** = 품목의 재고 행마다 `quantity − reserved_quantity`를 더한 값. 다음 행은 뺀다.
   - 격리(`quarantined`)된 재고 행
   - 종료(`closed`)된 LOT의 행

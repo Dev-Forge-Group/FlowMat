@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2ej(2026-10-17, 커밋 전).** 같은 날 사용자 요청("다음작업 시작")에 따라 리드가 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-009](ADR-009-connection-loss-rate.md)가 "결정하지 않은 것"으로 넘긴 지연(`delayTimeSec`) 적용을 정한다. 흐름률(`flowRate`)과 노드 자동 실행기는 이 ADR 밖이다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2ej(2026-10-17, 2026-10-18 `9500678`에서 커밋).** 같은 날 사용자 요청("다음작업 시작")에 따라 리드가 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-009](ADR-009-connection-loss-rate.md)가 "결정하지 않은 것"으로 넘긴 지연(`delayTimeSec`) 적용을 정한다. 흐름률(`flowRate`)과 노드 자동 실행기는 이 ADR 밖이다.
 
 근거: [ADR-009](ADR-009-connection-loss-rate.md) "결정하지 않은 것", [노드 실행 정책](../../domain/flow-run-execution-policy.md) EP4·EP5(재시도 대기는 `scheduledAt`으로 막음), [연결 계약](../../domain/process-port-connection-contract.md) PC-14·GR-17·GR-25·GR-33, [현재 기능](../../status/CURRENT_CAPABILITIES.md) FM-FLOW-002("지연·흐름률 미적용"), [ADR-003](ADR-003-resource-port-contract.md) 결정 5.
 

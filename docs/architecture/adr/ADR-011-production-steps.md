@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 구현 전.** 같은 날 사용자 요청("Production steps ADR")으로 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2el(2026-10-17, V91, 2026-10-18 `9500678`에서 커밋).** 같은 날 사용자 요청("Production steps ADR")으로 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다.
 
 근거: [실행 모델](../execution-model.md) §5·§6·§8, [Flow Run](../../domain/flow-run.md), [연결 계약](../../domain/process-port-connection-contract.md) GR-01–GR-52, [작업 지침](../../domain/work-instruction.md), [검사 기준](../../domain/inspection-standard.md), [ADR-002](ADR-002-module-dependency.md)(모듈 경계), [ADR-003](ADR-003-resource-port-contract.md).
 

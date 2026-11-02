@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 구현 전.** 같은 날 사용자 요청("Join decision draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-006](ADR-006-operation-types.md) 결정 9가 별도 결정으로 넘긴 기준(기다릴 갈래, 중첩 분기, 건너뛰거나 실패한 갈래, 재시도 중복 도착, 합친 입력 모양)을 아래 결정으로 정한다. 승인과 구현은 별개다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2ef(2026-10-17, V88, 2026-10-18 `9500678`에서 커밋).** 같은 날 사용자 요청("Join decision draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-006](ADR-006-operation-types.md) 결정 9가 별도 결정으로 넘긴 기준(기다릴 갈래, 중첩 분기, 건너뛰거나 실패한 갈래, 재시도 중복 도착, 합친 입력 모양)을 아래 결정으로 정한다. 승인과 구현은 별개다.
 
 근거: [ADR-006](ADR-006-operation-types.md)(게이트웨이 노드, Exclusive 구현 2eb), [연결 계약](../../domain/process-port-connection-contract.md) GR-01–GR-20, [노드 실행 정책](../../domain/flow-run-execution-policy.md)(재시도·시간 제한), [벤치마크](../../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) FM-PLAN-001(JOIN). 참고한 개념은 Conductor의 JOIN, BPMN의 병렬 합류·포함 합류다. 코드는 가져오지 않는다.
 

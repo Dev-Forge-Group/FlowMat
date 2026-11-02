@@ -57,6 +57,7 @@ public class MaterialRequirementService {
     private final BomStructureQuery bomStructure;
     private final StockAllocationService stockAllocationService;
     private final PurchaseSupplyQuery purchaseSupply;
+    private final WorkOrderOptionalItems optionalItems;
 
     public MaterialRequirementResponse summary(String projectId) {
         projectAccessService.requireProjectReadAccess(projectId);
@@ -87,6 +88,7 @@ public class MaterialRequirementService {
         Map<String, List<MaterialRequirementResponse.Need>> needs = new HashMap<>();
         List<String> problems = new ArrayList<>();
         int counted = 0;
+        Map<String, List<String>> picks = optionalItems.of(open.stream().map(WorkOrder::getWorkOrderId).toList());
         for (WorkOrder order : open) {
             BigDecimal remaining = order.getTargetQuantity().subtract(produced.getOrDefault(order.getWorkOrderId(), BigDecimal.ZERO));
             if (remaining.signum() <= 0) {
@@ -96,7 +98,8 @@ public class MaterialRequirementService {
             try {
                 // Phantom lines go through the revision of the order's planned day (multi-level-bom.md P3).
                 requirement = bomService.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining,
-                    order.getPlannedStartAt() == null ? null : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant()));
+                    order.getPlannedStartAt() == null ? null : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant()),
+                    picks.getOrDefault(order.getWorkOrderId(), List.of()));
             } catch (BusinessException exception) {
                 problems.add(order.getWorkOrderTitle() + ": " + exception.getMessage());
                 continue;
@@ -104,7 +107,8 @@ public class MaterialRequirementService {
             counted++;
             Map<String, BigDecimal> used = alreadyUsed.getOrDefault(order.getWorkOrderId(), Map.of());
             for (BomRequirementResponse.Line line : requirement.lines()) {
-                BigDecimal need = line.requiredItemQuantity().subtract(used.getOrDefault(line.childItemId(), BigDecimal.ZERO)).max(BigDecimal.ZERO);
+                // A substitute an open run put in counts as its main material (ADR-032 decision 6).
+                BigDecimal need = line.requiredItemQuantity().subtract(line.covered(used)).max(BigDecimal.ZERO);
                 required.merge(line.childItemId(), need, BigDecimal::add);
                 units.putIfAbsent(line.childItemId(), line.itemUnit());
                 needs.computeIfAbsent(line.childItemId(), id -> new ArrayList<>())

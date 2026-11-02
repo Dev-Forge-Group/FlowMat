@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.myweb.flowmat.domain.production.application.ProductionFlowRunAdapterTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-27T09:04:21.488Z" hostname="DESKTOP-852AG4Q" time="0.001">
-  <properties/>
-  <testcase name="historicalRunWithUnsupportedTypeCanStillFinishWithoutCreatingAFlowRun()" classname="org.myweb.flowmat.domain.production.application.ProductionFlowRunAdapterTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

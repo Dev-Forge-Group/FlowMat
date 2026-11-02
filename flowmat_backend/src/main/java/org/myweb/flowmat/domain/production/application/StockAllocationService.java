@@ -66,6 +66,7 @@ public class StockAllocationService {
     private final InventoryCommandService inventoryCommandService;
     private final ProjectAccessService projectAccessService;
     private final IdGenerator idGenerator;
+    private final WorkOrderOptionalItems optionalItems;
 
     @Transactional(readOnly = true)
     public StockAllocationResponse list(String workOrderId) {
@@ -84,7 +85,8 @@ public class StockAllocationService {
                 + order.getWorkOrderStatus() + "; allocate for an approved or started order.");
         }
         lockAllocations(order);
-        Map<String, BigDecimal> needs = needs(order, request);
+        Map<String, List<BomRequirementResponse.Substitute>> substitutes = new HashMap<>();
+        Map<String, BigDecimal> needs = needs(order, request, substitutes);
         String actor = projectAccessService.requireCurrentUserId();
         Map<String, BigDecimal> before = new HashMap<>();
         allocationRepository.findAllByWorkOrderIdAndStatusOrderByCreatedAtAscAllocationIdAsc(order.getWorkOrderId(), OPEN)
@@ -96,6 +98,13 @@ public class StockAllocationService {
                 .filter(found -> projectId.equals(found.projectId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "An item to allocate was not found in this project."));
             BigDecimal already = before.getOrDefault(item.itemId(), BigDecimal.ZERO);
+            // A substitute already allocated to the order counts as this material (ADR-032 decision 6).
+            for (BomRequirementResponse.Substitute substitute : substitutes.getOrDefault(item.itemId(), List.of())) {
+                BigDecimal held = before.get(substitute.childItemId());
+                if (held != null && substitute.mainPerUnit() != null) {
+                    already = already.add(scale(held.multiply(substitute.mainPerUnit())));
+                }
+            }
             BigDecimal left = need.getValue().subtract(already);
             BigDecimal now = BigDecimal.ZERO;
             if (left.signum() > 0) {
@@ -278,8 +287,12 @@ public class StockAllocationService {
         }
     }
 
-    /** Explicit lines, or the order's BOM for what is still to make less what its unfinished runs already took. */
-    private Map<String, BigDecimal> needs(WorkOrder order, StockAllocationRequest request) {
+    /**
+     * Explicit lines, or the order's BOM for what is still to make less what its unfinished runs already took, a substitute
+     * as its main material (ADR-032 decision 6). {@code substitutes} gets each BOM material's substitutes.
+     */
+    private Map<String, BigDecimal> needs(WorkOrder order, StockAllocationRequest request,
+                                          Map<String, List<BomRequirementResponse.Substitute>> substitutes) {
         Map<String, BigDecimal> needs = new LinkedHashMap<>();
         List<StockAllocationRequest.Line> lines = request == null || request.lines() == null ? List.of() : request.lines();
         if (!lines.isEmpty()) {
@@ -323,12 +336,15 @@ public class StockAllocationService {
         LocalDate phantomDay = order.getPlannedStartAt() == null ? null
             : projectCalendar.date(order.getProjectId(), order.getPlannedStartAt().toInstant());
         BomRequirementResponse requirement = bomService.requirementsForRun(order.getBomId(), order.getProjectId(), order.getTargetItemId(),
-            remaining, phantomDay);
+            remaining, phantomDay, optionalItems.of(order.getWorkOrderId()));
         Map<String, BigDecimal> used = openRunInputs.forOrder(order.getWorkOrderId());
         for (BomRequirementResponse.Line line : requirement.lines()) {
-            BigDecimal need = scale(line.requiredItemQuantity().subtract(used.getOrDefault(line.childItemId(), BigDecimal.ZERO)));
+            BigDecimal need = scale(line.requiredItemQuantity().subtract(line.covered(used)));
             if (need.signum() > 0) {
                 needs.merge(line.childItemId(), need, BigDecimal::add);
+            }
+            if (!line.substitutes().isEmpty()) {
+                substitutes.computeIfAbsent(line.childItemId(), id -> new ArrayList<>()).addAll(line.substitutes());
             }
         }
         return needs;

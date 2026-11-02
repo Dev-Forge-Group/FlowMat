@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.bom.application.publicapi;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -18,4 +19,21 @@ public interface BomStructureQuery {
 
     /** The items of a revision's lines in the order the BOM lists them; empty for an unknown revision. */
     List<String> lineItemIds(String bomId);
+
+    /**
+     * A revision's own substitutes (ADR-032 decision 8): substitute item → the main item it stands in for and how much of
+     * the main material, in the main item's unit, one unit of it stands for. Empty for an unknown revision or one without
+     * substitutes; a line whose quantity cannot be converted is left out.
+     */
+    Map<String, SubstituteShare> substituteShares(String bomId);
+
+    record SubstituteShare(String mainItemId, BigDecimal mainPerUnit) {
+    }
+
+    /**
+     * The items of a revision's optional material lines and of those inside the phantoms it goes through, by their
+     * approved revisions effective on {@code on}, a project calendar day; null looks at the revision's own lines only
+     * (ADR-033 decision 5). Empty for an unknown revision.
+     */
+    java.util.Set<String> optionalItemIds(String bomId, LocalDate on);
 }

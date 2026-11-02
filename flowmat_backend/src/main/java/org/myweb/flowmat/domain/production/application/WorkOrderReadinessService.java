@@ -74,6 +74,7 @@ public class WorkOrderReadinessService {
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
     private final org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps linkedSteps;
+    private final WorkOrderOptionalItems optionalItems;
 
     public WorkOrderReadinessResponse check(String workOrderId) {
         WorkOrder order = workOrderRepository.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)
@@ -359,7 +360,8 @@ public class WorkOrderReadinessService {
             // Phantoms expand as the order's run will freeze them: the planned day's revision (docs/domain/multi-level-bom.md P3).
             LocalDate phantomDay = order.getPlannedStartAt() == null ? null
                 : projectCalendar.date(order.getProjectId(), order.getPlannedStartAt().toInstant());
-            requirement = bomService.requirementsForRun(bom.bomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay);
+            requirement = bomService.requirementsForRun(bom.bomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay,
+                optionalItems.of(order.getWorkOrderId()));
         } catch (BusinessException exception) {
             checks.add(new Check("materials", FAIL, "Materials could not be calculated: " + exception.getMessage()));
             return List.of();
@@ -392,6 +394,7 @@ public class WorkOrderReadinessService {
 
         List<Material> materials = new ArrayList<>();
         List<String> shortages = new ArrayList<>();
+        List<String> covered = new ArrayList<>();
         // What this order's unfinished runs already put in has left stock, so it is not needed again.
         Map<String, BigDecimal> alreadyUsed = openRunInputs.forOrder(order.getWorkOrderId());
         for (BomRequirementResponse.Line line : requirement.lines()) {
@@ -400,14 +403,10 @@ public class WorkOrderReadinessService {
             BigDecimal available = BigDecimal.ZERO;
             Set<String> usableLots = new HashSet<>();
             for (StockView row : stock) {
-                if (!line.childItemId().equals(row.itemId()) || "quarantined".equals(row.inventoryStatus())) {
+                if (!line.childItemId().equals(row.itemId())) {
                     continue;
                 }
-                if (row.lotId() != null && ("closed".equals(lotStatus.get(row.lotId())) || expiredLots.contains(row.lotId()))) {
-                    continue;
-                }
-                BigDecimal free = zeroIfNull(row.quantity()).subtract(zeroIfNull(row.reservedQuantity()))
-                    .add(ownAllocated.getOrDefault(row.inventoryId(), BigDecimal.ZERO));
+                BigDecimal free = free(row, lotStatus, expiredLots, ownAllocated);
                 if (free.signum() > 0) {
                     available = available.add(free);
                     if (row.lotId() != null) {
@@ -420,19 +419,44 @@ public class WorkOrderReadinessService {
                     }
                 }
             }
-            BigDecimal required = line.requiredItemQuantity().subtract(alreadyUsed.getOrDefault(line.childItemId(), BigDecimal.ZERO))
-                .max(BigDecimal.ZERO);
+            // A substitute an unfinished run put in counts as this material (ADR-032 decision 6).
+            BigDecimal required = line.requiredItemQuantity().subtract(line.covered(alreadyUsed)).max(BigDecimal.ZERO);
             BigDecimal shortage = required.subtract(available).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
             String code = item != null ? item.itemCode() : line.childItemId();
             if (shortage.signum() > 0) {
-                shortages.add(code + " (need " + plain(required) + " " + line.itemUnit() + ", available " + plain(available) + ")");
+                String text = code + " (need " + plain(required) + " " + line.itemUnit() + ", available " + plain(available) + ")";
+                // Approved substitutes in usable stock, as this material, may cover it (ADR-032 decision 7).
+                BigDecimal cover = BigDecimal.ZERO;
+                List<String> inStock = new ArrayList<>();
+                for (BomRequirementResponse.Substitute substitute : line.substitutes()) {
+                    BigDecimal held = stock.stream().filter(row -> substitute.childItemId().equals(row.itemId()))
+                        .map(row -> free(row, lotStatus, expiredLots, ownAllocated)).filter(amount -> amount.signum() > 0)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    if (held.signum() > 0 && substitute.mainPerUnit() != null) {
+                        cover = cover.add(held.multiply(substitute.mainPerUnit()));
+                        inStock.add(itemCode(substitute.childItemId()) + " " + plain(held) + " " + substitute.itemUnit());
+                    }
+                }
+                String substitutes = String.join(", ", inStock);
+                if (!inStock.isEmpty() && cover.setScale(4, RoundingMode.HALF_UP).compareTo(shortage) >= 0) {
+                    covered.add(text + " with " + substitutes);
+                } else {
+                    shortages.add(text + (inStock.isEmpty() ? "" : "; substitutes in stock: " + substitutes));
+                }
             }
             materials.add(new Material(line.childItemId(), code, item != null ? item.itemName() : null, required,
                 line.itemUnit(), available, shortage, lotTracked, lotTracked ? usableLots.size() : 0));
         }
-        checks.add(shortages.isEmpty()
-            ? new Check("materials", OK, "Materials for " + plain(remaining) + " are in stock.")
-            : new Check("materials", FAIL, "Short of " + String.join(", ", shortages) + "."));
+        String substituted = covered.isEmpty() ? ""
+            : "Approved substitutes cover " + String.join("; ", covered) + "; put them in instead.";
+        if (!shortages.isEmpty()) {
+            checks.add(new Check("materials", FAIL, "Short of " + String.join(", ", shortages) + "."
+                + (substituted.isEmpty() ? "" : " " + substituted)));
+        } else if (!covered.isEmpty()) {
+            checks.add(new Check("materials", WARN, substituted));
+        } else {
+            checks.add(new Check("materials", OK, "Materials for " + plain(remaining) + " are in stock."));
+        }
         if (!expiringSoon.isEmpty()) {
             List<String> soon = new ArrayList<>(expiringSoon.values());
             String listed = String.join("; ", soon.subList(0, Math.min(3, soon.size())))
@@ -457,6 +481,20 @@ public class WorkOrderReadinessService {
             .filter(qty -> qty != null)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         return order.getTargetQuantity().subtract(produced);
+    }
+
+    /**
+     * What a stock row holds free for the order: nothing when it is quarantined or its LOT is closed or expired; what is
+     * allocated to the order itself counts as free (docs/domain/stock-allocation.md).
+     */
+    private static BigDecimal free(StockView row, Map<String, String> lotStatus, Set<String> expiredLots,
+                                   Map<String, BigDecimal> ownAllocated) {
+        if ("quarantined".equals(row.inventoryStatus())
+            || row.lotId() != null && ("closed".equals(lotStatus.get(row.lotId())) || expiredLots.contains(row.lotId()))) {
+            return BigDecimal.ZERO;
+        }
+        return zeroIfNull(row.quantity()).subtract(zeroIfNull(row.reservedQuantity()))
+            .add(ownAllocated.getOrDefault(row.inventoryId(), BigDecimal.ZERO));
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {

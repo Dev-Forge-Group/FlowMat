@@ -149,6 +149,47 @@ class BomLineImportIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + dough + "')].lineType").value(hasItem("material")));
     }
 
+    @Test
+    void aScrapColumnTakesPercentsOnMaterialLines() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String cake = item("BLI-CAKE-" + tag, "unit_ea");
+        String flour = item("BLI-SFLOUR-" + tag, "unit_kg");
+        String sugar = item("BLI-SUGAR-" + tag, "unit_kg");
+        String egg = item("BLI-EGG-" + tag, "unit_kg");
+        item("BLI-SHELL-" + tag, "unit_kg");
+        item("BLI-SALT-" + tag, "unit_kg");
+        String bomId = id(call(post("/boms"), json(Map.of("projectId", DEMO_PROJECT, "targetItemId", cake, "bomName", "Cake " + tag,
+            "baseQuantity", 1, "baseUnit", "ea"))), "bomId");
+
+        importLines(bomId, true, false,
+                row("itemCode", "BLI-SFLOUR-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "150"),
+                row("itemCode", "BLI-SUGAR-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "2.555"),
+                row("itemCode", "BLI-SHELL-" + tag, "quantity", "1", "unit", "kg", "lineType", "waste", "scrapPercent", "5"),
+                row("itemCode", "BLI-EGG-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "five%"),
+                row("itemCode", "BLI-SALT-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "-1"))
+            .andExpect(jsonPath("$.data.errors").value(5))
+            .andExpect(jsonPath("$.data.rows[0].message").value("Scrap must be from 0% to 100%"))
+            .andExpect(jsonPath("$.data.rows[1].message").value("Scrap takes at most 2 decimals (0.01%)"))
+            .andExpect(jsonPath("$.data.rows[2].message").value("Only a material line can have scrap"))
+            .andExpect(jsonPath("$.data.rows[3].message").value("Scrap is not a number: five%"))
+            .andExpect(jsonPath("$.data.rows[4].message").value("Scrap must be from 0% to 100%"));
+
+        importLines(bomId, false, false,
+                row("itemCode", "BLI-SFLOUR-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", " 5 % "),
+                row("itemCode", "BLI-SUGAR-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "2.25"),
+                row("itemCode", "BLI-SHELL-" + tag, "quantity", "1", "unit", "kg", "lineType", "waste", "scrapPercent", "0"),
+                row("itemCode", "BLI-EGG-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", ""))
+            .andExpect(jsonPath("$.data.applied").value(true));
+        call(get("/boms/" + bomId))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + flour + "')].scrapRate").value(hasItem(0.05)))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + sugar + "')].scrapRate").value(hasItem(0.0225)))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + egg + "')].scrapRate").value(hasItem(0.0)));
+        // 100% is the most a line may plan to lose, and the draft still submits with the file's scrap.
+        importLines(bomId, true, true, row("itemCode", "BLI-SFLOUR-" + tag, "quantity", "1", "unit", "kg", "scrapPercent", "100%"))
+            .andExpect(jsonPath("$.data.errors").value(0));
+        call(post("/boms/" + bomId + "/submit")).andExpect(status().isOk());
+    }
+
     // ---- helpers ----
 
     @SafeVarargs

@@ -29,6 +29,7 @@ public class WorkOrderEquipmentService {
     private final CatalogQuery catalogQuery;
     private final ProductionRunRepository productionRunRepository;
     private final ProjectAccessService projectAccessService;
+    private final WorkOrderOptionalItems optionalItems;
 
     @Transactional
     public WorkOrderResponse assign(String workOrderId, String equipmentId) {
@@ -52,6 +53,7 @@ public class WorkOrderEquipmentService {
         order.setUpdatedBy(projectAccessService.requireCurrentUserId());
         WorkOrder saved = workOrderRepository.save(order);
         return WorkOrderServiceImpl.toResponse(saved,
-            productionRunRepository.findAllByWorkOrderIdInAndDeletedYn(List.of(saved.getWorkOrderId()), NOT_DELETED));
+            productionRunRepository.findAllByWorkOrderIdInAndDeletedYn(List.of(saved.getWorkOrderId()), NOT_DELETED),
+            optionalItems.of(saved.getWorkOrderId()));
     }
 }

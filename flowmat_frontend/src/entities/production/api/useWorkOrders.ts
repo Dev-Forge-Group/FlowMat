@@ -18,6 +18,8 @@ export interface WorkOrderInput {
   bomId?: string
   /** Link to the written work instruction (http or https); left out on an update, it is cleared. */
   instructionUrl?: string
+  /** Optional BOM materials the order takes, by item (ADR-033); left out on an update, they stay as they are. */
+  optionalItemIds?: string[]
 }
 
 export type WorkOrderTransition = 'approve' | 'cancel' | 'complete'

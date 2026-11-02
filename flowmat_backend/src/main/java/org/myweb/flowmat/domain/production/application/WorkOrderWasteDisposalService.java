@@ -45,6 +45,7 @@ public class WorkOrderWasteDisposalService {
     private final CatalogDisposalCostQuery disposalCosts;
     private final ProjectCalendarQuery projectCalendar;
     private final ProjectAccessService access;
+    private final WorkOrderOptionalItems optionalItems;
 
     public WorkOrderWasteDisposalResponse estimate(String workOrderId) {
         WorkOrder order = workOrders.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)
@@ -67,7 +68,8 @@ public class WorkOrderWasteDisposalService {
             : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant());
         BomRequirementResponse requirement;
         try {
-            requirement = bomService.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining, phantomDay);
+            requirement = bomService.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining, phantomDay,
+                optionalItems.of(order.getWorkOrderId()));
         } catch (BusinessException exception) {
             return empty(order, remaining, "The BOM could not be used: " + exception.getMessage());
         }

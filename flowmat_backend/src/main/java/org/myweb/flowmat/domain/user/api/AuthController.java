@@ -61,6 +61,16 @@ public class AuthController {
     private static final Duration LOGIN_RATE_WINDOW = Duration.ofMinutes(10);
     private static final Duration EMAIL_CODE_RATE_WINDOW = Duration.ofHours(1);
     private static final Duration DORMANT_REQUEST_RATE_WINDOW = Duration.ofHours(1);
+    private static final int EMAIL_VERIFY_IP_LIMIT = 30;
+    private static final int EMAIL_VERIFY_EMAIL_LIMIT = 10;
+    private static final Duration EMAIL_VERIFY_RATE_WINDOW = Duration.ofMinutes(10);
+    private static final int ACCOUNT_RECOVERY_IP_LIMIT = 10;
+    private static final int ACCOUNT_RECOVERY_SUBJECT_LIMIT = 5;
+    private static final Duration ACCOUNT_RECOVERY_RATE_WINDOW = Duration.ofHours(1);
+    private static final int SIGNUP_IP_LIMIT = 20;
+    private static final Duration SIGNUP_RATE_WINDOW = Duration.ofHours(1);
+    private static final int GUEST_TOKEN_IP_LIMIT = 60;
+    private static final Duration GUEST_TOKEN_RATE_WINDOW = Duration.ofMinutes(10);
 
     private final AuthService authService;
     private final AuthRedisStore authRedisStore;
@@ -78,7 +88,9 @@ public class AuthController {
     }
 
     @PostMapping("/email/verify-code")
-    public ApiResponse<Void> verifyEmailCode(@Valid @RequestBody EmailCodeVerifyRequest request) {
+    public ApiResponse<Void> verifyEmailCode(HttpServletRequest httpRequest, @Valid @RequestBody EmailCodeVerifyRequest request) {
+        enforceRateLimit("email-verify-ip", clientIpKey(httpRequest), EMAIL_VERIFY_IP_LIMIT, EMAIL_VERIFY_RATE_WINDOW);
+        enforceRateLimit("email-verify-email", normalizeRateKey(request.userEmail()), EMAIL_VERIFY_EMAIL_LIMIT, EMAIL_VERIFY_RATE_WINDOW);
         authService.verifyEmailCode(request.userEmail(), request.code());
         return ApiResponse.ok(null);
     }
@@ -106,7 +118,8 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
-    public ApiResponse<Void> signup(@Valid @RequestBody UserSignupRequest request) {
+    public ApiResponse<Void> signup(HttpServletRequest httpRequest, @Valid @RequestBody UserSignupRequest request) {
+        enforceRateLimit("signup-ip", clientIpKey(httpRequest), SIGNUP_IP_LIMIT, SIGNUP_RATE_WINDOW);
         authService.signup(request);
         return ApiResponse.ok(null);
     }
@@ -136,6 +149,7 @@ public class AuthController {
 
     @PostMapping("/guest-token")
     public ApiResponse<UserTokenResponse> guestToken(HttpServletRequest request, HttpServletResponse response) {
+        enforceRateLimit("guest-token-ip", clientIpKey(request), GUEST_TOKEN_IP_LIMIT, GUEST_TOKEN_RATE_WINDOW);
         String guestSid = resolveOrCreateGuestSid(request);
         UserTokenResponse token = authService.issueGuestToken(guestSid, extractBearer(request.getHeader(HttpHeaders.AUTHORIZATION)));
         setGuestSidCookie(response, guestSid, isSecureRequest(request));
@@ -242,12 +256,16 @@ public class AuthController {
     }
 
     @PostMapping("/find-email")
-    public ApiResponse<String> findEmail(@Valid @RequestBody FindEmailRequest request) {
+    public ApiResponse<String> findEmail(HttpServletRequest httpRequest, @Valid @RequestBody FindEmailRequest request) {
+        enforceRateLimit("find-email-ip", clientIpKey(httpRequest), ACCOUNT_RECOVERY_IP_LIMIT, ACCOUNT_RECOVERY_RATE_WINDOW);
+        enforceRateLimit("find-email-tel", normalizeRateKey(request.userTel()), ACCOUNT_RECOVERY_SUBJECT_LIMIT, ACCOUNT_RECOVERY_RATE_WINDOW);
         return ApiResponse.ok(authService.findEmail(request));
     }
 
     @PostMapping("/reset-password/request")
-    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+    public ApiResponse<Void> requestPasswordReset(HttpServletRequest httpRequest, @Valid @RequestBody PasswordResetRequest request) {
+        enforceRateLimit("password-reset-ip", clientIpKey(httpRequest), ACCOUNT_RECOVERY_IP_LIMIT, ACCOUNT_RECOVERY_RATE_WINDOW);
+        enforceRateLimit("password-reset-email", normalizeRateKey(request.userEmail()), ACCOUNT_RECOVERY_SUBJECT_LIMIT, ACCOUNT_RECOVERY_RATE_WINDOW);
         authService.requestPasswordReset(request);
         return ApiResponse.ok(null);
     }
@@ -277,11 +295,12 @@ public class AuthController {
         return authorization.substring(7).trim();
     }
 
+    /**
+     * The client address as the servlet container resolved it. Behind a trusted proxy {@code server.forward-headers-strategy}
+     * lets Tomcat apply X-Forwarded-For; reading the header here let any caller name a fresh address per request and step
+     * around every per-IP limit.
+     */
     private String extractIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
         return request.getRemoteAddr();
     }
 

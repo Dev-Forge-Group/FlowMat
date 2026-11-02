@@ -81,7 +81,7 @@ test('real Split, transfer loss and Join preserve received quantities and show e
     expect(divided.map((step) => step.nodeId)).toEqual(['Measure', 'Divide', 'Bake', 'Cool'].map((name) => nodes[name]))
     expect(divided[2].inputSnapshot).toMatchObject({ quantity: 69.3, unit: 'kg' })
     expect(divided[3].inputSnapshot).toMatchObject({ quantity: 30, unit: 'kg' })
-    await expect(card(3, 'Bake')).toContainText('lost 0.7 kg')
+    await expect(card(3, 'Bake')).toContainText(/lost 0\.70* kg/)
 
     await complete(3, 'Bake', { quantity: 69.3, unit: 'kg', attrs: { branch: 'Bake' } })
     const gather = card(5, 'Gather')

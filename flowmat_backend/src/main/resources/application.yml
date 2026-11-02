@@ -51,6 +51,8 @@ jwt:
   refresh-token-expiry-seconds: ${JWT_REFRESH_EXPIRY:2592000}
 
 server:
+  # Tomcat applies X-Forwarded-For only from trusted (internal) proxies; the app never reads the header itself.
+  forward-headers-strategy: native
   servlet:
     context-path: /api
 
@@ -80,6 +82,9 @@ app:
     login-rate-limit:
       account-limit: ${AUTH_LOGIN_ACCOUNT_LIMIT:8}
       ip-limit: ${AUTH_LOGIN_IP_LIMIT:12}
+    # Off unless explicitly enabled (2026-11-01 user decision, ADR-030).
+    face-login:
+      enabled: ${APP_AUTH_FACE_LOGIN_ENABLED:false}
   frontend-url: ${FRONTEND_URL}
   oauth2:
     redirect-uri: ${APP_OAUTH2_REDIRECT_URI}
@@ -131,3 +136,19 @@ spring:
   flyway:
     init-sqls:
       - SET flowmat.demo_seed_enabled = 'true'
+
+---
+# Production: the actuator moves to its own management port (2026-11-01 user decision, ADR-029).
+# Keep that port off the public network (container network, firewall or proxy ACL);
+# MANAGEMENT_SERVER_ADDRESS binds it to one interface. The public port keeps only status probes.
+spring:
+  config:
+    activate:
+      on-profile: prod
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

@@ -24,6 +24,8 @@
 | M4 | 쓸 수 있는 양 = 활성 재고 행의 가용량(보유 − 예약) 합. 격리 행, 종료·만료 LOT 행 제외 | 재발주 목록·준비 점검과 같은 기준 |
 | M5 | 끝나지 않은 실행(pending·running)이 이미 기록한 투입(계획 행·취소 제외, 자재 단위로 환산)은 그 작업지시의 필요량에서 뺌(0 미만 없음) | 그 재고는 이미 줄었는데 남은 수량은 아직 그 몫을 세므로, 빼지 않으면 부족이 두 번 잡힘 |
 | M6 | 서비스에 트랜잭션을 두지 않음. 소요량 계산 실패는 `problems`로 보고 | 준비 점검과 같음 |
+| M10 | **대체 자재**(2026-11-02, [ADR-032](../architecture/adr/ADR-032-bom-substitute-materials.md)): 필요량은 주 자재로만 센다. 끝나지 않은 실행이 투입한 대체 자재는 주 자재 몫(주 자재 소요량 ÷ 대체 자재 소요량)으로 M5처럼 뺀다 | 계획은 주 자재, 대체는 사람이 고른다(결정 5·6) |
+| M11 | **선택 자재**(2026-11-02, [ADR-033](../architecture/adr/ADR-033-bom-optional-materials.md)): 각 작업지시의 필요량은 그 작업지시가 고른 선택 자재를 넣는다(팬텀 안 포함). 고르지 않은 선택 자재는 넣지 않는다. 하위 반제품 전개(작업지시 없음)는 선택 자재를 넣지 않는다 | 결정 6·7 |
 
 ## 화면
 
@@ -80,6 +82,7 @@ BOM 하나를 두고 "지금 재고로 제품을 얼마나 만들 수 있나"와
 | B3 | 내림. 제품 단위가 개수(`count`, 예 `ea`)면 정수로, 아니면 소수 넷째 자리까지 | 마지막 한 개의 일부는 만들 수 없음 |
 | B4 | 필요량이 반올림으로 0이 된 자재는 제한하지 않음(`buildable` null) | 0으로 나누지 않음 |
 | B5 | 열린 작업지시가 이미 쓸 몫은 빼지 않음 | 이 BOM만 놓고 본 답. 여러 작업지시의 합은 위 간이 MRP가 답함 |
+| B6 | 한 배치 필요량은 줄 스크랩률을 곱한 값이고, 대체 자재 줄과 선택 자재 줄은 세지 않는다(주 자재·필수 자재로 계획) | [ADR-031](../architecture/adr/ADR-031-bom-scrap-rate.md) 결정 4, [ADR-032](../architecture/adr/ADR-032-bom-substitute-materials.md) 결정 5, [ADR-033](../architecture/adr/ADR-033-bom-optional-materials.md) 결정 7. 2026-11-02 정정: 그 전에는 팬텀 줄이 있는 BOM만 스크랩을 반영했다 |
 
 화면: 재고 → BOMs 탭 목록에서 승인된 BOM 줄마다 **can make 6 ea**(0이면 빨강, 마우스를 올리면 먼저 떨어지는 자재, 계산 못 하면 "can't tell"과 이유). 초안이 아닌 BOM을 열면 소요량 계산 위에 **Can make now: 6 ea · (자재) runs out first**(0이면 빨강). **Use**를 누르면 그 양으로 소요량을 계산합니다. 소요량 표에 자재마다 `3 in stock`이 붙고, 모자라면 빨강으로 `· 7 short`. 재고가 움직이면 새로 고쳐집니다(`['inventories', projectId]` 아래 키). 품목 **Details**의 BOMs 줄에도 그 품목의 승인된 BOM이 만들 수 있는 양이 붙습니다(`· stock can make 6 ea now (MF-… runs out first)`, 0이면 빨강). 생산 → Work Orders의 작업지시 폼에서 BOM을 고르면 수량 아래에 "Stock can make 6 ea now (… runs out first)."가 나오고, 목표 수량이 그보다 크면 주황으로 "; the rest needs more material."이 붙습니다(초안·승인 대기 BOM도 같은 계산).
 

@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 구현 전.** 2026-10-11에 Proposed 초안으로 썼고(사용자 요청 "Proposed ADR 초안만 작성"), 사용자가 아래 결정으로 수용 기준을 닫았다. 승인과 구현은 별개다: 구현은 리드의 설비 효율(2ea) 다음에 Exclusive부터 한다. Join·Subflow·수량 분할은 이 ADR에서 승인하지 않은 후속 단계다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 1단계 Exclusive 로컬 구현 2eb(2026-10-17, `6c14fa6`에서 커밋).** 2026-10-11에 Proposed 초안으로 썼고(사용자 요청 "Proposed ADR 초안만 작성"), 사용자가 아래 결정으로 수용 기준을 닫았다. 승인과 구현은 별개다: 구현은 리드의 설비 효율(2ea) 다음에 Exclusive부터 한다. Join·Subflow·수량 분할은 이 ADR에서 승인하지 않은 후속 단계다.
 
 근거: [벤치마크](../../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) FM-PLAN-001(frePPLe operation의 fixed_time·time_per·routing·alternate·split, FlowMat 표현 ATOMIC·ROUTING·ALTERNATE·SPLIT·JOIN·SUBFLOW, 시간 정책 FIXED_TIME·TIME_PER_UNIT·FORMULA), [ADR-004](ADR-004-flow-run-execution-policy.md)가 참고한 Conductor의 흐름 제어 개념(분기·병렬·합류·하위 흐름). 코드는 가져오지 않는다.
 

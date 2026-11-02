@@ -34,7 +34,8 @@ public enum ErrorCode {
     TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "Refresh token reuse was detected."),
     FACE_NOT_REGISTERED(HttpStatus.BAD_REQUEST, "No face data is registered."),
     FACE_NOT_RECOGNIZED(HttpStatus.BAD_REQUEST, "Face could not be recognized."),
-    FACE_ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Face login is temporarily locked.");
+    FACE_ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Face login is temporarily locked."),
+    FACE_LOGIN_DISABLED(HttpStatus.NOT_FOUND, "Face login is not enabled.");
 
     private final HttpStatus status;
     private final String message;

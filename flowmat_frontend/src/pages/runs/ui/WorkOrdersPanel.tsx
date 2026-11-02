@@ -14,7 +14,7 @@ import { useBomBuildableQuery, useBomsQuery } from '../../../entities/bom/api/us
 import { useEffectiveBomQuery } from '../../../entities/bom/api/useBomEffectivity'
 import { useProjectTimeZone } from '../../../entities/project/api/useProjectTimeZone'
 import { projectDay } from '../model/workOrderBomModel'
-import { approvedRevision, zoneDay } from '../../inventory/model/bomModel'
+import { approvedRevision, optionalMaterials, zoneDay } from '../../inventory/model/bomModel'
 import { ItemScanInput } from '../../inventory/ui/ItemScanInput'
 import { pickableItems } from '../../inventory/model/itemStatusModel'
 import { WorkOrderReadiness } from './WorkOrderReadiness'
@@ -67,6 +67,8 @@ interface OrderForm {
   plannedEndAt: string
   instruction: string
   instructionUrl: string
+  /** Optional BOM materials the order takes, by item (ADR-033). */
+  optionalItemIds: string[]
 }
 
 const EMPTY_FORM: OrderForm = {
@@ -80,6 +82,7 @@ const EMPTY_FORM: OrderForm = {
   plannedEndAt: '',
   instruction: '',
   instructionUrl: '',
+  optionalItemIds: [],
 }
 
 /** "2026-10-01T09:00" (datetime-local, local time) <-> ISO instant for the API. */
@@ -126,6 +129,7 @@ export function WorkOrdersPanel({
 
   const orders = ordersQuery.data ?? []
   const itemLabel = useMemo(() => new Map(items.map((item) => [item.itemId, `${item.itemCode} · ${item.itemName}`])), [items])
+  const itemCode = useMemo(() => new Map(items.map((item) => [item.itemId, item.itemCode])), [items])
   const workflowLabel = useMemo(() => new Map(workflows.map((wf) => [wf.workflowId, wf.workflowName])), [workflows])
   const equipmentList = useEquipmentQuery(projectId).data
   const equipmentCode = useMemo(
@@ -144,6 +148,9 @@ export function WorkOrdersPanel({
   const timeZone = useProjectTimeZone(projectId).query.data?.timeZone
   const plannedDay = projectDay(form.plannedStartAt, timeZone)
   const effectiveBom = useEffectiveBomQuery(projectId, form.targetItemId, !form.bomId && hasApproved ? plannedDay : '')
+  // The revision the order will plan from: the chosen one, else the one effective on the planned start (ADR-033 decision 9).
+  const planningBom = chosenBom ?? (effectiveBom.data?.bomId ? bomById.get(effectiveBom.data.bomId) : undefined)
+  const optionalChoices = optionalMaterials(planningBom)
   // What usable stock could make with the chosen BOM, so a quantity beyond it shows before approving.
   const canMake = useBomBuildableQuery(projectId, form.bomId || null).data
 
@@ -224,6 +231,7 @@ export function WorkOrdersPanel({
       plannedEndAt: toLocalInput(order.plannedEndAt),
       instruction: order.instruction ?? '',
       instructionUrl: order.instructionUrl ?? '',
+      optionalItemIds: order.optionalItemIds ?? [],
     })
   }
 
@@ -242,6 +250,10 @@ export function WorkOrdersPanel({
         plannedEndAt: toIso(form.plannedEndAt),
         instruction: form.instruction.trim() || undefined,
         instructionUrl: form.instructionUrl.trim() || undefined,
+        // Only picks the planning revision offers; without a known revision the picks are left as they are.
+        optionalItemIds: planningBom
+          ? form.optionalItemIds.filter((itemId) => optionalChoices.some((choice) => choice.childItemId === itemId))
+          : undefined,
       })
       resetForm()
     } catch {
@@ -334,6 +346,8 @@ export function WorkOrdersPanel({
                       <div style={{ fontSize: 11, opacity: 0.7 }}>
                         {formatQty(order.targetQuantity)}
                         {order.bomId && ` · BOM ${bomById.get(order.bomId) ? `v${bomById.get(order.bomId)!.bomVersion}` : ''}`}
+                        {(order.optionalItemIds ?? []).length > 0
+                          && ` · with ${(order.optionalItemIds ?? []).map((id) => itemCode.get(id) ?? id).join(', ')}`}
                       </div>
                     </td>
                     <td style={{ ...cell, minWidth: 110 }}>
@@ -535,6 +549,26 @@ export function WorkOrdersPanel({
                 </span>
               )}
             </label>
+          )}
+          {optionalChoices.length > 0 && (
+            <fieldset aria-label="Optional materials" style={{ display: 'grid', gap: 4, border: 'none', padding: 0, margin: 0 }}>
+              <span>Optional materials</span>
+              {optionalChoices.map((choice) => (
+                <label key={choice.bomLineId} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.optionalItemIds.includes(choice.childItemId)}
+                    onChange={(e) => setForm((f) => ({
+                      ...f,
+                      optionalItemIds: e.target.checked
+                        ? [...f.optionalItemIds, choice.childItemId]
+                        : f.optionalItemIds.filter((itemId) => itemId !== choice.childItemId),
+                    }))}
+                  />
+                  Take {itemLabel.get(choice.childItemId) ?? choice.childItemId} ({formatQty(choice.quantity)} {choice.unit} a batch)
+                </label>
+              ))}
+            </fieldset>
           )}
           <label style={{ display: 'grid', gap: 4 }}>
             <span>Priority</span>

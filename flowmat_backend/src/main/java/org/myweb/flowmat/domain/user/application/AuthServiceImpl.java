@@ -265,7 +265,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logoutAll(String userId) {
-        authRedisStore.revokeAllRefreshTokens(userId);
+        authRedisStore.revokeAllRefreshTokensOrFail(userId);
     }
 
     @Override
@@ -323,6 +323,8 @@ public class AuthServiceImpl implements AuthService {
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "User not found."));
         user.setUserPwd(passwordEncoder.encode(request.newPassword().trim()));
         user.setPwdUpdatedAt(OffsetDateTime.now());
+        // Sessions opened with the old password end here; a failure rolls the new password back and keeps the link usable.
+        authRedisStore.revokeAllRefreshTokensOrFail(user.getUserId());
         authRedisStore.consumePasswordResetToken(request.token().trim());
     }
 

@@ -17,10 +17,17 @@ public record BomLineImportRequest(boolean dryRun, boolean replace, List<Row> ro
      * @param lineType material (blank), by_product or waste (docs/domain/bom-by-products.md)
      * @param phantom Y (yes, true, 1) for a phantom sub-assembly; blank, N (no, false, 0) for none
      *     (docs/domain/multi-level-bom.md P1)
+     * @param scrapPercent planned scrap as a percent of the quantity, as on screen: 5 or 5% is a rate of 0.05; blank for none
+     *     (ADR-031)
      */
-    public record Row(String itemCode, String quantity, String unit, String note, String lineType, String phantom) {
+    public record Row(String itemCode, String quantity, String unit, String note, String lineType, String phantom,
+                      String scrapPercent) {
         public Row(String itemCode, String quantity, String unit, String note, String lineType) {
-            this(itemCode, quantity, unit, note, lineType, null);
+            this(itemCode, quantity, unit, note, lineType, null, null);
+        }
+
+        public Row(String itemCode, String quantity, String unit, String note, String lineType, String phantom) {
+            this(itemCode, quantity, unit, note, lineType, phantom, null);
         }
     }
 }

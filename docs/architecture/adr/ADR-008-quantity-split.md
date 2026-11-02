@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 구현 전.** 같은 날 사용자 요청("Quantity split ADR draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-006](ADR-006-operation-types.md)과 [ADR-007](ADR-007-join-gateway.md)이 "결정하지 않은 것"으로 넘긴 수량 분할(SPLIT)과 갈래별 수량 배분을 아래 결정으로 정한다. 승인과 구현은 별개다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2eh(2026-10-17, V89, 2026-10-18 `9500678`에서 커밋).** 같은 날 사용자 요청("Quantity split ADR draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-006](ADR-006-operation-types.md)과 [ADR-007](ADR-007-join-gateway.md)이 "결정하지 않은 것"으로 넘긴 수량 분할(SPLIT)과 갈래별 수량 배분을 아래 결정으로 정한다. 승인과 구현은 별개다.
 
 근거: [ADR-006](ADR-006-operation-types.md)(게이트웨이 노드), [ADR-007](ADR-007-join-gateway.md)(Join, 합친 수량), [연결 계약](../../domain/process-port-connection-contract.md) GR-02–GR-04·GR-24, [ADR-005](ADR-005-port-measurement-and-validation.md)(포트 계측), [벤치마크](../../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) FM-PLAN-001(SPLIT, frePPLe split operation). 코드는 가져오지 않는다.
 

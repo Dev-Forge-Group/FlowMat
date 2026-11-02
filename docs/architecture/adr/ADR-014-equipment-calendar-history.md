@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-18, 사용자 결정 "Accept as recommended"). 로컬 구현 2es(2026-10-18, 커밋 전, V94).** 같은 날 사용자가 다음 기능으로 "설비 달력 이력"을 골랐고, 권장안 그대로 수용 기준 5개를 닫았다. [ADR-013](ADR-013-rota-history.md) "결정하지 않은 것"의 첫 항목이다.
+**Accepted (2026-10-18, 사용자 결정 "Accept as recommended"). 로컬 구현 2es(2026-10-18, V94, `9500678`에서 커밋).** 같은 날 사용자가 다음 기능으로 "설비 달력 이력"을 골랐고, 권장안 그대로 수용 기준 5개를 닫았다. [ADR-013](ADR-013-rota-history.md) "결정하지 않은 것"의 첫 항목이다.
 
 근거: [설비 달력](../../domain/equipment-schedule.md) S1–S6, D1–D7, H1–H4, [ADR-013](ADR-013-rota-history.md), [작업자 달력](../../domain/worker-calendar.md) WC55–WC60.
 

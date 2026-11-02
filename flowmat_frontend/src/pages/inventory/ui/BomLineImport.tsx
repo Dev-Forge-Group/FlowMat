@@ -8,7 +8,7 @@ const cell = { padding: '4px 6px' } as const
 
 /**
  * A draft's materials from a spreadsheet (docs/domain/item-import.md "BOM 자재"): item_code, quantity and unit columns, and
- * an optional type column (material, by_product or waste).
+ * optional type (material, by_product or waste), phantom and scrap_percent columns.
  * The file is checked with the approval rules first; saving happens only when no line is wrong.
  */
 export function BomLineImport({ projectId, bomId }: { projectId: string; bomId: string }) {

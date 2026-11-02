@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,6 +34,13 @@ public final class BomTree {
     /** A line the BOM consumes; the other line types are what a batch gives off (docs/domain/bom-by-products.md). */
     public static final String MATERIAL = "material";
     public static final Set<String> LINE_TYPES = Set.of(MATERIAL, "by_product", "waste");
+    /** The most a material line may plan to lose: 1 plans twice the net quantity (ADR-031 decision 2). */
+    public static final BigDecimal MAX_SCRAP_RATE = BigDecimal.ONE;
+    /** A substitute group's main line first: lowest priority, then sort order, then id (ADR-032 decision 1). */
+    public static final Comparator<BomLine> PREFERENCE = Comparator
+        .comparing((BomLine line) -> line.getPriority() == null ? 0 : line.getPriority())
+        .thenComparing(line -> line.getSortOrder() == null ? 0 : line.getSortOrder())
+        .thenComparing(BomLine::getBomLineId);
     private static final String NOT_DELETED = "N";
 
     private BomTree() {
@@ -87,8 +95,9 @@ public final class BomTree {
     }
 
     /**
-     * How much of a line's material one unit of the BOM's product takes: the line quantity in the material's unit ÷ the
-     * batch size in the product's unit, 12 decimals. The unit ids are the material's and the product's (null when unknown).
+     * How much of a line's material one unit of the BOM's product takes: the line quantity in the material's unit, with the
+     * line's planned scrap (ADR-031), ÷ the batch size in the product's unit, 12 decimals. The unit ids are the material's
+     * and the product's (null when unknown).
      * Throws a 400 when a quantity cannot be converted or the batch is not above zero.
      */
     public static BigDecimal perProductUnit(
@@ -103,12 +112,59 @@ public final class BomTree {
         if (quantity == null || batch == null || batch.signum() <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Base quantity must be greater than 0.");
         }
-        return quantity.divide(batch, 12, RoundingMode.HALF_UP);
+        BigDecimal planned = isMaterial(line.getLineType()) ? quantity.multiply(scrapFactor(line)) : quantity;
+        return planned.divide(batch, 12, RoundingMode.HALF_UP);
     }
 
     /** Lines written before line types were used have none; they are materials. */
     public static boolean isMaterial(String lineType) {
         return lineType == null || MATERIAL.equals(lineType);
+    }
+
+    /** 1 + the line's scrap rate: what the line plans to use for each unit that ends up in the product (ADR-031 decision 1). */
+    public static BigDecimal scrapFactor(BomLine line) {
+        BigDecimal rate = line.getScrapRate();
+        return rate == null || rate.signum() == 0 ? BigDecimal.ONE : BigDecimal.ONE.add(rate);
+    }
+
+    /**
+     * Why a line cannot have this scrap rate, or null when it can: from 0 to {@link #MAX_SCRAP_RATE} with at most 4 decimals,
+     * and only on a material line (ADR-031 decisions 2-3). Starts in lower case, for "Material X: ..." and a sentence alike.
+     */
+    public static String scrapRateProblem(BigDecimal rate, String lineType) {
+        if (rate == null || rate.signum() == 0) {
+            return null;
+        }
+        if (rate.signum() < 0 || rate.compareTo(MAX_SCRAP_RATE) > 0) {
+            return "a scrap rate must be from 0 to 1 (0% to 100%)";
+        }
+        if (rate.stripTrailingZeros().scale() > 4) {
+            return "a scrap rate takes at most 4 decimals (0.01%)";
+        }
+        if (!isMaterial(lineType)) {
+            return "only a material line can have a scrap rate";
+        }
+        return null;
+    }
+
+    /**
+     * Substitute line id → the main line it stands in for (ADR-032 decision 1). The lines of one revision that share a
+     * substitute group form the group, and {@link #PREFERENCE} puts its main line first. Main lines and lines outside a
+     * group are not keys. The lines may come from several revisions.
+     */
+    public static Map<String, BomLine> mainLines(Collection<BomLine> lines) {
+        Map<List<String>, List<BomLine>> groups = new HashMap<>();
+        for (BomLine line : lines) {
+            if (line.getSubstituteGroup() != null) {
+                groups.computeIfAbsent(List.of(line.getBomId(), line.getSubstituteGroup()), key -> new ArrayList<>()).add(line);
+            }
+        }
+        Map<String, BomLine> main = new HashMap<>();
+        for (List<BomLine> group : groups.values()) {
+            group.sort(PREFERENCE);
+            group.subList(1, group.size()).forEach(line -> main.put(line.getBomLineId(), group.get(0)));
+        }
+        return main;
     }
 
     /** A way from {@code from} down to {@code to} through approved BOMs, both ends included; null when there is none. */

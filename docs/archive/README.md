@@ -11,6 +11,7 @@
 | [2026-08-editor/](2026-08-editor/) | 8월 에디터 계획(프로젝트 테이블 개선 기획안, 구현 백로그, annotation·자유 캔버스 계획), 진행 기록([커넥터](2026-08-editor/connector-line-progress-2026-08-14.md), [8월 current-state 원본](2026-08-editor/editor-current-state-2026-08.md)), 교대 기록 [relay/](2026-08-editor/relay/BATON.md)(2026-08-18에 멈춤) | [editor/current-state](../editor/current-state.md), [architecture/decision-handoff](../architecture/decision-handoff.md) |
 | [2026-09-architecture/](2026-09-architecture/) | 2026-09-24 판 도메인 지도(`enterprise-domain-map`), 실행 모델(`execution-model`), 로드맵(`domain-roadmap`). 2026-10-02에 현행 판으로 대체 | [architecture/domain-map](../architecture/domain-map.md), [architecture/execution-model](../architecture/execution-model.md), [status/WORKBOARD](../status/WORKBOARD.md) |
 | [2026-09-handoff/](2026-09-handoff/) | 2026-09-23·24 작업 분할, 위임 지시서, 보고서 A–J, 인증 refresh 경합·V21 공지, 2026-09-24 코드 감사 | [status/CURRENT_CAPABILITIES](../status/CURRENT_CAPABILITIES.md), 열린 결정은 [status/WORKBOARD](../status/WORKBOARD.md) |
+| [2026-10-workboard/](2026-10-workboard/) | 2026-10-09~10-31 작업 현황판의 끝난 기록: §1 진행 중 항목 52개, 리드 기록의 구현 줄 64개, §2 다음 작업 표의 끝난 줄 228개. 2026-11-01 리드가 옮겼다(번호 `2hb` 등으로 찾는다) | [status/WORKBOARD](../status/WORKBOARD.md) |
 
 ## 읽을 때 주의
 

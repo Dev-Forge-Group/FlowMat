@@ -38,6 +38,13 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
         """)
     LotStockTotals lotStockTotals(@Param("lotId") String lotId);
 
+    /** Scalar ids select the rows currently held, even when their entities were loaded before another transaction. */
+    @Query("""
+        select i.inventoryId from Inventory i
+         where i.lotId = :lotId and i.deletedYn = 'N' and i.inventoryStatus = 'quarantined'
+        """)
+    List<String> findInventoryIdsToReleaseForLot(@Param("lotId") String lotId);
+
     @Query("""
         select i.inventoryId from Inventory i
          where i.lotId = :lotId and i.deletedYn = 'N'

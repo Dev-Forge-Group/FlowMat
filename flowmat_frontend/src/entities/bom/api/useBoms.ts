@@ -13,6 +13,7 @@ import type {
   BomWhereUsedDto,
   BomWhereUsedTreeDto,
   BuildableQuantityDto,
+  BomScrapPerformanceDto,
 } from '../../../shared/types/api'
 
 /** Mirrors BomCreateRequest. */
@@ -33,6 +34,12 @@ export interface BomLineInput {
   lineType?: BomLineType
   /** A phantom sub-assembly: used through its own BOM (docs/domain/multi-level-bom.md P1); material lines only. */
   phantom?: boolean
+  /** Planned scrap on top of the quantity, 0 to 1 (ADR-031); material lines only. */
+  scrapRate?: number
+  /** The material line this one stands in for; it goes last in that line's substitute group (ADR-032). */
+  substituteFor?: string
+  /** "Y": an optional material, planned only for a work order that picks it (ADR-033). */
+  optionalYn?: 'Y'
 }
 
 /** submit needs write access; approve / reject / retire need project owner access. */
@@ -99,6 +106,16 @@ export function useBomBuildableQuery(projectId: string, bomId: string | null) {
     queryFn: async () => unwrapApiResponse(await httpClient.get<ApiEnvelope<BuildableQuantityDto>>(`${path(bomId ?? '')}/buildable`)),
     enabled: Boolean(projectId && bomId),
     staleTime: 0,
+  })
+}
+
+/** What the revision's finished runs lost against its planned scrap (GET /boms/{id}/scrap-performance, ADR-034). */
+export function useBomScrapPerformanceQuery(projectId: string, bomId: string | null) {
+  return useQuery<BomScrapPerformanceDto>({
+    queryKey: ['inventories', projectId, 'bom-scrap-performance', bomId],
+    queryFn: async () =>
+      unwrapApiResponse(await httpClient.get<ApiEnvelope<BomScrapPerformanceDto>>(`${path(bomId ?? '')}/scrap-performance`)),
+    enabled: Boolean(projectId && bomId),
   })
 }
 

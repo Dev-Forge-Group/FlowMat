@@ -2,9 +2,20 @@ import { useState } from 'react'
 import { useBomRequirementsQuery } from '../../../entities/bom/api/useBoms'
 import { formatQty } from '../../../shared/lib/formatQty'
 import type { BomDto } from '../../../shared/types/api'
-import { compareBoms, costChange, type BomLineChange } from '../model/bomModel'
+import { compareBoms, costChange, scrapLabel, type BomLineChange, type BomLineSide } from '../model/bomModel'
 
 const cell = { padding: '4px 6px' } as const
+
+/**
+ * "2 kg", with "· 5% scrap" when the material plans scrap (ADR-031) and "· substitute for X" when it stands in for another
+ * (ADR-032); "-" when the revision has no such line.
+ */
+function sideText(side: BomLineSide | null, itemLabel: Map<string, string>): string {
+  if (!side) return '-'
+  const scrap = scrapLabel(side.scrapRate)
+  const substitute = side.substituteFor ? ` · substitute for ${itemLabel.get(side.substituteFor) ?? side.substituteFor}` : ''
+  return `${formatQty(side.quantity)} ${side.unit}${scrap ? ` · ${scrap}` : ''}${substitute}${side.optional ? ' · optional' : ''}`
+}
 const CHANGE_STYLE: Record<BomLineChange, { label: string; color?: string }> = {
   added: { label: 'added', color: '#047857' },
   removed: { label: 'removed', color: '#b91c1c' },
@@ -87,10 +98,10 @@ export function BomRevisionCompare({
                 <tr key={`${line.childItemId}-${line.before?.unit ?? ''}-${line.after?.unit ?? ''}`} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={cell}>{itemLabel.get(line.childItemId) ?? line.childItemId}</td>
                   <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {line.before ? `${formatQty(line.before.quantity)} ${line.before.unit}` : '-'}
+                    {sideText(line.before, itemLabel)}
                   </td>
                   <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {line.after ? `${formatQty(line.after.quantity)} ${line.after.unit}` : '-'}
+                    {sideText(line.after, itemLabel)}
                   </td>
                   <td style={{ ...cell, color: CHANGE_STYLE[line.change].color, fontWeight: 600 }}>{CHANGE_STYLE[line.change].label}</td>
                 </tr>

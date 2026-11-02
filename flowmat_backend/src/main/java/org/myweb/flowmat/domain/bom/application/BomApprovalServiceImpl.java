@@ -238,14 +238,20 @@ public class BomApprovalServiceImpl implements BomApprovalService {
             if (!seen.add(child.itemId())) {
                 problems.add("Material " + label + " appears more than once; combine the lines.");
             }
-            if (line.getSubstituteGroup() != null) {
-                problems.add("Material " + label + ": substitute groups are not supported yet.");
+            if (line.getSubstituteGroup() != null && !BomTree.isMaterial(line.getLineType())) {
+                problems.add("Material " + label + ": only a material line can be in a substitute group.");
+            } else if (line.getSubstituteGroup() != null && "Y".equals(line.getPhantomYn())) {
+                problems.add("Material " + label + ": a phantom cannot be in a substitute group.");
             }
-            if ("Y".equals(line.getOptionalYn())) {
-                problems.add("Material " + label + ": optional materials are not supported yet.");
+            // An optional material is a plain material a work order may pick (ADR-033 decision 1).
+            if ("Y".equals(line.getOptionalYn()) && !BomTree.isMaterial(line.getLineType())) {
+                problems.add("Material " + label + ": only a material line can be optional.");
+            } else if ("Y".equals(line.getOptionalYn()) && line.getSubstituteGroup() != null) {
+                problems.add("Material " + label + ": an optional material cannot be in a substitute group.");
             }
-            if (line.getScrapRate() != null && line.getScrapRate().signum() != 0) {
-                problems.add("Material " + label + ": scrap rates are not supported yet.");
+            String scrapProblem = BomTree.scrapRateProblem(line.getScrapRate(), line.getLineType());
+            if (scrapProblem != null) {
+                problems.add("Material " + label + ": " + scrapProblem + ".");
             }
             if (line.getQuantity() != null && line.getQuantity().signum() > 0) {
                 convertible(line.getQuantity(), line.getUnit(), child, "Material " + label, problems);
@@ -261,6 +267,23 @@ public class BomApprovalServiceImpl implements BomApprovalService {
                 }
             }
         }
+
+        // A substitute group has two lines or more, each with a priority of its own (ADR-032 decision 4).
+        Map<String, List<BomLine>> groups = lines.stream().filter(line -> line.getSubstituteGroup() != null)
+            .collect(Collectors.groupingBy(BomLine::getSubstituteGroup, java.util.LinkedHashMap::new, Collectors.toList()));
+        Function<BomLine, String> code = line -> items.containsKey(line.getChildItemId())
+            ? items.get(line.getChildItemId()).itemCode() : line.getChildItemId();
+        groups.values().forEach(group -> {
+            List<BomLine> ordered = group.stream().sorted(BomTree.PREFERENCE).toList();
+            String main = code.apply(ordered.get(0));
+            if (ordered.size() < 2) {
+                problems.add("Material " + main + " is alone in its substitute group; add a substitute or take it out of the group.");
+            }
+            Set<Integer> priorities = new HashSet<>();
+            ordered.stream().filter(line -> !priorities.add(line.getPriority() == null ? 0 : line.getPriority()))
+                .forEach(line -> problems.add("Substitutes of " + main + ": " + code.apply(line)
+                    + " has the same priority as another material of the group; give each its own."));
+        });
 
         // Multi-level (docs/domain/multi-level-bom.md): a material may have its own approved BOM, but no BOM may contain its
         // own item through its materials' BOMs, and the tree may be at most MAX_LEVELS deep. Every approved revision counts,

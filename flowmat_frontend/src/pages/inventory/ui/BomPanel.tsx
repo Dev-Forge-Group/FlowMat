@@ -12,7 +12,10 @@ import {
 import type { BomDto, BomLineType, BuildableQuantityDto, ItemDto, UnitDto } from '../../../shared/types/api'
 import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
-import { BOM_ACTION_LABELS, bomActions, groupByTarget, isEditable, overlappingApproved, periodLabel, replacementEndDay } from '../model/bomModel'
+import {
+  BOM_ACTION_LABELS, bomActions, groupByTarget, isEditable, overlappingApproved, periodLabel, replacementEndDay, scrapLabel,
+  scrapRateFromPercent, substituteLabel, substituteTargets,
+} from '../model/bomModel'
 import { shortBy, usableByMaterial } from '../model/buildableModel'
 import { BomRevisionCompare } from './BomRevisionCompare'
 import { BomLineImport } from './BomLineImport'
@@ -21,6 +24,7 @@ import { BomPeriodsPanel } from './BomPeriodsPanel'
 import { BomWhereUsed } from './BomWhereUsed'
 import { BomCostRollup } from './BomCostRollup'
 import { BomExplosion } from './BomExplosion'
+import { BomScrapPerformance } from './BomScrapPerformance'
 import { hasSubAssemblies, subAssemblyIds } from '../model/bomExplosionModel'
 import { LINE_TYPE_OPTIONS, lineSummary, lineTypeTag } from '../model/bomLineTypeModel'
 import { ItemScanInput } from './ItemScanInput'
@@ -278,10 +282,17 @@ function BomDetail({
   const [endEarlier, setEndEarlier] = useState(false)
   const editable = isEditable(bom)
   const [line, setLine] = useState({
-    childItemId: '', quantity: '', unit: unitCodes[0] ?? 'kg', lineType: 'material' as BomLineType, phantom: false,
+    childItemId: '', quantity: '', unit: unitCodes[0] ?? 'kg', lineType: 'material' as BomLineType, phantom: false, scrap: '',
+    substituteFor: '', optional: false,
   })
+  const [scrapError, setScrapError] = useState<string | null>(null)
   // Only a material with its own approved BOM can be a phantom (docs/domain/multi-level-bom.md P1).
   const canBePhantom = line.lineType === 'material' && subAssemblies.has(line.childItemId)
+  // A plain material may stand in for one already on the BOM (ADR-032 decision 3).
+  const targets = substituteTargets(bom.lines)
+  const canBeSubstitute = line.lineType === 'material' && !(canBePhantom && line.phantom) && targets.length > 0
+    && !line.optional
+  const label = (itemId: string) => itemLabel.get(itemId) ?? itemId
   const [productionQty, setProductionQty] = useState(String(bom.baseQuantity))
   const requirementsQuery = useBomRequirementsQuery(bom.bomStatus === 'draft' ? null : bom.bomId, Number(productionQty))
   const buildableQuery = useBomBuildableQuery(projectId, bom.bomStatus === 'draft' ? null : bom.bomId)
@@ -290,12 +301,18 @@ function BomDetail({
 
   async function handleAddLine(e: FormEvent) {
     e.preventDefault()
+    // Only a material plans scrap (ADR-031 decision 3).
+    const scrap = scrapRateFromPercent(line.lineType === 'material' ? line.scrap : '')
+    setScrapError(scrap.ok ? null : scrap.error)
+    if (!scrap.ok) return
     try {
       await add.mutateAsync({
         bomId: bom.bomId, childItemId: line.childItemId, quantity: Number(line.quantity), unit: line.unit, lineType: line.lineType,
-        phantom: canBePhantom && line.phantom ? true : undefined,
+        phantom: canBePhantom && line.phantom ? true : undefined, scrapRate: scrap.rate,
+        substituteFor: canBeSubstitute && line.substituteFor ? line.substituteFor : undefined,
+        optionalYn: line.lineType === 'material' && line.optional && !(canBeSubstitute && line.substituteFor) ? 'Y' : undefined,
       })
-      setLine((l) => ({ ...l, childItemId: '', quantity: '', phantom: false }))
+      setLine((l) => ({ ...l, childItemId: '', quantity: '', phantom: false, scrap: '', substituteFor: '', optional: false }))
     } catch {
       // Shown below.
     }
@@ -358,6 +375,9 @@ function BomDetail({
                 {subAssemblies.has(l.childItemId) && !l.phantom && <span className="inspector-hint"> · has its own BOM</span>}
                 {l.phantom && <span className="inspector-hint"> · phantom: its own BOM's materials are used</span>}
                 {lineTypeTag(l.lineType) && <span className="inspector-hint"> · {lineTypeTag(l.lineType)}</span>}
+                {scrapLabel(l.scrapRate) && <span className="inspector-hint"> · {scrapLabel(l.scrapRate)}</span>}
+                {l.substituteFor && <span className="inspector-hint"> · {substituteLabel(l, bom.lines, label)}</span>}
+                {l.optionalYn === 'Y' && <span className="inspector-hint"> · optional, per work order</span>}
               </td>
               <td style={{ ...cell, textAlign: 'right' }}>{formatQty(l.quantity)} {l.unit}</td>
               {editable && (
@@ -378,7 +398,7 @@ function BomDetail({
       </table>
 
       {editable && (
-        <form onSubmit={(e) => void handleAddLine(e)} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 64px auto', gap: 6, marginBottom: 12 }}>
+        <form onSubmit={(e) => void handleAddLine(e)} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 64px 76px auto', gap: 6, marginBottom: 12 }}>
           <ItemScanInput
             items={pickableItems(items).filter((item) => item.itemId !== bom.targetItemId)}
             style={{ gridColumn: '1 / -1', fontSize: 12 }}
@@ -417,6 +437,26 @@ function BomDetail({
               Phantom: use its own BOM's materials instead of stocking it
             </label>
           )}
+          {line.lineType === 'material' && !line.substituteFor && (
+            <label style={{ gridColumn: '1 / -1', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="checkbox" checked={line.optional} onChange={(e) => setLine((l) => ({ ...l, optional: e.target.checked }))} />
+              Optional: planned only for work orders that pick it
+            </label>
+          )}
+          {canBeSubstitute && (
+            <select
+              aria-label="Substitute for"
+              title="Approved in place of a material already on the BOM; the plan keeps using that material"
+              value={line.substituteFor}
+              onChange={(e) => setLine((l) => ({ ...l, substituteFor: e.target.value }))}
+              style={{ gridColumn: '1 / -1', fontSize: 12 }}
+            >
+              <option value="">Main material (not a substitute)</option>
+              {targets.map((target) => (
+                <option key={target.bomLineId} value={target.bomLineId}>Substitute for {label(target.childItemId)}</option>
+              ))}
+            </select>
+          )}
           <input
             type="number"
             min="0"
@@ -430,9 +470,24 @@ function BomDetail({
           <select aria-label="Material unit" value={line.unit} onChange={(e) => setLine((l) => ({ ...l, unit: e.target.value }))}>
             {unitCodes.map((code) => <option key={code} value={code}>{code}</option>)}
           </select>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="any"
+            placeholder="Scrap %"
+            aria-label="Scrap percent"
+            title={line.lineType === 'material'
+              ? 'Planned scrap on top of the quantity, 0 to 100%'
+              : 'Only a material line plans scrap'}
+            value={line.lineType === 'material' ? line.scrap : ''}
+            disabled={line.lineType !== 'material'}
+            onChange={(e) => setLine((l) => ({ ...l, scrap: e.target.value }))}
+          />
           <button type="submit" disabled={add.isPending}>Add</button>
         </form>
       )}
+      {editable && scrapError && <p role="alert" style={{ color: '#dc2626', fontSize: 12, margin: '0 0 8px' }}>{scrapError}</p>}
       {editable && <BomLineImport projectId={projectId} bomId={bom.bomId} />}
 
       {overlaps.length > 0 && (
@@ -515,6 +570,13 @@ function BomDetail({
                       <td style={cell}>
                         {itemLabel.get(r.childItemId) ?? r.childItemId}
                         {r.viaItemId && <span className="inspector-hint"> · via {itemLabel.get(r.viaItemId) ?? r.viaItemId}</span>}
+                        {scrapLabel(r.scrapRate) && <span className="inspector-hint"> · incl. {scrapLabel(r.scrapRate)}</span>}
+                        {(r.substitutes ?? []).map((s) => (
+                          <span key={s.bomLineId} className="inspector-hint" style={{ display: 'block' }}>
+                            or {label(s.childItemId)} {formatQty(s.requiredItemQuantity)} {s.itemUnit}
+                            {s.lineCost != null && ` (cost ${formatQty(s.lineCost)})`}
+                          </span>
+                        ))}
                       </td>
                       <td style={{ ...cell, textAlign: 'right' }}>
                         <strong>{formatQty(r.requiredItemQuantity)} {r.itemUnit}</strong>
@@ -549,6 +611,24 @@ function BomDetail({
               </tbody>
             </table>
           )}
+          {(requirementsQuery.data?.optionals ?? []).length > 0 && (
+            <table aria-label="Optional, per work order" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
+              <tbody>
+                {(requirementsQuery.data?.optionals ?? []).map((optional) => (
+                  <tr key={optional.bomLineId} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={cell}>
+                      {label(optional.childItemId)}
+                      <span className="inspector-hint"> · optional, only for work orders that pick it</span>
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right' }}>
+                      + {formatQty(optional.requiredItemQuantity)} {optional.itemUnit}
+                      {optional.lineCost != null && ` (cost ${formatQty(optional.lineCost)})`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           {(requirementsQuery.data?.outputs ?? []).length > 0 && (
             <table aria-label="Comes out of the batch" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
               <tbody>
@@ -566,6 +646,9 @@ function BomDetail({
           )}
           {bom.bomStatus === 'approved' && hasSubAssemblies(bom, subAssemblies) && Number(productionQty) > 0 && (
             <BomExplosion bomId={bom.bomId} quantity={Number(productionQty)} />
+          )}
+          {(bom.bomStatus === 'approved' || bom.bomStatus === 'retired') && (
+            <BomScrapPerformance projectId={projectId} bomId={bom.bomId} itemLabel={itemLabel} />
           )}
         </div>
       )}

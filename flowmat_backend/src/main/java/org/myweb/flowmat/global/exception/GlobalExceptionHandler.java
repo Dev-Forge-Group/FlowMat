@@ -5,11 +5,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -62,6 +70,44 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(ErrorCode.CONFLICT.getStatus())
             .body(ApiResponse.error("This conflicts with a change that was just saved. Reload and try again."));
+    }
+
+    /** Broken JSON or a body that does not fit the request type. The cause stays out of the answer. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException e) {
+        return ResponseEntity
+            .status(ErrorCode.BAD_REQUEST.getStatus())
+            .body(ApiResponse.error("The request body could not be read."));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return ResponseEntity
+            .status(ErrorCode.BAD_REQUEST.getStatus())
+            .body(ApiResponse.error(e.getName() + " has an invalid value."));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED);
+        if (e.getSupportedHttpMethods() != null) {
+            response.allow(e.getSupportedHttpMethods().toArray(HttpMethod[]::new));
+        }
+        return response.body(ApiResponse.error("Method " + e.getMethod() + " is not supported here."));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity
+            .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+            .body(ApiResponse.error("This content type is not supported here."));
+    }
+
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(Exception e) {
+        return ResponseEntity
+            .status(ErrorCode.NOT_FOUND.getStatus())
+            .body(ApiResponse.error(ErrorCode.NOT_FOUND.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

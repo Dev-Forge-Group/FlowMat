@@ -81,13 +81,14 @@
 { "dryRun": true, "replace": false, "rows": [{ "itemCode": "FLR-1", "quantity": "5000", "unit": "g" }] }
 ```
 
-- 파일 열: `item_code`(또는 `code`, `material`), `quantity`(`qty`), `unit`(`unit_code`), 선택 `note`, 선택 `type`(`line_type`, `kind`: 비우면 material, by_product, waste — [부산물](bom-by-products.md), 2026-10-03), 선택 `phantom`(`is_phantom`: Y/N, [다단계 BOM](multi-level-bom.md) P1, 2026-10-10 2cr). 세 필수 열이 없으면 화면에서 바로 알려 줍니다.
+- 파일 열: `item_code`(또는 `code`, `material`), `quantity`(`qty`), `unit`(`unit_code`), 선택 `note`, 선택 `type`(`line_type`, `kind`: 비우면 material, by_product, waste — [부산물](bom-by-products.md), 2026-10-03), 선택 `phantom`(`is_phantom`: Y/N, [다단계 BOM](multi-level-bom.md) P1, 2026-10-10 2cr), 선택 `scrap_percent`(`scrap`, `scrap_pct`, `scrap %`: 계획 스크랩 퍼센트, `5`나 `5%`, 0–100·소수 둘째 자리까지·자재 줄만, [ADR-031](../architecture/adr/ADR-031-bom-scrap-rate.md) 결정 9, 2026-11-02). 세 필수 열이 없으면 화면에서 바로 알려 줍니다. `scrap_rate`·`scrap_factor` 열은 0–1 비율로 읽힐 수 있어 파일째 거절합니다. 대체 자재는 화면에서만 넣습니다. `substitute…`·`alternate…`·`alternative…` 열이 있으면 조용히 버리지 않고 파일째 거절합니다. 선택 자재도 화면에서만 표시하며 `optional`·`is_optional`·`optional_yn` 열은 같은 식으로 거절합니다([ADR-033](../architecture/adr/ADR-033-bom-optional-materials.md) 결정 10, 2026-11-02)([ADR-032](../architecture/adr/ADR-032-bom-substitute-materials.md) 결정 3, 2026-11-02).
 - 수량은 소수점에 `.`을 쓰며, 천 단위 쉼표는 세 자리마다 쓸 수 있습니다(예: `1,234.5`). 쉼표가 든 CSV 셀은 따옴표로 감싸야 합니다. `1,2` 같은 잘못된 쉼표 표기는 줄 오류입니다.
 - `replace=false`면 지금 자재에 더하고, `true`면 지금 자재를 모두 지우고 파일 내용으로 바꿉니다.
 - 줄마다 **승인 검증 중 한 줄에 관한 규칙**을 미리 봅니다(계약서 §5): 품목 코드가 있고 하나뿐, 수량은 소수점 네 자리 반올림 후 0보다 크고 `numeric(14,4)` 범위 안에 있음, 단위가 자재 단위로 바뀜, 이 BOM이 만드는 품목이 아님, 파일 안이나 남는 자재와 겹치지 않음, 그 자재에 승인된 BOM이 없음(1차는 단일 단계).
 - 한 줄이라도 문제가 있거나 dry run이면 저장하지 않습니다. 저장은 평소 자재 추가·삭제를 한 트랜잭션에서 부릅니다. 한 번에 500줄까지.
 - 화면: BOMs 탭 → 초안 BOM 상세 → **Materials from CSV**. 파일을 고르면 검사 결과("N to add, N to remove, N with problems")와 문제 줄을 보여 주고, 문제가 없으면 **Add N materials**(또는 **Replace materials**)로 저장합니다. "Replace current materials"를 바꾸면 다시 검사합니다.
 - 검증: `BomLineImportIntegrationTest` 1건 — 6줄(좋은 줄, 이미 있는 자재, 제품 자신, 승인 BOM이 있는 반제품, 없는 코드, 수량 0·단위 안 맞음) → 오류 5, 저장 안 됨. 좋은 줄만 → 추가(`g` 그대로). replace dry run → removed 2, 저장 안 됨. replace 저장 → 2줄. 가져온 초안이 승인까지 통과. 승인된 BOM·다른 BOM 409. `bomModel.test.ts`의 `bomLinesFromCsv` 2건.
+- 스크랩 열(2026-11-02, ADR-031 결정 9): `BomLineImportIntegrationTest.aScrapColumnTakesPercentsOnMaterialLines` — 150·-1(범위), 2.555(자리), 폐기물 줄 5(자재 줄만), `five%`(숫자 아님) → 오류 5. ` 5 % `·`2.25`·폐기물 0·빈 칸 저장 → 0.05·0.0225·0. 100%는 통과하고 초안이 제출된다. `bomModel.test.ts`가 `Scrap %` 열 읽기, 별칭 중복, `Scrap Rate` 열 거절을 보고, 모의 e2e `bom-scrap-rate.spec.ts`가 `scrap_rate` 파일 거절(요청 없음)과 `scrapPercent: '5%'` 전송을 본다.
 
 ## 검증
 

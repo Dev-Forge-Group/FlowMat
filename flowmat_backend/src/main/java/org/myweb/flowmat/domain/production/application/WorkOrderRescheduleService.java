@@ -29,6 +29,7 @@ public class WorkOrderRescheduleService {
     private final ProjectAccessService access;
     private final IdGenerator ids;
     private final WorkOrderBomSelection bomSelection;
+    private final WorkOrderOptionalItems optionalItems;
 
     @Transactional(readOnly = true)
     public List<WorkOrderRescheduleResponse> history(String workOrderId) {
@@ -94,7 +95,8 @@ public class WorkOrderRescheduleService {
 
     private WorkOrderRescheduleResult result(WorkOrder order, WorkOrderReschedule change) {
         return new WorkOrderRescheduleResult(WorkOrderServiceImpl.toResponse(order,
-            runs.findAllByWorkOrderIdInAndDeletedYn(List.of(order.getWorkOrderId()), "N")), WorkOrderRescheduleResponse.from(change));
+            runs.findAllByWorkOrderIdInAndDeletedYn(List.of(order.getWorkOrderId()), "N"), optionalItems.of(order.getWorkOrderId())),
+            WorkOrderRescheduleResponse.from(change));
     }
     private static OffsetDateTime stored(OffsetDateTime date) {
         if (date == null) return null;

@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 구현 전.** 같은 날 사용자 요청("Loss rate ADR draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-008](ADR-008-quantity-split.md)이 "결정하지 않은 것"으로 넘긴 손실률(`lossRate`) 적용을 정한다. 흐름률(`flowRate`)·지연(`delayTimeSec`)·개수 단위의 정수 처리는 이 ADR 밖이다.
+**Accepted (2026-10-17, 사용자 결정 "Accept as recommended"). 로컬 구현 2ei(2026-10-17, 2026-10-18 `9500678`에서 커밋).** 같은 날 사용자 요청("Loss rate ADR draft")으로 Proposed 초안을 썼고, 사용자가 권장안 그대로 수용 기준 8개를 닫았다. [ADR-008](ADR-008-quantity-split.md)이 "결정하지 않은 것"으로 넘긴 손실률(`lossRate`) 적용을 정한다. 흐름률(`flowRate`)·지연(`delayTimeSec`)·개수 단위의 정수 처리는 이 ADR 밖이다.
 
 근거: [ADR-008](ADR-008-quantity-split.md) 결정 7·12와 S4, [연결 계약](../../domain/process-port-connection-contract.md) PC-14·GR-03·GR-07·GR-08·GR-24·GR-31, [현재 기능](../../status/CURRENT_CAPABILITIES.md) FM-FLOW-002("지연·손실률 미적용"), [ADR-003](ADR-003-resource-port-contract.md) 결정 5(발행 snapshot은 실행 중 바뀌지 않음), [실행 모델](../execution-model.md) §6·§8.
 

@@ -72,8 +72,13 @@ public class BomWhereUsedTreeService {
         Map<String, BomHeader> approvedByBom = BomTree.approvedByItem(bomHeaderRepository, project, day)
             .values().stream()
             .collect(Collectors.toMap(BomHeader::getBomId, Function.identity()));
-        List<BomLine> lines = approvedByBom.isEmpty() ? List.of() : bomLineRepository.findAllByBomIdIn(approvedByBom.keySet()).stream()
-            .filter(line -> BomTree.isMaterial(line.getLineType()))
+        List<BomLine> bomLines = approvedByBom.isEmpty() ? List.of() : bomLineRepository.findAllByBomIdIn(approvedByBom.keySet());
+        // Quantities add up through main lines that every batch uses: not a substitute, which stands in for one, nor an
+        // optional material, which a work order may pick (ADR-032 decision 10, ADR-033 decision 7).
+        Map<String, BomLine> substitutes = BomTree.mainLines(bomLines);
+        List<BomLine> lines = bomLines.stream()
+            .filter(line -> BomTree.isMaterial(line.getLineType()) && !substitutes.containsKey(line.getBomLineId())
+                && !"Y".equals(line.getOptionalYn()))
             .toList();
         Set<String> itemIds = new HashSet<>();
         itemIds.add(start.itemId());

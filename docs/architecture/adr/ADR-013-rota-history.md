@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-18, 사용자 결정 "Accept as recommended"). 로컬 구현 2er(2026-10-18, 커밋 전, V93).** 같은 날 사용자가 다음 기능으로 "근무표 이력"을 골랐고, 권장안 그대로 수용 기준 6개를 닫았다.
+**Accepted (2026-10-18, 사용자 결정 "Accept as recommended"). 로컬 구현 2er(2026-10-18, V93, `9500678`에서 커밋).** 같은 날 사용자가 다음 기능으로 "근무표 이력"을 골랐고, 권장안 그대로 수용 기준 6개를 닫았다.
 
 근거: [작업자 달력](../../domain/worker-calendar.md) WC2, WC3, WC4, WC29–WC34, WC44–WC54, [설비 달력](../../domain/equipment-schedule.md), [ADR-002](ADR-002-module-dependency.md).
 

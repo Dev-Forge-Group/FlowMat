@@ -25,7 +25,6 @@ import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAttendancePayResponse;
-import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerLaborRateQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerLaborRates;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerPayQuery;
@@ -59,7 +58,7 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
     private final ProjectHolidayQuery holidays;
-    private final WorkerCalendarQuery calendar;
+    private final WorkerCalendarService calendar;
 
     /** Work days from {@code from} to {@code to} (project dates, as for attendance: 7 days to today by default, 62 at most). */
     @Transactional(readOnly = true)
@@ -241,7 +240,7 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
         }
         // Holidays and rest days from the first loaded day, as the regular minutes of a week need them (decisions 14, 18).
         Set<LocalDate> holidayDays = holidays.holidays(projectId, first.minusDays(6), last);
-        Set<LocalDate> restDays = restDays(projectId, userId, first.minusDays(6), last, rules, zone);
+        Set<LocalDate> restDays = restDays(projectId, userId, first.minusDays(6), last, rules);
         // Each loaded day's regular minutes, less its own overtime: weekly overtime counts only these (decision 14).
         Map<LocalDate, Integer> regular = new TreeMap<>();
         minutes.forEach((date, day) -> {
@@ -283,8 +282,7 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
      * The days from {@code first} to {@code last} without any of the worker's scheduled time (decision 16): their shifts, days off and
      * own days, as their calendar has them. Read only when some day's rule pays rest days like holidays; none without shifts.
      */
-    private Set<LocalDate> restDays(String projectId, String userId, LocalDate first, LocalDate last, LaborPremiumService.Rules rules,
-                                    ZoneId zone) {
+    private Set<LocalDate> restDays(String projectId, String userId, LocalDate first, LocalDate last, LaborPremiumService.Rules rules) {
         boolean asked = false;
         for (LocalDate date = first; !asked && !date.isAfter(last); date = date.plusDays(1)) {
             asked = rules.on(date).map(LaborPremiumRule::isRestDaysAsHolidays).orElse(false);
@@ -293,13 +291,10 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
         if (!asked) {
             return rest;
         }
-        WorkerTime time = calendar.workingTime(projectId, List.of(userId), first.atStartOfDay(zone).toOffsetDateTime(),
-            last.plusDays(1).atStartOfDay(zone).toOffsetDateTime()).get(userId);
-        if (time == null || !time.calendarSet()) {
-            return rest;
-        }
+        Map<LocalDate, WorkerTime> days = calendar.workingDays(projectId, userId, first, last);
         for (LocalDate date = first; !date.isAfter(last); date = date.plusDays(1)) {
-            if (time.secondsBetween(date.atStartOfDay(zone).toInstant(), date.plusDays(1).atStartOfDay(zone).toInstant()) == 0) {
+            WorkerTime time = days.get(date);
+            if (time != null && time.calendarSet() && time.seconds() == 0) {
                 rest.add(date);
             }
         }

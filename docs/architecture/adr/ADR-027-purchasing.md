@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-24). 로컬 구현 2fm(2026-10-24, 커밋 전, V106), 결정 9는 2fr(V108), 결정 10은 2fv(V109), 결정 11은 2fw(V110), 결정 12는 2fz(V111), 결정 13은 2ga(V112), 결정 14는 2gc(V113), 결정 15는 2gh(V116), 결정 16은 2gv(V118), 결정 17은 2gx(V119), 결정 18은 2gy(V120), 결정 19는 2gz(V121), 결정 20은 2ha(화면만), 결정 21은 2hb(V122), 결정 22는 2hc(V123).** 사용자 위임(2026-10-24, "의사결정도 recommend 로 계속 알아서 밀고나가")에 따라 리드가 고른 권장안이다. [자재 소요](../../domain/material-requirements.md) "발주(구매) 연계는 구매 도메인이 생긴 뒤"와 [도메인 지도](../domain-map.md) MRP/SCM의 "구매·발주"를 연다.
+**Accepted (2026-10-24). 로컬 구현 2fm(2026-10-24, V106; 아래 결정 9–15의 구현과 함께 2026-10-25 `398de46`에서 커밋), 결정 9는 2fr(V108), 결정 10은 2fv(V109), 결정 11은 2fw(V110), 결정 12는 2fz(V111), 결정 13은 2ga(V112), 결정 14는 2gc(V113), 결정 15는 2gh(V116), 결정 16은 2gv(V118), 결정 17은 2gx(V119), 결정 18은 2gy(V120), 결정 19는 2gz(V121), 결정 20은 2ha(화면만), 결정 21은 2hb(V122), 결정 22는 2hc(V123).** 사용자 위임(2026-10-24, "의사결정도 recommend 로 계속 알아서 밀고나가")에 따라 리드가 고른 권장안이다. [자재 소요](../../domain/material-requirements.md) "발주(구매) 연계는 구매 도메인이 생긴 뒤"와 [도메인 지도](../domain-map.md) MRP/SCM의 "구매·발주"를 연다.
 
 근거: 재주문 목록(제안량·구매 단위·CSV, [재고 경보](../../domain/stock-alert.md)), 입고 한 줄의 검사와 저장([재고 일괄 입고](../../domain/stock-import.md)), [벤치마크](../../reference/benchmarks/FlowMat_GitHub_Benchmark_2026-09-24.md) SCM-04 OCA/purchase-workflow(상태 전이, 취소 사유).
 
@@ -74,6 +74,6 @@
 ## 결과
 
 - 좋은 점: 주문한 것과 받은 것이 기록되고, 받은 재고가 어느 발주의 것인지 원장에 남는다.
-- 위험: 새 컨텍스트와 마이그레이션 V106(표 셋). V102–V105와 함께 커밋 전이다.
-- 위험(2026-10-24 추가): V108(줄 단가, 2fr), V109(`supplier`, 2fv), V110(`purchase_order_date_change`, 2fw), V111(`purchase_return`, 2fz), V112(`supplier_item`, 2ga), V113(`purchase_setting`·승인 열, 2gc), V115(`supplier_item.unit_price`, 2gg), V116(`purchase_order.deliver_to`, 2gh), V118(`purchase_return.nonconformity_id`·`ncr_no`, 2gv), V119(`purchase_order_line.supplier_item_code`, 2gx), V120(`purchase_return.replacement_yn`·`purchase_order_line.replacement_quantity`, V106 받은 양 검사 교체, 2gy), V121(`purchase_credit`, 2gz), V122(`purchase_approval_step`·`purchase_order_approval`, 2hb), V123(`purchase_credit_change`, 2hc)도 커밋 전이다. 목록을 처음 만든 프로젝트는 목록 전의 초안을 주문하려면 공급처를 목록 이름으로 고쳐야 한다.
+- 위험: 새 컨텍스트와 마이그레이션 V106(표 셋). V102–V105와 함께 2026-10-25 `398de46`에서 커밋됐다.
+- 위험(2026-10-24 추가): V108(줄 단가, 2fr), V109(`supplier`, 2fv), V110(`purchase_order_date_change`, 2fw), V111(`purchase_return`, 2fz), V112(`supplier_item`, 2ga), V113(`purchase_setting`·승인 열, 2gc), V115(`supplier_item.unit_price`, 2gg), V116(`purchase_order.deliver_to`, 2gh), V118(`purchase_return.nonconformity_id`·`ncr_no`, 2gv), V119(`purchase_order_line.supplier_item_code`, 2gx), V120(`purchase_return.replacement_yn`·`purchase_order_line.replacement_quantity`, V106 받은 양 검사 교체, 2gy), V121(`purchase_credit`, 2gz), V122(`purchase_approval_step`·`purchase_order_approval`, 2hb), V123(`purchase_credit_change`, 2hc)도 같은 `398de46`에서 커밋됐다. 목록을 처음 만든 프로젝트는 목록 전의 초안을 주문하려면 공급처를 목록 이름으로 고쳐야 한다.
 - 구현: [구매 발주](../../domain/purchasing.md) PO1–PO7.

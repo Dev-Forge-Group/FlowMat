@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.myweb.flowmat.domain.workflow.collab.WorkflowPresenceCleanupServiceTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-27T09:04:27.181Z" hostname="DESKTOP-852AG4Q" time="0.089">
-  <properties/>
-  <testcase name="cleanupBroadcastsLeaveForRemovedStaleSession()" classname="org.myweb.flowmat.domain.workflow.collab.WorkflowPresenceCleanupServiceTest" time="0.089"/>
-  <system-out><![CDATA[2026-09-27 18:04:27.267 INFO  [no-request] [anon] [no-project] [no-workflow] [no-run] o.m.f.d.w.c.WorkflowPresenceCleanupService - Removed 1 stale workflow presence sessions.
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

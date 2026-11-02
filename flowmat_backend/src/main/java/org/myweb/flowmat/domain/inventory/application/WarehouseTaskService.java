@@ -145,7 +145,7 @@ public class WarehouseTaskService {
             // Phantoms expand through the revision of the order's planned day (docs/domain/multi-level-bom.md P3).
             LocalDate phantomDay = order.plannedStartAt() == null ? null : projectCalendar.date(projectId, order.plannedStartAt().toInstant());
             BomRequirementResponse requirement = bomService.requirementsForRun(order.bomId(), projectId, order.targetItemId(), quantity,
-                phantomDay);
+                phantomDay, order.optionalItemIds());
             for (BomRequirementResponse.Line line : requirement.lines()) {
                 needs.merge(line.childItemId(), line.requiredItemQuantity(), BigDecimal::add);
             }

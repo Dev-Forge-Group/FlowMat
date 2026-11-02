@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.myweb.flowmat.domain.flowrun.application.FlowRunServiceTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-27T09:04:19.830Z" hostname="DESKTOP-852AG4Q" time="0.793">
-  <properties/>
-  <testcase name="startsOnlyPublishedRevisionWithAuthenticatedActorAndFrozenInputs()" classname="org.myweb.flowmat.domain.flowrun.application.FlowRunServiceTest" time="0.784"/>
-  <testcase name="refusesRetiredRevisionBeforeSavingRun()" classname="org.myweb.flowmat.domain.flowrun.application.FlowRunServiceTest" time="0.004"/>
-  <testcase name="finishRequiresWriteAccessAndRejectsSecondCompletion()" classname="org.myweb.flowmat.domain.flowrun.application.FlowRunServiceTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

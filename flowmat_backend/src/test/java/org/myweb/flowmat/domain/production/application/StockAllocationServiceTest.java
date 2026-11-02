@@ -53,6 +53,7 @@ class StockAllocationServiceTest {
     @Mock private InventoryCommandService inventoryCommandService;
     @Mock private ProjectAccessService projectAccessService;
     @Mock private IdGenerator idGenerator;
+    @Mock private WorkOrderOptionalItems optionalItems;
     @InjectMocks private StockAllocationService service;
 
     private WorkOrder order;
@@ -124,7 +125,7 @@ class StockAllocationServiceTest {
         order.setTargetItemId("product");
         order.setTargetQuantity(BigDecimal.ONE);
         BigDecimal required = new BigDecimal("0.001");
-        when(bomService.requirementsForRun("bom", "project", "product", BigDecimal.ONE, null)).thenReturn(
+        when(bomService.requirementsForRun("bom", "project", "product", BigDecimal.ONE, null, List.of())).thenReturn(
             new BomRequirementResponse("bom", 1, "product", BigDecimal.ONE, BigDecimal.ONE,
                 List.of(new BomRequirementResponse.Line("line", "item", required, "kg", required,
                     "kg", required, BigDecimal.ONE, null, null)), null, false, List.of()));

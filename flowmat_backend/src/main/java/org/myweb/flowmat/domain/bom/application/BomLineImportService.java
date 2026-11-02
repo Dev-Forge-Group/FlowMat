@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Fills a draft BOM's materials from a spreadsheet (docs/domain/item-import.md "BOM 자재"). Every row is checked first,
  * with the approval rules that concern a single line (docs/domain/inventory-bom-lot-contract.md §5): the material
- * exists, is not the product, is not listed twice, has no approved BOM of its own, and its unit converts to the
- * material's unit. When any row is wrong, or it is a dry run, nothing is saved; otherwise the lines go through the
+ * exists, is not the product, is not listed twice, has no approved BOM of its own, its unit converts to the
+ * material's unit, and any scrap is 0–100% on a material line (ADR-031). When any row is wrong, or it is a dry run, nothing is saved; otherwise the lines go through the
  * ordinary add and delete in one transaction.
  */
 @Service
@@ -41,6 +41,7 @@ public class BomLineImportService {
     public static final int MAX_ROWS = 500;
     private static final String NOT_DELETED = "N";
     private static final int MAX_INTEGER_DIGITS = 10;
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
 
     private final BomHeaderRepository bomHeaderRepository;
     private final BomLineRepository bomLineRepository;
@@ -165,6 +166,7 @@ public class BomLineImportService {
         if (Boolean.TRUE.equals(phantom) && lineType != null && !BomTree.MATERIAL.equals(lineType)) {
             problems.add("Only a material line can be a phantom");
         }
+        BigDecimal scrapRate = scrapRate(row.scrapPercent(), lineType, problems);
         if (matches.size() != 1) {
             return null;
         }
@@ -194,9 +196,40 @@ public class BomLineImportService {
             }
         }
         return problems.isEmpty()
-            ? new BomLineCreateRequest(material.itemId(), quantity, unit, null, null, null, null, trimToNull(row.note()), lineType,
-                phantom)
+            ? new BomLineCreateRequest(material.itemId(), quantity, unit, scrapRate, null, null, null, trimToNull(row.note()),
+                lineType, phantom)
             : null;
+    }
+
+    /**
+     * The scrap column is a percent, as on screen (ADR-031): 5 or 5% is a rate of 0.05. Blank or 0 is none; otherwise up to 100%
+     * with at most 2 decimals, which is the rate's 4, and only on a material line.
+     */
+    private static BigDecimal scrapRate(String value, String lineType, List<String> problems) {
+        String text = trimToNull(value);
+        if (text == null) return null;
+        String number = text.endsWith("%") ? text.substring(0, text.length() - 1).trim() : text;
+        BigDecimal percent;
+        try {
+            percent = CsvDecimalParser.parse(number);
+        } catch (NumberFormatException e) {
+            problems.add("Scrap is not a number: " + text);
+            return null;
+        }
+        if (percent.signum() < 0 || percent.compareTo(ONE_HUNDRED) > 0) {
+            problems.add("Scrap must be from 0% to 100%");
+            return null;
+        }
+        if (percent.stripTrailingZeros().scale() > 2) {
+            problems.add("Scrap takes at most 2 decimals (0.01%)");
+            return null;
+        }
+        if (percent.signum() == 0) return null;
+        if (lineType != null && !BomTree.MATERIAL.equals(lineType)) {
+            problems.add("Only a material line can have scrap");
+            return null;
+        }
+        return percent.movePointLeft(2);
     }
 
     /** Y, yes, true or 1 is a phantom; blank, N, no, false or 0 is not; anything else is a row problem. */

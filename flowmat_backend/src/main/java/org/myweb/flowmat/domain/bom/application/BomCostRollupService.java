@@ -74,8 +74,13 @@ public class BomCostRollupService {
         }
         Map<String, String> itemByBom = approved.values().stream()
             .collect(Collectors.toMap(BomHeader::getBomId, BomHeader::getTargetItemId));
-        Map<String, List<BomLine>> linesByItem = bomLineRepository.findAllByBomIdIn(itemByBom.keySet()).stream()
-            .filter(line -> BomTree.isMaterial(line.getLineType()))
+        List<BomLine> bomLines = bomLineRepository.findAllByBomIdIn(itemByBom.keySet());
+        // A substitute stands in for its main line and an optional material waits for a work order to pick it: the rollup
+        // costs the main lines without the optional ones (ADR-032 decision 5, ADR-033 decision 7).
+        Map<String, BomLine> substitutes = BomTree.mainLines(bomLines);
+        Map<String, List<BomLine>> linesByItem = bomLines.stream()
+            .filter(line -> BomTree.isMaterial(line.getLineType()) && !substitutes.containsKey(line.getBomLineId())
+                && !"Y".equals(line.getOptionalYn()))
             .collect(Collectors.groupingBy(line -> itemByBom.get(line.getBomId())));
         Set<String> itemIds = new HashSet<>(approved.keySet());
         linesByItem.values().forEach(lines -> lines.forEach(line -> itemIds.add(line.getChildItemId())));

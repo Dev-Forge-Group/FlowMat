@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { BomDto } from '../../../shared/types/api'
+import type { BomDto, BomLineDto } from '../../../shared/types/api'
 import {
   approvedRevision, bomActions, bomLinesFromCsv, compareBoms, costChange, groupByTarget, isEditable, overlappingApproved,
-  localDay, periodLabel, replacementEndDay, zoneDay,
+  localDay, lossGap, optionalMaterials, percentLabel, periodLabel, replacementEndDay, scrapLabel, scrapRateFromPercent, substituteLabel, substituteTargets,
+  zoneDay,
 } from './bomModel'
 
 function bom(overrides: Partial<BomDto>): BomDto {
@@ -63,7 +64,7 @@ describe('compareBoms', () => {
     childItemId,
     quantity,
     unit,
-    scrapRate: null,
+    scrapRate: null as number | null,
     optionalYn: null,
     substituteGroup: null,
     sortOrder: null,
@@ -110,6 +111,132 @@ describe('compareBoms', () => {
   it('adds up lines of one material in one unit', () => {
     const v1 = revision(1, 10, [line('flour', 3), line('flour', 2)])
     expect(compareBoms(v1, revision(2, 10, [line('flour', 5)])).lines[0].change).toBe('same')
+  })
+
+  it('counts another scrap rate as a change and shows the rate on each side (ADR-031)', () => {
+    const withScrap = (quantity: number, scrapRate: number) => ({ ...line('flour', quantity), scrapRate })
+    const v1 = revision(1, 10, [line('flour', 5)])
+    expect(compareBoms(v1, revision(2, 10, [withScrap(5, 0.05)])).lines).toEqual([
+      { childItemId: 'flour', before: { quantity: 5, unit: 'kg' }, after: { quantity: 5, unit: 'kg', scrapRate: 0.05 }, change: 'changed' },
+    ])
+    expect(compareBoms(revision(1, 10, [withScrap(5, 0.05)]), revision(2, 20, [withScrap(10, 0.05)])).lines[0].change).toBe('same')
+    // Added-up lines plan their scrap together: 3 kg at 10% and 2 kg at none is 0.3 kg on 5 kg.
+    expect(compareBoms(v1, revision(2, 10, [withScrap(3, 0.1), line('flour', 2)])).lines[0].after).toEqual({
+      quantity: 5, unit: 'kg', scrapRate: 0.06,
+    })
+  })
+})
+
+describe('substitutes (ADR-032)', () => {
+  const line = (bomLineId: string, overrides: Partial<BomLineDto> = {}): BomLineDto => ({
+    bomLineId, childItemId: bomLineId.toUpperCase(), quantity: 1, unit: 'kg', scrapRate: null, optionalYn: null,
+    substituteGroup: null, sortOrder: null, note: null, ...overrides,
+  })
+  const flour = line('flour', { substituteGroup: 'flour', priority: 0 })
+  const rye = line('rye', { substituteGroup: 'flour', priority: 1, substituteFor: 'flour' })
+  const spelt = line('spelt', { substituteGroup: 'flour', priority: 2, substituteFor: 'flour' })
+  const dough = line('dough', { phantom: true })
+  const water = line('water', { lineType: 'by_product' })
+  const sugar = line('sugar')
+
+  it('offers main materials that are not phantoms to stand in for', () => {
+    expect(substituteTargets([flour, rye, dough, water, sugar]).map((one) => one.bomLineId)).toEqual(['flour', 'sugar'])
+  })
+
+  it('names the main material, and the order when it has several substitutes', () => {
+    const name = (itemId: string) => itemId.toLowerCase()
+    expect(substituteLabel(rye, [flour, rye], name)).toBe('substitute for flour')
+    expect(substituteLabel(spelt, [flour, spelt, rye], name)).toBe('substitute 2 for flour')
+    expect(substituteLabel(flour, [flour, rye], name)).toBe('')
+  })
+
+  it('counts a material becoming a substitute as a change between revisions', () => {
+    const before = bom({ lines: [line('flour'), line('rye')] })
+    const after = bom({ bomVersion: 2, lines: [flour, rye] })
+    const rows = compareBoms(before, after).lines
+    expect(rows.find((row) => row.childItemId === 'RYE')).toMatchObject({ change: 'changed', after: { substituteFor: 'FLOUR' } })
+    expect(rows.find((row) => row.childItemId === 'FLOUR')?.change).toBe('same')
+  })
+
+  it('refuses a substitute column in a materials CSV rather than skipping it', () => {
+    for (const column of ['substitute_for', 'Substitute Group', 'alternate']) {
+      expect(bomLinesFromCsv(`item_code,quantity,unit,${column}\nRYE,1,kg,FLOUR`)).toEqual({ ok: false,
+        error: `Substitute materials are added on screen, not by CSV yet; remove the ${column} column.` })
+    }
+  })
+})
+
+describe('optional materials (ADR-033)', () => {
+  const line = (bomLineId: string, overrides: Partial<BomLineDto> = {}): BomLineDto => ({
+    bomLineId, childItemId: bomLineId.toUpperCase(), quantity: 1, unit: 'kg', scrapRate: null, optionalYn: 'N',
+    substituteGroup: null, sortOrder: null, note: null, ...overrides,
+  })
+  const box = line('box', { optionalYn: 'Y' })
+  const flour = line('flour')
+
+  it('lists the optional materials a work order may pick, and none without a revision', () => {
+    const sticker = line('sticker', { optionalYn: 'Y', lineType: 'by_product' })
+    expect(optionalMaterials({ lines: [flour, box, sticker] }).map((one) => one.bomLineId)).toEqual(['box'])
+    expect(optionalMaterials(undefined)).toEqual([])
+  })
+
+  it('never offers an optional material to stand in for', () => {
+    expect(substituteTargets([flour, box]).map((one) => one.bomLineId)).toEqual(['flour'])
+  })
+
+  it('counts a material becoming optional as a change between revisions', () => {
+    const rows = compareBoms(bom({ lines: [flour, line('box')] }), bom({ bomVersion: 2, lines: [flour, box] })).lines
+    expect(rows.find((row) => row.childItemId === 'BOX')).toMatchObject({ change: 'changed', after: { optional: true } })
+    expect(rows.find((row) => row.childItemId === 'FLOUR')?.change).toBe('same')
+  })
+
+  it('refuses an optional column in a materials CSV rather than skipping it', () => {
+    for (const column of ['optional', 'Is Optional', 'optional_yn']) {
+      expect(bomLinesFromCsv(`item_code,quantity,unit,${column}\nBOX,1,ea,Y`)).toEqual({ ok: false,
+        error: `Optional materials are marked on screen, not by CSV yet; remove the ${column} column.` })
+    }
+  })
+})
+
+describe('actual scrap against planned (ADR-034)', () => {
+  it('says how many points the actual loss is off the plan, half a point either way being even', () => {
+    expect(lossGap(0.05, 0.0833)).toEqual({ points: 3.33, tone: 'over' })
+    expect(lossGap(0.05, 0.03)).toEqual({ points: -2, tone: 'under' })
+    expect(lossGap(0.05, 0.054)).toEqual({ points: 0.4, tone: 'even' })
+    expect(lossGap(0.05, null)).toBeNull()
+  })
+
+  it('writes a rate as a percent with two decimals at most', () => {
+    expect(percentLabel(0.0833)).toBe('8.33%')
+    expect(percentLabel(0)).toBe('0%')
+    expect(percentLabel(-0.02)).toBe('-2%')
+  })
+})
+
+describe('scrapRateFromPercent', () => {
+  it('turns a percent into the rate the server keeps; blank or 0 is none', () => {
+    expect(scrapRateFromPercent('5')).toEqual({ ok: true, rate: 0.05 })
+    expect(scrapRateFromPercent(' 2.5 ')).toEqual({ ok: true, rate: 0.025 })
+    expect(scrapRateFromPercent('33.33')).toEqual({ ok: true, rate: 0.3333 })
+    expect(scrapRateFromPercent('100')).toEqual({ ok: true, rate: 1 })
+    expect(scrapRateFromPercent('')).toEqual({ ok: true, rate: undefined })
+    expect(scrapRateFromPercent('0')).toEqual({ ok: true, rate: undefined })
+  })
+
+  it('refuses what is not a percent from 0 to 100 with at most 2 decimals', () => {
+    expect(scrapRateFromPercent('-1')).toEqual({ ok: false, error: 'Give scrap as a percent from 0 to 100.' })
+    expect(scrapRateFromPercent('5%')).toEqual({ ok: false, error: 'Give scrap as a percent from 0 to 100.' })
+    expect(scrapRateFromPercent('100.5')).toEqual({ ok: false, error: 'Scrap must be from 0% to 100%.' })
+    expect(scrapRateFromPercent('0.125')).toEqual({ ok: false, error: 'Scrap takes at most 2 decimals (0.01%).' })
+  })
+})
+
+describe('scrapLabel', () => {
+  it('says the percent, and nothing for no scrap', () => {
+    expect(scrapLabel(0.05)).toBe('5% scrap')
+    expect(scrapLabel(0.3333)).toBe('33.33% scrap')
+    expect(scrapLabel(0)).toBe('')
+    expect(scrapLabel(null)).toBe('')
   })
 })
 
@@ -177,6 +304,22 @@ describe('bomLinesFromCsv', () => {
     })
     expect(bomLinesFromCsv('item_code,quantity,unit,phantom,is_phantom\nDOUGH,2,kg,Y,N\n'))
       .toEqual({ ok: false, error: 'Use only one phantom column, including aliases.' })
+  })
+
+  it('reads an optional scrap percent column and refuses a 0–1 rate column', () => {
+    expect(bomLinesFromCsv('item_code,quantity,unit,Scrap %\nFLOUR,2,kg,5\nSALT,0.1,kg,\n')).toEqual({
+      ok: true,
+      rows: [
+        { itemCode: 'FLOUR', quantity: '2', unit: 'kg', scrapPercent: '5' },
+        { itemCode: 'SALT', quantity: '0.1', unit: 'kg', scrapPercent: '' },
+      ],
+    })
+    expect(bomLinesFromCsv('item_code,quantity,unit,scrap,scrap_percent\nFLOUR,2,kg,5,5\n'))
+      .toEqual({ ok: false, error: 'Use only one scrap column, including aliases.' })
+    expect(bomLinesFromCsv('item_code,quantity,unit,Scrap Rate\nFLOUR,2,kg,0.05\n')).toEqual({
+      ok: false,
+      error: 'Give scrap as a percent in a scrap_percent column (5 means 5%), not Scrap Rate.',
+    })
   })
 
   it.each([

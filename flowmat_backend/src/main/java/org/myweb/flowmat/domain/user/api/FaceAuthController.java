@@ -18,6 +18,7 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.myweb.flowmat.global.security.AuthUser;
 import org.myweb.flowmat.global.security.RefreshTokenCookieService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,8 +27,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/** Only with {@code app.auth.face-login.enabled=true}; otherwise {@link FaceLoginDisabledController} answers (ADR-030). */
 @RestController
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "app.auth.face-login", name = "enabled", havingValue = "true")
 @RequestMapping("/auth/face")
 public class FaceAuthController {
 
@@ -104,11 +107,8 @@ public class FaceAuthController {
         return ApiResponse.ok(null);
     }
 
+    /** The container-resolved address; see AuthController#extractIp for why the header is not read here. */
     private String extractIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
         return request.getRemoteAddr();
     }
 

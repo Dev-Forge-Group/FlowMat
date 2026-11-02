@@ -114,7 +114,7 @@ class BomIntegrationTest extends IntegrationTestSupport {
             line(material, "1", "kg"),
             line(material, "2", "kg"),
             line(item("unit_kg"), "1", "m"),
-            "{\"childItemId\":\"" + item("unit_kg") + "\",\"quantity\":1,\"unit\":\"kg\",\"scrapRate\":0.05}");
+            "{\"childItemId\":\"" + item("unit_kg") + "\",\"quantity\":1,\"unit\":\"kg\",\"lineType\":\"by_product\",\"optionalYn\":\"Y\"}");
 
         call(post("/boms/" + bomId + "/submit"))
             .andExpect(status().isBadRequest())
@@ -122,7 +122,7 @@ class BomIntegrationTest extends IntegrationTestSupport {
                 containsString("is the item this BOM produces"),
                 containsString("appears more than once"),
                 containsString("Cannot record m (length)"),
-                containsString("scrap rates are not supported"))));
+                containsString("only a material line can be optional"))));
     }
 
     @Test

@@ -1,17 +1,22 @@
 package org.myweb.flowmat.domain.user.application;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class AuthRedisStore {
@@ -21,6 +26,10 @@ public class AuthRedisStore {
     private static final String EMAIL_CODE_PREFIX = "auth:email:code:";
     private static final String EMAIL_COOLDOWN_PREFIX = "auth:email:cooldown:";
     private static final String EMAIL_VERIFIED_PREFIX = "auth:email:verified:";
+    private static final String EMAIL_ATTEMPT_PREFIX = "auth:email:attempts:";
+    /** Wrong codes allowed per sent code; then the code is deleted and a new one must be sent (audit B1). */
+    static final int MAX_EMAIL_CODE_ATTEMPTS = 5;
+    private static final SecureRandom CODE_RANDOM = new SecureRandom();
     private static final String PWD_RESET_PREFIX = "auth:pwdreset:";
     private static final String LOGIN_FAIL_PREFIX = "auth:loginfail:";
     private static final String LOGIN_LOCK_PREFIX = "auth:loginlock:";
@@ -75,16 +84,26 @@ public class AuthRedisStore {
     }
 
     public void revokeAllRefreshTokens(String userId) {
-        executeQuietly(() -> {
-            Set<String> jtis = redisTemplate.opsForSet().members(rtUserKey(userId));
-            if (jtis != null) {
-                for (String jti : jtis) {
-                    redisTemplate.delete(rtKey(jti));
-                }
+        executeQuietly(() -> deleteAllRefreshTokens(userId));
+    }
+
+    /**
+     * Like {@link #revokeAllRefreshTokens} but reports a Redis failure (503) instead of logging it: logout-all and a
+     * password reset must not claim success while the old sessions still work (audit B2, B6).
+     */
+    public void revokeAllRefreshTokensOrFail(String userId) {
+        execute(() -> deleteAllRefreshTokens(userId));
+    }
+
+    private Void deleteAllRefreshTokens(String userId) {
+        Set<String> jtis = redisTemplate.opsForSet().members(rtUserKey(userId));
+        if (jtis != null) {
+            for (String jti : jtis) {
+                redisTemplate.delete(rtKey(jti));
             }
-            redisTemplate.delete(rtUserKey(userId));
-            return null;
-        });
+        }
+        redisTemplate.delete(rtUserKey(userId));
+        return null;
     }
 
     public void saveEmailCode(String email, String code, Duration codeTtl, Duration cooldownTtl) {
@@ -93,6 +112,7 @@ public class AuthRedisStore {
                 throw new IllegalStateException("cooldown");
             }
             redisTemplate.opsForValue().set(emailCodeKey(email), code, codeTtl);
+            redisTemplate.delete(emailAttemptKey(email));
             redisTemplate.opsForValue().set(emailCooldownKey(email), "1", cooldownTtl);
             return null;
         });
@@ -101,10 +121,24 @@ public class AuthRedisStore {
     public boolean verifyEmailCode(String email, String code, Duration verifiedTtl) {
         return execute(() -> {
             String saved = redisTemplate.opsForValue().get(emailCodeKey(email));
-            if (saved == null || !saved.equals(code)) {
+            if (saved == null || code == null) {
+                return false;
+            }
+            if (!MessageDigest.isEqual(saved.getBytes(StandardCharsets.UTF_8), code.getBytes(StandardCharsets.UTF_8))) {
+                Long attempts = redisTemplate.opsForValue().increment(emailAttemptKey(email));
+                if (attempts != null && attempts == 1L) {
+                    Long ttl = redisTemplate.getExpire(emailCodeKey(email));
+                    redisTemplate.expire(emailAttemptKey(email), Duration.ofSeconds(ttl != null && ttl > 0 ? ttl : 300));
+                }
+                if (attempts != null && attempts >= MAX_EMAIL_CODE_ATTEMPTS) {
+                    // A six-digit code must not outlive a guessing run.
+                    redisTemplate.delete(emailCodeKey(email));
+                    redisTemplate.delete(emailAttemptKey(email));
+                }
                 return false;
             }
             redisTemplate.delete(emailCodeKey(email));
+            redisTemplate.delete(emailAttemptKey(email));
             redisTemplate.opsForValue().set(emailVerifiedKey(email), "Y", verifiedTtl);
             return true;
         });
@@ -117,6 +151,7 @@ public class AuthRedisStore {
     public void clearEmailState(String email) {
         executeQuietly(() -> {
             redisTemplate.delete(emailCodeKey(email));
+            redisTemplate.delete(emailAttemptKey(email));
             redisTemplate.delete(emailVerifiedKey(email));
             return null;
         });
@@ -202,7 +237,7 @@ public class AuthRedisStore {
     }
 
     public String generateVerificationCode() {
-        int value = java.util.concurrent.ThreadLocalRandom.current().nextInt(1_000_000);
+        int value = CODE_RANDOM.nextInt(1_000_000);
         return "%06d".formatted(value);
     }
 
@@ -229,7 +264,9 @@ public class AuthRedisStore {
     private void executeQuietly(RedisCallback<Void> callback) {
         try {
             callback.run();
-        } catch (DataAccessException ignored) {
+        } catch (DataAccessException e) {
+            // Best effort (single logout, cleanup), but never silent: a token meant to be revoked may still work.
+            log.warn("Auth store write skipped after a Redis failure ({})", e.getClass().getSimpleName());
         }
     }
 
@@ -238,6 +275,7 @@ public class AuthRedisStore {
     private String emailCodeKey(String email) { return EMAIL_CODE_PREFIX + email; }
     private String emailCooldownKey(String email) { return EMAIL_COOLDOWN_PREFIX + email; }
     private String emailVerifiedKey(String email) { return EMAIL_VERIFIED_PREFIX + email; }
+    private String emailAttemptKey(String email) { return EMAIL_ATTEMPT_PREFIX + email; }
     private String passwordResetKey(String token) { return PWD_RESET_PREFIX + token; }
     private String loginFailKey(String userId) { return LOGIN_FAIL_PREFIX + userId; }
     private String loginLockKey(String userId) { return LOGIN_LOCK_PREFIX + userId; }

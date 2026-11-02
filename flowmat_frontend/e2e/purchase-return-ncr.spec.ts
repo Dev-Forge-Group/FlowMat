@@ -1,11 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
 /** A return sent back for an NCR names it, and the NCR shows it (docs/domain/purchasing.md PO42-PO43), mocked. */
 test.use({ timezoneId: 'UTC' })
 
-test('a return sent back for an NCR names it on both sides', async ({ page }) => {
-  const projectId = 'prj-po-ncr'
+const projectId = 'prj-po-ncr'
+
+/** Answers the order, its stock and the NCR; the NCR list waits for `ncrsHeld` when one is given. */
+async function mockReturns(page: Page, ncrsHeld?: Promise<void>) {
   const yeast = { lineId: 'l1', lineNo: 1, itemId: 'yeast', itemCode: 'YEAST', itemName: 'yeast', unitCode: 'kg', lotTracked: true, quantity: 2,
     receivedQuantity: 2, remainingQuantity: 0, expectedDate: null, note: null, unitPrice: null, lineValue: null, returnedQuantity: 0 }
   const order = { purchaseOrderId: 'po1', projectId, orderNumber: 'PO-0001', supplierName: 'Mill Co', status: 'received', expectedDate: null,
@@ -37,7 +39,10 @@ test('a return sent back for an NCR names it on both sides', async ({ page }) =>
     }
     if (request.method() !== 'GET') return route.fulfill({ status: 404 })
     if (pathname === '/api/purchase-orders') return ok(route, [current])
-    if (pathname === '/api/nonconformities') return ok(route, [ncr])
+    if (pathname === '/api/nonconformities') {
+      if (ncrsHeld) await ncrsHeld
+      return ok(route, [ncr])
+    }
     if (pathname === '/api/inventories') return ok(route, [sent.length ? { ...stock, quantity: 0, availableQuantity: 0 } : stock])
     if (pathname === '/api/quality/summary') {
       return ok(route, { inspections: 0, passed: 0, failed: 0, passRate: null, openDefects: 0, resolvedDefects: 0, defectsByType: [],
@@ -48,6 +53,11 @@ test('a return sent back for an NCR names it on both sides', async ({ page }) =>
     if (pathname.endsWith('/time-zone')) return ok(route, { projectId, timeZone: 'UTC', version: 0 })
     return ok(route, [])
   })
+  return sent
+}
+
+test('a return sent back for an NCR names it on both sides', async ({ page }) => {
+  const sent = await mockReturns(page)
   await mockedLogin(page)
   await page.goto(`/projects/${projectId}/inventory?tab=quality`)
   await page.getByRole('table', { name: 'Nonconformity list' }).getByRole('button', { name: 'Open' }).click()
@@ -74,4 +84,24 @@ test('a return sent back for an NCR names it on both sides', async ({ page }) =>
   await page.getByRole('table', { name: 'Nonconformity list' }).getByRole('button', { name: 'Open' }).click()
   await expect(page.getByRole('list', { name: 'Sent back' }).getByRole('listitem'))
     .toHaveText('2041-09-05 10:00 · YEAST 2 back on PO-0001 · LOT L-1 · replacement on the order · by demo-owner')
+})
+
+test('the NCR named in the address is filled in when the NCR list arrives after the return form opened', async ({ page }) => {
+  let release: () => void = () => {}
+  const sent = await mockReturns(page, new Promise<void>((resolve) => { release = resolve }))
+  await mockedLogin(page)
+  await page.goto(`/projects/${projectId}/inventory?tab=purchasing&order=po1&ncr=n1`)
+  const detail = page.getByRole('region', { name: 'Purchase order PO-0001' })
+  await detail.getByRole('button', { name: 'Return to supplier' }).click()
+  const form = detail.getByRole('form', { name: 'Return to supplier' })
+  await expect(form.getByLabel('Return quantity')).toBeVisible()
+  await expect(form.getByLabel('For NCR')).toHaveCount(0)
+
+  release()
+  await expect(form.getByLabel('For NCR')).toHaveValue('n1')
+  await form.getByLabel('Return quantity').fill('2')
+  await form.getByLabel('Return reason').fill('Sour')
+  await form.getByRole('button', { name: 'Save return' }).click()
+  await expect(form).toHaveCount(0)
+  expect(sent).toEqual([expect.objectContaining({ nonconformityId: 'n1' })])
 })

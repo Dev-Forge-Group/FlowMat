@@ -88,6 +88,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private final StockAllocationService stockAllocationService;
     private final RunInstructionService runInstructionService;
     private final ProjectCalendarQuery projectCalendar;
+    private final WorkOrderOptionalItems optionalItems;
 
     @Override
     public List<ProductionRunResponse> listRuns(String workflowId) {
@@ -148,7 +149,9 @@ public class ProductionRunServiceImpl implements ProductionRunService {
             : null;
         BomRequirementResponse bom = bomId == null
             ? null
-            : bomService.requirementsForRun(bomId, request.projectId().trim(), targetItemId, request.plannedOutputQty(), phantomDay);
+            // The run freezes the optional materials its order picked; a run without an order takes none (ADR-033 decision 6).
+            : bomService.requirementsForRun(bomId, request.projectId().trim(), targetItemId, request.plannedOutputQty(), phantomDay,
+                workOrder != null ? optionalItems.of(workOrder.getWorkOrderId()) : List.of());
         if (bom != null && targetItemId == null) {
             targetItemId = bom.targetItemId();
         }

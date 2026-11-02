@@ -59,14 +59,19 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final StockAllocationService stockAllocationService;
     private final org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand notifications;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery projectMemberQuery;
+    private final WorkOrderOptionalItems optionalItems;
+    private final WorkOrderOptionalItemCheck optionalItemCheck;
 
     @Override
     public List<WorkOrderResponse> listWorkOrders(String projectId) {
         projectAccessService.requireProjectReadAccess(projectId);
         List<WorkOrder> orders = workOrderRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtDesc(projectId, NOT_DELETED);
-        Map<String, List<ProductionRun>> runsByOrder = runsByWorkOrder(orders.stream().map(WorkOrder::getWorkOrderId).toList());
+        List<String> ids = orders.stream().map(WorkOrder::getWorkOrderId).toList();
+        Map<String, List<ProductionRun>> runsByOrder = runsByWorkOrder(ids);
+        Map<String, List<String>> picks = optionalItems.of(ids);
         return orders.stream()
-            .map(order -> toResponse(order, runsByOrder.getOrDefault(order.getWorkOrderId(), List.of())))
+            .map(order -> toResponse(order, runsByOrder.getOrDefault(order.getWorkOrderId(), List.of()),
+                picks.getOrDefault(order.getWorkOrderId(), List.of())))
             .toList();
     }
 
@@ -95,9 +100,15 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         order.setInstructionUrl(instructionUrl(request.instructionUrl()));
         order.setCreatedBy(projectAccessService.requireCurrentUserId());
         order.setDeletedYn(NOT_DELETED);
+        List<String> picks = WorkOrderOptionalItemCheck.normalize(request.optionalItemIds());
+        picks = picks == null ? List.of() : picks;
+        optionalItemCheck.check(order, picks);
         WorkOrder saved = workOrderRepository.save(order);
+        if (!picks.isEmpty()) {
+            optionalItems.replace(saved.getWorkOrderId(), picks, saved.getCreatedBy());
+        }
         tellAssignee(saved, null);
-        return toResponse(saved, List.of());
+        return toResponse(saved, List.of(), picks);
     }
 
     @Override
@@ -118,7 +129,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             request.bomId());
         order.setInstructionUrl(instructionUrl(request.instructionUrl()));
         order.setUpdatedBy(projectAccessService.requireCurrentUserId());
+        // The picks are checked against the BOM as it now stands, whether they changed or not (ADR-033 decision 5).
+        List<String> requested = WorkOrderOptionalItemCheck.normalize(request.optionalItemIds());
+        List<String> picks = requested != null ? requested : optionalItems.of(order.getWorkOrderId());
+        optionalItemCheck.check(order, picks);
         WorkOrder saved = workOrderRepository.save(order);
+        if (requested != null) {
+            optionalItems.replace(saved.getWorkOrderId(), requested, saved.getUpdatedBy());
+        }
         tellAssignee(saved, assigneeBefore);
         return toResponse(saved);
     }
@@ -142,6 +160,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         WorkOrder order = findOrderForUpdate(workOrderId);
         projectAccessService.requireProjectOwnerAccess(order.getProjectId());
         order.setBomId(bomSelection.resolve(order, order.getBomId(), order.getPlannedStartAt(), true));
+        optionalItemCheck.checkForApproval(order, optionalItems.of(order.getWorkOrderId()));
         transition(order, WorkOrderStatus.APPROVED);
         String userId = projectAccessService.requireCurrentUserId();
         OffsetDateTime now = OffsetDateTime.now();
@@ -178,7 +197,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         stockAllocationService.releaseOpenOf(order);
         order.setActualEndAt(OffsetDateTime.now());
         order.setUpdatedBy(projectAccessService.requireCurrentUserId());
-        return toResponse(workOrderRepository.save(order), runs);
+        return toResponse(workOrderRepository.save(order), runs, optionalItems.of(order.getWorkOrderId()));
     }
 
     private void applyEditableFields(
@@ -341,10 +360,11 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     }
 
     private WorkOrderResponse toResponse(WorkOrder order) {
-        return toResponse(order, runsByWorkOrder(List.of(order.getWorkOrderId())).getOrDefault(order.getWorkOrderId(), List.of()));
+        return toResponse(order, runsByWorkOrder(List.of(order.getWorkOrderId())).getOrDefault(order.getWorkOrderId(), List.of()),
+            optionalItems.of(order.getWorkOrderId()));
     }
 
-    static WorkOrderResponse toResponse(WorkOrder order, List<ProductionRun> runs) {
+    static WorkOrderResponse toResponse(WorkOrder order, List<ProductionRun> runs, List<String> optionalItemIds) {
         BigDecimal produced = runs.stream()
             .filter(run -> run.affectsPhysicalState() && FINISHED_RUN.equalsIgnoreCase(run.getRunStatus()))
             .map(ProductionRun::getActualOutputQty)
@@ -372,7 +392,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             runs.size(),
             order.getBomId(),
             order.getInstructionUrl(),
-            order.getEquipmentId()
+            order.getEquipmentId(),
+            List.copyOf(optionalItemIds)
         );
     }
 

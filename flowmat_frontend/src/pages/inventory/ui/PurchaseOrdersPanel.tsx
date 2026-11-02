@@ -93,6 +93,7 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   const allNcrs = useNonconformitiesQuery(projectId, null).data ?? []
   const ncrChoices = returnNcrChoices(allNcrs)
   const linkedNcr = ncrParam ? allNcrs.find((one) => one.nonconformityId === ncrParam) ?? null : null
+  const linkedNcrId = linkedNcr && ncrChoices.includes(linkedNcr) ? linkedNcr.nonconformityId : ''
   const [editing, setEditing] = useState<PurchaseOrderDto | null>(null)
   const [form, setForm] = useState<OrderForm>(EMPTY_ORDER_FORM)
   const [formError, setFormError] = useState<string | null>(null)
@@ -127,6 +128,9 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   const [returning, setReturning] = useState<ReturnForm | null>(null)
   const [returnError, setReturnError] = useState<string | null>(null)
   const [returnRequestId, setReturnRequestId] = useState(newRequestId)
+  // The NCR list can arrive after the return form opened; until the user picks, the linked NCR is the choice (PO42).
+  const [returnNcrPicked, setReturnNcrPicked] = useState(false)
+  const returnNcrId = returning && !returnNcrPicked && !returning.nonconformityId ? linkedNcrId : returning?.nonconformityId ?? ''
   const [crediting, setCrediting] = useState<CreditForm | null>(null)
   const [creditError, setCreditError] = useState<string | null>(null)
   const actionError = order.error ?? cancel.error ?? close.error ?? approve.error
@@ -205,8 +209,8 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
 
   /** Stock received on the order goes back to the supplier (PO26), replaced on it unless it is closed (PO46). */
   function startReturn() {
-    setReturning(returnForm(returnable, linkedNcr && ncrChoices.includes(linkedNcr) ? linkedNcr.nonconformityId : '',
-      selected?.status !== 'closed'))
+    setReturning(returnForm(returnable, linkedNcrId, selected?.status !== 'closed'))
+    setReturnNcrPicked(false)
     setReturnError(null)
     setReturnRequestId(newRequestId())
     giveBack.reset()
@@ -217,7 +221,7 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
     if (!selected || !returning) return
     const submitted = returning
     const submittedRequestId = returnRequestId
-    const payload = returnPayload(returnable, submitted, submittedRequestId)
+    const payload = returnPayload(returnable, { ...submitted, nonconformityId: returnNcrId }, submittedRequestId)
     setReturnError(payload.error)
     // The same requestId goes again after an unconfirmed answer, so a retry cannot send stock back twice.
     if (payload.input) giveBack.mutate({ purchaseOrderId: selected.purchaseOrderId, input: payload.input }, { onSuccess: () => {
@@ -409,8 +413,8 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
             onChange={(event) => setReturning({ ...returning, quantity: event.target.value })} /></label>
           <label>Return reason<input value={returning.reason} maxLength={500}
             onChange={(event) => setReturning({ ...returning, reason: event.target.value })} /></label>
-          {ncrChoices.length > 0 && <label>For NCR<select value={returning.nonconformityId}
-            onChange={(event) => setReturning({ ...returning, nonconformityId: event.target.value })}>
+          {ncrChoices.length > 0 && <label>For NCR<select value={returnNcrId}
+            onChange={(event) => { setReturnNcrPicked(true); setReturning({ ...returning, nonconformityId: event.target.value }) }}>
             <option value="">None</option>
             {ncrChoices.map((one) => <option key={one.nonconformityId} value={one.nonconformityId}>{ncrChoiceText(one)}</option>)}
           </select></label>}

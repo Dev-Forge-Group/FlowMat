@@ -92,16 +92,51 @@ public class RunMaterialUsageService {
         BigDecimal basis = basisIsActual ? run.getActualOutputQty() : plannedOutput;
         boolean scalable = plannedOutput != null && plannedOutput.signum() > 0 && basis != null;
 
+        // A substitute the run's BOM approves stands in for its main material, so the main material's standard is shared
+        // out by what each of them used, counted as the main material (ADR-032 decision 8).
+        Map<String, BomStructureQuery.SubstituteShare> shares = run.getBomId() == null ? Map.of()
+            : bomStructure.substituteShares(run.getBomId());
+        Map<String, String> substituteFor = new HashMap<>();
+        shares.forEach((substituteId, share) -> {
+            if (items.containsKey(substituteId) && !planned.containsKey(substituteId) && planned.containsKey(share.mainItemId())) {
+                substituteFor.put(substituteId, share.mainItemId());
+            }
+        });
+        // An optional material its order did not pick is used beyond the plan, yet the BOM knows it (ADR-033 decision 8).
+        Set<String> optional = run.getBomId() == null ? Set.of() : bomStructure.optionalItemIds(run.getBomId(), null);
+        Map<String, BigDecimal> groupUse = new HashMap<>();
+        Set<String> unknownGroups = new HashSet<>();
+        substituteFor.forEach((substituteId, main) -> {
+            if (unconvertible.contains(substituteId) || unconvertible.contains(main)) {
+                unknownGroups.add(main);
+            }
+            groupUse.merge(main, actual.getOrDefault(substituteId, BigDecimal.ZERO).multiply(shares.get(substituteId).mainPerUnit()),
+                BigDecimal::add);
+        });
+        groupUse.replaceAll((main, use) -> use.add(actual.getOrDefault(main, BigDecimal.ZERO)));
+
         List<RunMaterialUsageResponse.Line> lines = new ArrayList<>();
         BigDecimal varianceCost = BigDecimal.ZERO;
         boolean complete = true;
         for (CatalogItemView item : items.values()) {
             String itemId = item.itemId();
-            boolean inBom = planned.containsKey(itemId);
-            BigDecimal plan = inBom ? scale(planned.get(itemId)) : null;
-            BigDecimal standard = !inBom ? scale(BigDecimal.ZERO)
-                : scalable ? scale(planned.get(itemId).multiply(basis).divide(plannedOutput, SCALE + 4, RoundingMode.HALF_UP))
-                : null;
+            String main = substituteFor.get(itemId);
+            String group = main != null ? main : itemId;
+            boolean inBom = planned.containsKey(itemId) || main != null;
+            BigDecimal plan = planned.containsKey(itemId) ? scale(planned.get(itemId)) : null;
+            BigDecimal whole = inBom && scalable
+                ? planned.get(group).multiply(basis).divide(plannedOutput, SCALE + 4, RoundingMode.HALF_UP) : null;
+            BigDecimal standard;
+            if (!inBom) {
+                standard = scale(BigDecimal.ZERO);
+            } else if (whole == null || unknownGroups.contains(group)) {
+                standard = null;
+            } else if (!groupUse.containsKey(group) || groupUse.get(group).signum() == 0) {
+                standard = scale(main == null ? whole : BigDecimal.ZERO);
+            } else {
+                standard = scale(whole.multiply(actual.getOrDefault(itemId, BigDecimal.ZERO))
+                    .divide(groupUse.get(group), SCALE + 4, RoundingMode.HALF_UP));
+            }
             BigDecimal used = unconvertible.contains(itemId) ? null : scale(actual.getOrDefault(itemId, BigDecimal.ZERO));
             BigDecimal variance = used == null || standard == null ? null : used.subtract(standard);
             BigDecimal percent = variance == null || standard.signum() == 0 ? null
@@ -114,7 +149,7 @@ public class RunMaterialUsageService {
                 complete = false;
             }
             lines.add(new RunMaterialUsageResponse.Line(itemId, item.itemCode(), item.itemName(), item.unitCode(), inBom,
-                plan, standard, used, variance, percent, unitCost, lineCost));
+                plan, standard, used, variance, percent, unitCost, lineCost, main, !inBom && optional.contains(itemId)));
         }
         // Recordings come back in id order, which is random; list materials as the BOM lists them, then the rest by code.
         Map<String, Integer> bomOrder = new HashMap<>();

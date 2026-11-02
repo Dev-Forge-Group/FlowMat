@@ -104,14 +104,18 @@ public class BuildableQuantityService {
             }
         }
         for (BomLineResponse line : needs.isEmpty() ? bom.lines() : List.<BomLineResponse>of()) {
-            if (!BomTree.isMaterial(line.lineType())) {
+            // The batch is planned on main lines without optional materials (ADR-032 decision 5, ADR-033 decision 7).
+            if (!BomTree.isMaterial(line.lineType()) || line.substituteFor() != null || "Y".equals(line.optionalYn())) {
                 continue;
             }
             CatalogItemView child = stock.items().get(line.childItemId());
             if (child == null) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Material " + line.childItemId() + " no longer exists.");
             }
-            UnitConverter.Conversion need = unitConverter.toItemUnit(line.quantity(), line.unit(), child.unitId());
+            // With the line's planned scrap on top, as the requirement plans it (ADR-031 decision 1).
+            BigDecimal planned = line.scrapRate() == null || line.scrapRate().signum() == 0 ? line.quantity()
+                : line.quantity().multiply(BigDecimal.ONE.add(line.scrapRate()));
+            UnitConverter.Conversion need = unitConverter.toItemUnit(planned, line.unit(), child.unitId());
             // The BOM rounds each converted line before adding it. Repeated materials share one stock balance.
             needs.merge(child.itemId(), need.quantity().setScale(SCALE, RoundingMode.HALF_UP), BigDecimal::add);
             itemUnits.putIfAbsent(child.itemId(), need.toUnitCode());

@@ -87,7 +87,14 @@ function UsageAgainstBom({ usage }: { usage: RunMaterialUsageDto }) {
             <tr key={line.itemId} style={{ borderBottom: '1px solid var(--border)' }}>
               <td style={{ ...cell, wordBreak: 'break-word' }}>
                 {line.itemCode}
-                {!line.inBom && <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>not in BOM</span>}
+                {!line.inBom && (
+                  <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>{line.optional ? 'optional, not picked' : 'not in BOM'}</span>
+                )}
+                {line.substituteFor && (
+                  <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
+                    substitute for {usage.lines.find((other) => other.itemId === line.substituteFor)?.itemCode ?? 'a BOM material'}
+                  </span>
+                )}
               </td>
               <td style={{ ...num, whiteSpace: 'nowrap' }}>{line.standard == null ? '-' : `${formatQty(line.standard)} ${line.unit ?? ''}`}</td>
               <td style={{ ...num, whiteSpace: 'nowrap' }}>{line.actual == null ? '-' : `${formatQty(line.actual)} ${line.unit ?? ''}`}</td>

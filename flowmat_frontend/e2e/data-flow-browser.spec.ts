@@ -249,7 +249,7 @@ test('Data Flow: UI creates, publishes and completes File → Transform → Data
       await expect(page.getByRole('combobox', { name: 'Flow Run', exact: true })).toContainText('finished')
     })
     await test.step('DF12: exactly one completed attempt per step, output values and events', async () => {
-      for (const [number, name, output] of [[1, 'Read CSV', '"path": "in.csv"'], [2, 'Validate rows', '"valid": true'], [3, 'Store rows', '"stored": 3']] as const) {
+      for (const [number, name, output] of [[1, 'Read CSV', /"path":\s*"in\.csv"/], [2, 'Validate rows', /"valid":\s*true/], [3, 'Store rows', /"stored":\s*3/]] as const) {
         const card = step(number, name)
         if (await card.getByRole('button', { name: 'Show attempts', exact: true }).count()) await card.getByRole('button', { name: 'Show attempts', exact: true }).click()
         await expect(card.getByText(/^Attempt \d+:/)).toHaveCount(1)

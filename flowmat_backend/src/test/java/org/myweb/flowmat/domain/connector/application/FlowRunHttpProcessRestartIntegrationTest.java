@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,7 @@ class FlowRunHttpProcessRestartIntegrationTest {
             OwnedApplication first = null;
             OwnedApplication second = null;
             CompletableFuture<HttpResponse<String>> interruptedRequest = null;
+            boolean finished = false;
             try {
                 first = launch(workspace, "first", postgres, redis, secret);
                 URI firstApi = first.api();
@@ -146,6 +148,7 @@ class FlowRunHttpProcessRestartIntegrationTest {
                 assertEquals(1L, database.queryForObject("select count(*) from flow_run_step_attempt where step_id=?", Long.class, step));
                 assertEquals(initialBoms, database.queryForObject("select count(*) from bom_header", Long.class));
                 assertEquals("running", database.queryForObject("select status from flow_run_step where step_id=?", String.class, step));
+                finished = true;
             } finally {
                 try {
                     if (second != null) second.close();
@@ -154,6 +157,8 @@ class FlowRunHttpProcessRestartIntegrationTest {
                         if (first != null) first.close();
                     } finally {
                         if (interruptedRequest != null) interruptedRequest.cancel(true);
+                        // A failing run keeps its owned logs for the message above; a passing one leaves nothing behind (audit B8).
+                        if (finished) deleteQuietly(workspace);
                     }
                 }
             }
@@ -193,7 +198,7 @@ class FlowRunHttpProcessRestartIntegrationTest {
         Path ready = workspace.resolve(name + ".ready");
         Path gateway = workspace.resolve(name + ".gateway");
         List<String> args = new ArrayList<>(List.of("-Xmx384m", "-Dspring.devtools.restart.enabled=false",
-            "-Djava.io.tmpdir=" + workspace.toAbsolutePath(), "-cp", childClasspath(), ChildApplication.class.getName(),
+            "-Djava.io.tmpdir=" + workspace.toAbsolutePath(), "-Drestart.acceptance.parent=" + ProcessHandle.current().pid(), "-cp", childClasspath(), ChildApplication.class.getName(),
             "--spring.profiles.active=dev", "--server.address=127.0.0.1", "--server.port=0", "--spring.jpa.hibernate.ddl-auto=validate",
             "--flowmat.connector.enabled=true", "--flowmat.connector.allowed-origins=" + ORIGIN,
             "--app.storage.upload-dir=" + workspace.resolve("uploads"), "--logging.level.root=WARN",
@@ -231,6 +236,9 @@ class FlowRunHttpProcessRestartIntegrationTest {
         env.put("MAIL_PORT", "2525");
         env.put("MAIL_USERNAME", "");
         env.put("MAIL_PASSWORD", "");
+        env.put("FRONTEND_URL", "http://localhost:5173");
+        env.put("APP_OAUTH2_REDIRECT_URI", "http://localhost:5173/oauth/callback");
+        env.put("APP_CORS_ALLOWED_ORIGINS", "http://localhost:5173");
         Process process = builder.start();
         OwnedApplication app = new OwnedApplication(process, java, argsFile, ready, gateway);
         try {
@@ -275,6 +283,28 @@ class FlowRunHttpProcessRestartIntegrationTest {
         assertTrue(entries.stream().anyMatch(entry -> entry.replace('\\', '/').endsWith("/classes/java/test")),
             "The child must inherit Gradle's complete test runtime classpath.");
         return String.join(File.pathSeparator, entries);
+    }
+
+    /**
+     * Best effort: a leftover folder must not fail a passing run. Windows can hold a just-stopped child's log for a moment,
+     * so the delete is tried a few times.
+     */
+    private static void deleteQuietly(Path workspace) {
+        for (int attempt = 0; attempt < 10 && Files.exists(workspace); attempt++) {
+            try (var paths = Files.walk(workspace)) {
+                paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            } catch (IOException | java.io.UncheckedIOException ignored) {
+                // Retried below; the next run uses a new folder anyway.
+            }
+            if (Files.exists(workspace)) {
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
     }
 
     private static void writeMarker(Path target, String value) throws IOException {
@@ -337,7 +367,8 @@ class FlowRunHttpProcessRestartIntegrationTest {
                 Process lookup = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
                     "(Get-CimInstance Win32_Process -Filter 'ProcessId=" + pid() + "').CommandLine")
                     .redirectErrorStream(true).start();
-                if (!lookup.waitFor(5, TimeUnit.SECONDS)) {
+                // PowerShell can take well over five seconds to start while a full test run loads the machine.
+                if (!lookup.waitFor(30, TimeUnit.SECONDS)) {
                     lookup.destroyForcibly();
                     throw new IOException("Owned child command-line lookup timed out.");
                 }
@@ -360,6 +391,10 @@ class FlowRunHttpProcessRestartIntegrationTest {
     /** Only explicitly launched child JVMs import this test-only configuration. */
     public static final class ChildApplication {
         public static void main(String[] args) {
+            // A test JVM killed outright cannot close its children; end with it instead of holding a port and logs (audit B8).
+            ProcessHandle.of(Long.getLong("restart.acceptance.parent", -1L)).ifPresentOrElse(
+                parent -> parent.onExit().thenRun(() -> Runtime.getRuntime().halt(3)),
+                () -> Runtime.getRuntime().halt(3));
             SpringApplication application = new SpringApplication(Application.class, BlockingGatewayConfiguration.class);
             application.setLogStartupInfo(true);
             // A plain application on the test classpath must not discover other tests' configurations.

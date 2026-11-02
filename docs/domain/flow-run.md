@@ -46,6 +46,7 @@ FlowRun을 장기적으로 도메인 독립적인 실행 Core로 쓴다. 지금 
 | F16 | 정확한 소수(2026-10-18, 오류 담당 수정안을 리드가 반영, 마이그레이션 없음): 단계 보고의 `outputSnapshot`, 단계 만들기의 `inputSnapshot`, 저장된 단계·실행 JSON을 읽을 때 소수를 이진 부동소수점으로 바꾸지 않는다. 그래서 `999999999999999.9999` 같은 큰 소수가 조건(`quantity = 999999999999999.9999`), Join 합계, 받은 snapshot에서 그대로다. 전에는 double로 읽혀 `1.0E15`가 되어 조건이 맞지 않고 작은 도착분이 합계에서 사라졌다 | |
 | F17 | 큰 지수 거절(2026-10-19, 오류 담당 보고를 리드가 반영): 정확한 소수(F16)로 읽은 snapshot에서 지수가 Jackson의 scale 한도(절댓값 100 000)를 넘는 수(`1e100000000` 같은 것)는 거절한다. 그대로 두면 조건·Join 합계·손실 계산이 몇 분씩 걸렸다. 단계 API와 생산 단계 API의 읽을 수 없는 본문은 500이 아니라 400이다. 생산 단계 완료(`POST /production-runs/{id}/steps/{stepId}/complete`)의 `outputSnapshot`도 이제 정확한 소수다 | 400 `inputSnapshot and outputSnapshot must be valid JSON with numbers within the safe conversion limits.` / `outputSnapshot must be valid JSON with numbers within the safe conversion limits.` |
 | F18 | 근무 시간으로 세는 지연(2026-10-19, 2fa, V99, [ADR-022](../architecture/adr/ADR-022-working-time-delay.md)): 연결의 `delayBasis`가 `working`이면 F13·F14의 근무 시간을 지연만큼 쌓은 때가 예정 시각이다([연결 계약](process-port-connection-contract.md) GR-53–GR-58). 생산 실행이 아니거나 시간을 정할 설비·인력이 없으면 모든 시간으로 센다 | 409 `Step cannot start before its scheduledAt.` |
+| F19 | 이벤트 시각 순서(2026-11-02, 리드가 고침, 마이그레이션 없음): 이벤트 원장은 시각 순, 같은 시각이면 무작위 id 순으로 읽는다. 그래서 기록기(`FlowRunEventRecorder`)는 시각을 마이크로초(Postgres가 저장하는 정밀도)로 자르고, 앞서 준 시각 이하이면 그 1µs 뒤를 준다. 한 요청이 잇달아 남긴 이벤트(예: `step_completed` 다음 `connection_filtered`)가 같은 시계 눈금을 읽어 순서가 뒤바뀌지 않게 하려는 것이다. 마지막 `step_scheduled`로 기다리는 이유(F15)를 고를 때도 이 순서를 쓴다. 보장 범위는 서버 하나다. 여러 서버가 같은 실행에 동시에 쓰면 그 사이 순서는 각 서버의 시각대로다 | 없음 |
 
 ## API
 
@@ -60,7 +61,7 @@ FlowRun을 장기적으로 도메인 독립적인 실행 Core로 쓴다. 지금 
 | `POST …/steps/{stepId}/start`·`/complete`·`/fail`·`/retry` | 단계 결과 보고 |
 | `POST …/steps/{stepId}/preview` | 완료 전 연결별 라우팅 미리보기(GR-10) |
 | `GET …/steps/{stepId}/lineage`, `GET …/steps/{stepId}/attempts` | 출처 단계 체인(Join은 여러 출처, GR-28), 시도 목록 |
-| `GET /flow-runs/{flowRunId}/events` | 이벤트 원장 |
+| `GET /flow-runs/{flowRunId}/events` | 이벤트 원장(시각 순, F19) |
 
 ## 이벤트
 

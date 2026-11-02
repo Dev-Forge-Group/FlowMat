@@ -39,7 +39,7 @@ public class BomCopyService {
         for (BomLineResponse line : source.lines()) {
             copy = bomService.addLine(copy.bomId(), new BomLineCreateRequest(line.childItemId(), line.quantity(), line.unit(),
                 line.scrapRate(), line.optionalYn(), line.substituteGroup(), line.sortOrder(), line.note(), line.lineType(),
-                line.phantom()));
+                line.phantom(), null, line.priority()));
         }
         return copy;
     }

@@ -98,6 +98,8 @@ export interface WorkOrderDto {
   instructionUrl?: string | null
   /** The equipment the order runs on; readiness checks its time in the planned window (docs/domain/equipment-schedule.md). */
   equipmentId?: string | null
+  /** Optional BOM materials the order takes, by item; its BOM calculations plan them (ADR-033). */
+  optionalItemIds?: string[]
 }
 
 export interface ProductionRunItemDto {
@@ -188,6 +190,10 @@ export interface RunMaterialUsageLineDto {
   variancePercent: number | null
   unitCost: number | null
   varianceCost: number | null
+  /** The main material this item stood in for: it takes a share of that material's standard (ADR-032). */
+  substituteFor?: string | null
+  /** An optional material of the BOM that the run's work order did not pick, so not planned (ADR-033). */
+  optional?: boolean
 }
 
 export type ReadinessCheckStatus = 'ok' | 'warn' | 'fail'
@@ -497,6 +503,8 @@ export interface BomLineImportRowDto {
   lineType?: string
   /** Y for a phantom sub-assembly, blank or N for none (docs/domain/multi-level-bom.md P1). */
   phantom?: string
+  /** Planned scrap as a percent, as on screen: 5 or 5% (ADR-031); blank for none. */
+  scrapPercent?: string
 }
 
 /** What a BOM line import did or would do; nothing is saved when any row has an error or it is a dry run. */
@@ -761,6 +769,10 @@ export interface BomLineDto {
   note: string | null
   /** A phantom sub-assembly, used through its own BOM (docs/domain/multi-level-bom.md P1). */
   phantom?: boolean
+  /** Order of preference in the substitute group, lowest first (ADR-032). */
+  priority?: number | null
+  /** The main line this one stands in for; null for a main line and a line outside a group (ADR-032). */
+  substituteFor?: string | null
 }
 
 /** One BOM revision. Only drafts can change; a change to an approved BOM is a new revision. */
@@ -798,6 +810,50 @@ export interface BomRequirementLineDto {
   lineCost?: number | null
   /** The phantom sub-assembly this material comes through (docs/domain/multi-level-bom.md P2). */
   viaItemId?: string | null
+  /** The line's planned scrap, 0 to 1; the required quantities already include it (ADR-031). */
+  scrapRate?: number | null
+  /** Materials the BOM approves in place of this one, in order of preference; not in the requirement (ADR-032). */
+  substitutes?: BomRequirementSubstituteDto[]
+}
+
+/** What the same production would take of a substitute instead of its main material, with its own scrap (ADR-032). */
+export interface BomRequirementSubstituteDto {
+  bomLineId: string
+  childItemId: string
+  requiredItemQuantity: number
+  itemUnit: string
+  unitCost: number | null
+  lineCost: number | null
+  priority: number | null
+  /** How much of the main material one item unit of this substitute stands for. */
+  mainPerUnit: number | null
+}
+
+/** Planned scrap against what a BOM revision's finished runs lost, material by material (ADR-034). */
+export interface BomScrapPerformanceDto {
+  bomId: string
+  bomVersion: number
+  /** Finished runs counted. */
+  runs: number
+  lines: BomScrapPerformanceLineDto[]
+}
+
+/** One material over the runs that planned it, each scaled to its actual output, in the item's unit. */
+export interface BomScrapPerformanceLineDto {
+  itemId: string
+  itemCode: string
+  unit: string | null
+  plannedScrapRate: number
+  runs: number
+  /** What the output takes without scrap. */
+  net: number
+  planned: number
+  /** What went in, a substitute as its main material. */
+  actual: number
+  /** actual ÷ net − 1; null when net is zero. */
+  actualLossRate: number | null
+  /** False when some input could not be converted and is left out. */
+  complete: boolean
 }
 
 export interface BomRequirementDto {
@@ -813,6 +869,8 @@ export interface BomRequirementDto {
   costComplete?: boolean
   /** By-products and waste the batch gives off; not in lines. */
   outputs?: BomOutputDto[]
+  /** Optional materials no work order picked here: worked out like lines, but not in them or in materialCost (ADR-033). */
+  optionals?: BomRequirementLineDto[]
 }
 
 /** GET /boms/{id}/buildable: how much of the product usable stock could make now (docs/domain/material-requirements.md). */

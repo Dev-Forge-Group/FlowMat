@@ -38,14 +38,18 @@ test('real editor publishes a working delay and production steps wait for the eq
   await page.goto(`/projects/${projectId}/workflows/${workflowId}`)
   const edge = page.locator(`.react-flow__edge[data-id="${connectionId}"] .react-flow__edge-interaction`)
   const chooseConnection = async () => {
-    await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
-    await expect(edge).toBeAttached()
-    const point = await edge.evaluate((element) => {
-      const path = element as SVGPathElement
-      const point = path.getPointAtLength(path.getTotalLength() / 4).matrixTransform(path.getScreenCTM()!)
-      return { x: point.x, y: point.y }
-    })
-    await page.mouse.click(point.x, point.y)
+    // A point measured while the canvas is still settling can miss the edge; select again until the inspector opens.
+    await expect(async () => {
+      await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
+      await expect(edge).toBeAttached()
+      const point = await edge.evaluate((element) => {
+        const path = element as SVGPathElement
+        const point = path.getPointAtLength(path.getTotalLength() / 4).matrixTransform(path.getScreenCTM()!)
+        return { x: point.x, y: point.y }
+      })
+      await page.mouse.click(point.x, point.y)
+      await expect(page.getByRole('combobox', { name: 'Delay counts' })).toBeVisible({ timeout: 1_000 })
+    }).toPass({ timeout: 10_000 })
   }
   await chooseConnection()
   await expect(page.getByRole('combobox', { name: 'Delay counts' })).toHaveValue('elapsed')

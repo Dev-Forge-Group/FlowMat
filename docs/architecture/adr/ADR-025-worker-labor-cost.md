@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-10-23). 로컬 구현 2ff(2026-10-23, 커밋 전, V103).** 사용자 계획 "10. 그 다음 Worker Labor Cost ADR owner-only monetary access project-scoped effective rate history"(2026-10-19)가 세 가지를 정했다. 금액은 소유자만 보고, 단가는 프로젝트마다 따로 두며, 적용 시작일이 있는 이력으로 남긴다(결정 1–3). 나머지 세부는 사용자 사전 위임(2026-10-18, "구현 중 새 설계 선택 | 권장안으로 진행")에 따라 리드가 고른 권장안이다. 구현은 2ff이고 새 마이그레이션은 V103이다(V102와 함께 커밋 전).
+**Accepted (2026-10-23). 로컬 구현 2ff(2026-10-23, V103, 2026-10-25 `398de46`에서 커밋).** 사용자 계획 "10. 그 다음 Worker Labor Cost ADR owner-only monetary access project-scoped effective rate history"(2026-10-19)가 세 가지를 정했다. 금액은 소유자만 보고, 단가는 프로젝트마다 따로 두며, 적용 시작일이 있는 이력으로 남긴다(결정 1–3). 나머지 세부는 사용자 사전 위임(2026-10-18, "구현 중 새 설계 선택 | 권장안으로 진행")에 따라 리드가 고른 권장안이다. 구현은 2ff이고 새 마이그레이션은 V103이다(V102와 함께 2026-10-25 `398de46`에서 커밋).
 
 근거: [ADR-019](ADR-019-run-labor.md) "결정하지 않은 것: 작업자 단가와 인건비", [ADR-020](ADR-020-labor-correction.md), [작업자 달력](../../domain/worker-calendar.md) LB1–LB18, 같은 일을 설비에 대해 정한 [설비 원가](../../domain/equipment-setup-cost.md) AS2·AS8–AS10.
 

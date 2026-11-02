@@ -86,6 +86,9 @@ public class InventoryCommandService {
         }
 
         if (type.changesStatusOnly()) {
+            // Preserve this transaction's pending edits before checking the current state under its row lock.
+            entities.flush();
+            entities.refresh(before, LockModeType.PESSIMISTIC_WRITE);
             changeQuarantine(before, type == InventoryTransactionType.QUARANTINE, now);
         } else {
             if (quantityDelta.signum() == 0 && reservedDelta.signum() == 0) {
@@ -347,16 +350,15 @@ public class InventoryCommandService {
         }
         String lotNo = lot.getLotNo();
         OffsetDateTime now = OffsetDateTime.now();
-        for (Inventory row : inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED)) {
-            if (QUARANTINED.equals(row.getInventoryStatus())) {
-                inventoryRepository.updateStatus(row.getInventoryId(), AVAILABLE, now);
-                record(findActiveInventory(row.getInventoryId()), InventoryTransactionType.UNQUARANTINE, BigDecimal.ZERO, BigDecimal.ZERO,
-                    INSPECTION_RELEASE, lotId, "Released after the receipt checks of LOT " + lotNo, null, actorUserId);
-            }
+        for (String inventoryId : inventoryRepository.findInventoryIdsToReleaseForLot(lotId)) {
+            inventoryRepository.updateStatus(inventoryId, AVAILABLE, now);
+            record(findActiveInventory(inventoryId), InventoryTransactionType.UNQUARANTINE, BigDecimal.ZERO, BigDecimal.ZERO,
+                INSPECTION_RELEASE, lotId, "Released after the receipt checks of LOT " + lotNo, null, actorUserId);
         }
-        List<Inventory> stock = inventoryRepository.findAllByLotIdAndDeletedYn(lotId, NOT_DELETED);
+        InventoryRepository.LotStockTotals stock = inventoryRepository.lotStockTotals(lotId);
         LotMaster current = lotMasterRepository.findById(lotId).orElseThrow();
-        current.setLotStatus(stock.isEmpty() ? AVAILABLE : lotStatusFor(stock));
+        current.setLotStatus(stock.getStockRows() == 0 ? AVAILABLE
+            : lotStatusFor(stock.getQuantityOnHand(), stock.getQuantityReserved()));
         lotMasterRepository.saveAndFlush(current);
         return current.getLotStatus();
     }
