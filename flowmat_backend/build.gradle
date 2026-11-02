@@ -50,7 +50,7 @@ dependencies {
 	implementation 'software.amazon.awssdk:url-connection-client'
 
 	// API Documentation
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0'
 
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
