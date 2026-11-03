@@ -24,6 +24,10 @@ import type { PresenceMessage, GraphChangeMessage } from '../../../entities/work
 import { Link, useNavigate } from 'react-router-dom'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { EditorPublish } from './EditorPublish'
+import { CanvasReadingChip } from './CanvasReadingChip'
+import { ProcessFinder } from './ProcessFinder'
+import { ReadingGuide } from './ReadingGuide'
+import { useCanvasReading } from '../model/useCanvasReading'
 import type {
   WorkspaceEditorCommandApi,
   WorkspaceEditorSelectionSnapshot,
@@ -961,6 +965,14 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const fitViewRef = useRef<() => void>(() => {})
   const selectAllRef = useRef<() => void>(() => {})
   const exportPngRef = useRef<(filename: string) => void>(() => {})
+  // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
+  const reading = useCanvasReading(canvas)
+  const readingRef = useRef(reading)
+  readingRef.current = reading
+  const centerProcessRef = useRef<(processId: string) => void>(() => {})
+  const handleCenterReady = useCallback((fn: (processId: string) => void) => { centerProcessRef.current = fn }, [])
+  const [finderOpen, setFinderOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const deleteApiRef = useRef<{
     deleteSelection(): Promise<void>
@@ -1051,6 +1063,19 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           editorCommandApiRef.current?.clearSelection()
           setEditorSelection(EMPTY_EDITOR_SELECTION)
           clearSelection()
+          return
+        }
+
+        // Reading: "/" finds a process, "?" opens the guide, Esc stops reading once the Pointer tool is back (above).
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '/' || e.key === '?')) {
+          e.preventDefault()
+          if (e.key === '/') setFinderOpen(true)
+          else setGuideOpen(true)
+          return
+        }
+        if (e.key === 'Escape' && readingRef.current.active) {
+          e.preventDefault()
+          readingRef.current.clear()
           return
         }
 
@@ -1658,6 +1683,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               drawingEnabled={activeTool !== 'select'}
               canEditAnnotations={canEditAnnotations}
               onNodeSelect={(processId) => {
+                // While a route is being picked, the click also names its start or end.
+                readingRef.current.pick(processId)
                 editorCommandApiRef.current?.clearSelection()
                 setEditorSelection(EMPTY_EDITOR_SELECTION)
                 selectNode(processId)
@@ -1697,6 +1724,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onEditorCommandReady={handleEditorCommandReady}
               editingPresence={editingPresence}
               remoteAnnotationPreviews={remoteAnnotationPreviews}
+              reading={reading.view?.highlight ?? null}
+              onCenterReady={handleCenterReady}
               onEdgeReconnect={async (oldEdgeId, newConnection) => {
                 await deleteConnection(oldEdgeId)
                 await createConnection(newConnection)
@@ -1723,6 +1752,23 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               />
             )}
           </Suspense>
+          <CanvasReadingChip reading={reading} selectedProcessId={selectedProcessId}
+            onFind={() => setFinderOpen(true)} onGuide={() => setGuideOpen(true)} />
+          {finderOpen && (
+            <ProcessFinder
+              nodes={canvas.nodes}
+              onClose={() => setFinderOpen(false)}
+              onPick={(processId) => {
+                setFinderOpen(false)
+                editorCommandApiRef.current?.clearSelection()
+                setEditorSelection(EMPTY_EDITOR_SELECTION)
+                selectNode(processId)
+                reading.focus(processId)
+                centerProcessRef.current(processId)
+              }}
+            />
+          )}
+          {guideOpen && <ReadingGuide onClose={() => setGuideOpen(false)} />}
           {/* Remote cursor overlay: cursor coordinates are window-relative, so subtract the canvas rect. */}
           {(() => {
             const rect = canvasContainerRef.current?.getBoundingClientRect()

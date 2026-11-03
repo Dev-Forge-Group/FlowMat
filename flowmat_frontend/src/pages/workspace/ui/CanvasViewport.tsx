@@ -44,6 +44,7 @@ import {
   type WorkflowPaletteTool,
 } from '../../../entities/workflow/model/nodeCatalog'
 import type { PatchCanvasAnnotationInput } from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
+import type { CanvasReadingHighlight } from '../model/canvasReadingModel'
 import { CanvasNode } from './CanvasNode'
 import { CanvasEdge } from './CanvasEdge'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
@@ -302,6 +303,9 @@ function ExportController({ onReady }: { onReady?: (fn: (filename: string) => vo
       const viewport = getViewportForBounds(bounds, W, H, 0.1, 2, 0.1)
       const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
       if (!el) return
+      // The picture is the workflow itself: reading highlights stay out of it.
+      const frame = el.closest('.workspace-canvas-viewport')
+      frame?.classList.add('reading-exporting')
       void toPng(el, {
         backgroundColor: '#f4f3f8',
         width: W,
@@ -317,7 +321,7 @@ function ExportController({ onReady }: { onReady?: (fn: (filename: string) => vo
         a.href = dataUrl
         a.download = `${filename}.png`
         a.click()
-      })
+      }).finally(() => frame?.classList.remove('reading-exporting'))
     })
   }, [onReady])
 
@@ -401,6 +405,10 @@ interface Props {
   onEditorSelectionChange?(snapshot: WorkspaceEditorSelectionSnapshot): void
   onEditorCommandReady?(api: WorkspaceEditorCommandApi | null): void
   remoteAnnotationPreviews?: ReadonlyMap<string, { points: { x: number; y: number }[]; annotationType: string }>
+  /** What is being read (a process's neighbours, upstream, downstream or a route); the rest recedes. View only. */
+  reading?: CanvasReadingHighlight | null
+  /** A way to bring one process into view, for the process finder. */
+  onCenterReady?(fn: (processId: string) => void): void
 }
 
 type RfNode = {
@@ -503,6 +511,8 @@ export function CanvasViewport({
   onEditorCommandReady,
   editingPresence,
   remoteAnnotationPreviews,
+  reading = null,
+  onCenterReady,
 }: Props) {
   const storageKey = `flowmat-viewport-${workflowId}`
   const savedViewport = useMemo(() => loadSavedViewport(storageKey), [storageKey])
@@ -539,6 +549,13 @@ export function CanvasViewport({
   const setHoveredEdgeId = useCanvasInteractionStore((s) => s.setHoveredEdgeId)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const selectedEditorAnnotationIdsRef = useRef<string[]>([])
+
+  useEffect(() => {
+    if (!reactFlowInstance) return
+    onCenterReady?.((processId) => {
+      void reactFlowInstance.fitView({ nodes: [{ id: processId }], padding: 0.8, maxZoom: 1.25, duration: 300 })
+    })
+  }, [onCenterReady, reactFlowInstance])
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -930,6 +947,15 @@ export function CanvasViewport({
     [activeTool, appendFreehandPoint, reactFlowInstance]
   )
 
+  // Reading marks every process and connection as part of what is read or receding (index.css "Canvas reading").
+  const readingNodes = useMemo(() => (reading
+    ? localNodes.map((node) => ({ ...node, className: reading.nodeIds.has(node.id)
+      ? `reading-on reading-${reading.tone}${node.id === reading.origin ? ' reading-origin' : ''}` : 'reading-dim' }))
+    : localNodes), [localNodes, reading])
+  const readingEdges = useMemo(() => (reading
+    ? localEdges.map((edge) => ({ ...edge, className: reading.edgeIds.has(edge.id) ? `reading-on reading-${reading.tone}` : 'reading-dim' }))
+    : localEdges), [localEdges, reading])
+
   return (
     <div
       className="workspace-canvas-viewport workspace-canvas-viewport--editor-layer"
@@ -943,8 +969,8 @@ export function CanvasViewport({
     >
       <ReactFlow
         onInit={setReactFlowInstance}
-        nodes={localNodes as unknown as Node[]}
-        edges={localEdges as unknown as Edge[]}
+        nodes={readingNodes as unknown as Node[]}
+        edges={readingEdges as unknown as Edge[]}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={handleNodesChange}

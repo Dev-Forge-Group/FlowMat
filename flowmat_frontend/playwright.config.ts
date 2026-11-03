@@ -1,5 +1,12 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// CI serves the built app (E2E_WEB_SERVER=preview after `npm run build`). A cold dev server transforms modules on first
+// request, and a lazily loaded screen that fails to load mid-test swaps the page for the router's error screen.
+// `vite preview` keeps the same /api proxy (preview.proxy defaults to server.proxy).
+const webServerCommand = process.env.E2E_WEB_SERVER === 'preview'
+  ? 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort'
+  : 'npm run dev -- --host 127.0.0.1 --port 4173'
+
 export default defineConfig({
   testDir: './e2e',
   testIgnore: [
@@ -21,7 +28,7 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+          command: webServerCommand,
           url: 'http://127.0.0.1:4173',
           reuseExistingServer: !process.env.CI,
         },

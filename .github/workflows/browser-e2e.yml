@@ -18,6 +18,7 @@ jobs:
         shard: [1, 2, 3]
     env:
       REAL_API_E2E: ''
+      E2E_WEB_SERVER: preview
 
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +33,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: flowmat_frontend
         run: npm ci
+
+      - name: Build frontend for E2E
+        working-directory: flowmat_frontend
+        run: npm run build
 
       - name: Install Playwright browser
         working-directory: flowmat_frontend
@@ -56,6 +61,8 @@ jobs:
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      E2E_WEB_SERVER: preview
     services:
       postgres:
         image: postgres:16
@@ -132,6 +139,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: flowmat_frontend
         run: npm ci
+
+      - name: Build frontend for E2E
+        working-directory: flowmat_frontend
+        run: npm run build
 
       - name: Verify backend API contract
         run: |

@@ -1137,6 +1137,181 @@ code {
   color: #dc2626;
 }
 
+/* Canvas reading (pages/workspace/model/useCanvasReading.ts): view only, and never part of an exported picture.
+   Upstream is dashed violet, downstream solid green, so the two differ without colour too. */
+.canvas-reading-chip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  max-width: min(760px, calc(100% - 16px));
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 12px;
+}
+
+.canvas-reading-chip button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.canvas-reading-chip button[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.canvas-reading-chip__hint {
+  color: var(--text);
+}
+
+.canvas-reading-popup {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(420px, calc(100% - 32px));
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.canvas-reading-popup input {
+  width: 100%;
+}
+
+.canvas-reading-popup ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.canvas-reading-popup li {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.canvas-reading-popup li[aria-selected='true'] {
+  background: var(--accent-bg);
+}
+
+.canvas-reading-popup dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0;
+}
+
+.canvas-reading-popup dt {
+  font-weight: 600;
+}
+
+.canvas-reading-popup dd {
+  margin: 0;
+}
+
+.canvas-reading-popup > button {
+  margin-top: 8px;
+}
+
+.workspace-canvas-viewport .react-flow__node,
+.workspace-canvas-viewport .react-flow__edge {
+  transition: opacity 160ms ease;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-dim,
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-dim {
+  opacity: 0.22;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-on .react-flow__edge-path {
+  stroke-width: 3.5px !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-upstream .react-flow__edge-path {
+  stroke: #8b5cf6 !important;
+  stroke-dasharray: 7 4 !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-downstream .react-flow__edge-path {
+  stroke: #10b981 !important;
+  stroke-dasharray: none !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-route .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-dasharray: none !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-origin {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-upstream:not(.reading-origin) {
+  outline: 2px dashed #8b5cf6;
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-downstream:not(.reading-origin) {
+  outline: 2px solid #10b981;
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-route:not(.reading-origin) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* The exported picture reads styles at once, so the highlights leave without fading. */
+.workspace-canvas-viewport.reading-exporting .react-flow__node,
+.workspace-canvas-viewport.reading-exporting .react-flow__edge {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-canvas-viewport .react-flow__node,
+  .workspace-canvas-viewport .react-flow__edge {
+    transition: none;
+  }
+}
+
+/* A failed background refresh: the editor stays, this note floats above it. */
+.workspace-refresh-error {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  background: var(--bg);
+  color: #dc2626;
+  font-size: 12px;
+}
+
 /* ============================================================
    On-canvas node picker (ported from tldraw OnCanvasComponentPicker)
    ============================================================ */

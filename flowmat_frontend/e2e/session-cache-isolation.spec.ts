@@ -48,7 +48,8 @@ async function mockSessions(page: Page, holdOwner = false) {
       const rejected = !hasSession || refreshExpired
       return send(route, rejected ? null : { accessToken: accountToken(account, 2) }, rejected ? 401 : 200)
     }
-    if (path === '/api/session-expiry-check') return send(route, null, 401)
+    // Once the session has expired, the access token is refused everywhere (and so is the refresh, above).
+    if (refreshExpired) return send(route, null, 401)
 
     const requester: Account = route.request().headers().authorization === `Bearer ${accountToken('owner')}`
       || route.request().headers().authorization === `Bearer ${accountToken('owner', 2)}` ? 'owner' : 'viewer'
@@ -127,11 +128,11 @@ test('expired refresh removes an already mounted protected route', async ({ page
   await expect(page.getByRole('heading', { name: 'Organizations', exact: true })).toBeVisible()
   const previousRefreshes = session.refreshCount()
   session.expire()
-  await page.evaluate(async () => {
-    const path = '/src/shared/api/httpClient.ts'
-    const { httpClient } = await import(/* @vite-ignore */ path)
-    await httpClient.get('/session-expiry-check').catch(() => undefined)
-  })
+  // The next request the open screen makes meets the expired session; CI serves the built app, so the test cannot
+  // import the HTTP client from /src.
+  const create = page.getByRole('form', { name: 'New team organization' })
+  await create.getByRole('textbox', { name: 'Organization name' }).fill('Night shift')
+  await create.getByRole('button', { name: 'Create organization' }).click()
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Organizations', exact: true })).toHaveCount(0)

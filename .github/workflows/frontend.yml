@@ -52,4 +52,6 @@ jobs:
 
     - name: Run mocked authentication E2E
       if: matrix.node-version == '22.x'
+      env:
+        E2E_WEB_SERVER: preview
       run: npm run test:e2e -- e2e/auth.spec.ts e2e/session-cache-isolation.spec.ts
