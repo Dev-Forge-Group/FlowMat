@@ -134,6 +134,9 @@ test('a new project goes to the chosen team organization, or the personal one by
   await form.getByPlaceholder('프로젝트 이름').fill('Mine')
   await form.getByRole('button', { name: '만들기', exact: true }).click()
   await expect.poll(() => created.length).toBe(1)
+  // The form clears the name once the project is made; typing before that would be cleared with it.
+  await expect(form.getByRole('button', { name: '만들기', exact: true })).toBeEnabled()
+  await expect(form.getByPlaceholder('프로젝트 이름')).toHaveValue('')
   await organization.selectOption('org-team')
   await form.getByPlaceholder('프로젝트 이름').fill('Shared line')
   await form.getByRole('button', { name: '만들기', exact: true }).click()
