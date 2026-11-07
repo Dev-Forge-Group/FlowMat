@@ -1155,11 +1155,14 @@ code {
   background: var(--bg);
   color: var(--text-h);
   font-size: 12px;
+  /* Only its buttons take clicks; a process under its text or gaps can still be clicked. */
+  pointer-events: none;
 }
 
 .canvas-reading-chip button {
   font-size: 12px;
   padding: 2px 8px;
+  pointer-events: auto;
 }
 
 .canvas-reading-chip button[aria-pressed='true'] {
@@ -1168,6 +1171,31 @@ code {
 }
 
 .canvas-reading-chip__hint {
+  color: var(--text);
+}
+
+.canvas-reading-chip__error {
+  color: #dc2626;
+}
+
+.canvas-reading-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvas-reading-steps button {
+  border-radius: 999px;
+  background: var(--accent-bg);
+}
+
+.canvas-reading-steps li + li::before {
+  content: '→';
+  margin-right: 4px;
   color: var(--text);
 }
 
@@ -1228,6 +1256,31 @@ code {
   margin-top: 8px;
 }
 
+/* The kind and run pickers stay open while choices change, so they keep to the side rather than over the canvas. */
+.canvas-reading-popup--lens,
+.canvas-reading-popup--side {
+  left: 8px;
+  transform: none;
+  width: min(340px, calc(100% - 16px));
+}
+
+.canvas-reading-popup--lens h3,
+.canvas-reading-popup--side h3 {
+  margin: 0;
+}
+
+.canvas-reading-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.canvas-reading-kinds button[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .workspace-canvas-viewport .react-flow__node,
 .workspace-canvas-viewport .react-flow__edge {
   transition: opacity 160ms ease;
@@ -1236,6 +1289,11 @@ code {
 .workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-dim,
 .workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-dim {
   opacity: 0.22;
+}
+
+/* A lens's nearby processes: what its kind touches, between read and receding. */
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-near {
+  opacity: 0.6;
 }
 
 .workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-on .react-flow__edge-path {
@@ -1255,6 +1313,24 @@ code {
 .workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-route .react-flow__edge-path {
   stroke: var(--accent) !important;
   stroke-dasharray: none !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-lens {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* While a route is picked: where it can go, dashed, so it differs from the route itself (solid). */
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.reading-candidate .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-dasharray: 4 4 !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-candidate:not(.reading-origin) {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
 }
 
 .workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.reading-origin {
@@ -1281,6 +1357,212 @@ code {
   border-radius: 10px;
 }
 
+/* A production run over the canvas (useRunOverlay.ts): a mark at each process's top right with a shape as well as a
+   colour, apart from the reading outlines; red only for a failure. Never part of an exported picture. */
+.canvas-run-summary {
+  color: var(--text);
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-mark::after {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bg);
+  border-radius: 999px;
+  background: #64748b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-waiting::after {
+  content: '○';
+  background: #94a3b8;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-running::after {
+  content: '▶';
+  background: #2563eb;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-completed::after {
+  content: '✓';
+  background: #059669;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-failed::after {
+  content: '✕';
+  background: #dc2626;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-skipped::after {
+  content: '↷';
+  background: #94a3b8;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.run-cancelled::after {
+  content: '⊘';
+  background: #64748b;
+}
+
+/* What the draft changed since a published revision (useRevisionChanges.ts, archify's delta): a square mark at a process's
+   top left, + added (green) and Δ changed (amber), apart from the round run marks on the right; a connection in the same
+   colour, solid when added and dashed when changed. Never part of an exported picture. */
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.change-mark::before {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bg);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.change-added::before {
+  content: '+';
+  background: #059669;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__node.change-changed::before {
+  content: 'Δ';
+  background: #d97706;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.change-added .react-flow__edge-path {
+  stroke: #059669 !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: none !important;
+}
+
+.workspace-canvas-viewport:not(.reading-exporting) .react-flow__edge.change-changed .react-flow__edge-path {
+  stroke: #d97706 !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: 6 3 !important;
+}
+
+.canvas-changes ul {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvas-changes li button {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 12px;
+  text-align: left;
+}
+
+/* A process's connections in the inspector (ProcessConnections.tsx): out, in and loop rows that preview their line. */
+.process-connections h4 {
+  margin: 12px 0 4px;
+}
+
+.process-connections h5 {
+  margin: 6px 0 2px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.process-connections ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.process-connections li button {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 12px;
+  text-align: left;
+}
+
+/* The workflow check's issues (ValidationIssueList.tsx): fixes, the warnings an issue explains and folded evidence under
+   each issue's button. */
+.validation-issues {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.validation-issues > li {
+  margin-bottom: 6px;
+}
+
+/* Layout warnings from the same check (LayoutWarningList.tsx): measured from the canvas as drawn, never part of publishing. */
+.layout-warnings p {
+  margin: 8px 0 2px;
+}
+
+.layout-warnings__list {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.validation-issues__fixes {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  color: var(--text-h);
+  font-size: 12px;
+}
+
+.validation-issues__hides {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.validation-issues__evidence {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.validation-issues__evidence dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 0;
+}
+
+.validation-issues__evidence dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The exported picture is the workflow only (archify exports without view state): no selection, toolbars or insert
+   buttons. The picture copies lines as they are written, not as styled, so CanvasViewport's export gives a selected
+   line its own kind's look for the moment of the export instead. */
+.workspace-canvas-viewport.reading-exporting .canvas-node--selected {
+  border-color: var(--border);
+  box-shadow: var(--node-shadow);
+}
+
+.workspace-canvas-viewport.reading-exporting .react-flow__node-toolbar,
+.workspace-canvas-viewport.reading-exporting .react-flow__edge-toolbar,
+.workspace-canvas-viewport.reading-exporting .edge-insert-button {
+  visibility: hidden !important;
+}
+
 /* The exported picture reads styles at once, so the highlights leave without fading. */
 .workspace-canvas-viewport.reading-exporting .react-flow__node,
 .workspace-canvas-viewport.reading-exporting .react-flow__edge {
@@ -1292,6 +1574,138 @@ code {
   .workspace-canvas-viewport .react-flow__edge {
     transition: none;
   }
+}
+
+/* A run's step timing (pages/runs/ui/RunStepTiming.tsx): bars on one time axis, dashed while still running, red only for a
+   failure, worked time thinner under its step. */
+.run-timing {
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.run-timing__table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.run-timing__table th,
+.run-timing__table td {
+  padding: 3px 6px;
+  font-weight: normal;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.run-timing__table thead th {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.run-timing__lane {
+  position: relative;
+  width: 60%;
+  min-width: 200px;
+}
+
+.run-timing__axis {
+  position: relative;
+  display: block;
+  height: 16px;
+}
+
+.run-timing__axis span {
+  position: absolute;
+  transform: translateX(-50%);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.run-timing__axis span:first-child {
+  transform: none;
+}
+
+.run-timing__axis span:last-child {
+  transform: translateX(-100%);
+}
+
+.run-timing__bar {
+  position: absolute;
+  top: 50%;
+  height: 10px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: #64748b;
+}
+
+.run-timing__bar--open {
+  border: 1px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.2);
+}
+
+.run-timing__bar--failed {
+  background: #dc2626;
+}
+
+.run-timing__bar--cancelled {
+  background: #cbd5e1;
+}
+
+.run-timing__bar--worked {
+  height: 6px;
+  background: #a78bfa;
+}
+
+.run-timing__axis span:only-child {
+  left: 50% !important;
+  transform: translateX(-50%);
+}
+
+/* A Flow Run's event timeline (pages/runs/ui/FlowRunEventTimeline.tsx): one lane per step, marks by shape as well as
+   colour, red only for a problem; a folded quiet stretch is a dashed gap with its real length above. */
+.event-timeline {
+  margin: 8px 0;
+}
+
+.event-timeline__lane {
+  height: 22px;
+}
+
+.event-timeline__mark {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.event-timeline__mark--alert {
+  color: #dc2626;
+}
+
+.event-timeline__mark--recovery {
+  color: #d97706;
+}
+
+.event-timeline__fold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--border);
+}
+
+/* Folded lengths sit on a second line under the start and end times, so they never cover them. */
+.event-timeline .run-timing__axis {
+  height: 30px;
+}
+
+.event-timeline .run-timing__axis .event-timeline__fold-label {
+  top: 15px;
+  font-style: italic;
+  transform: translateX(-50%);
 }
 
 /* A failed background refresh: the editor stays, this note floats above it. */

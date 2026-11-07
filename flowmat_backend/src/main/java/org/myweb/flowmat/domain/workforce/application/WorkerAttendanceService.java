@@ -3,7 +3,6 @@ package org.myweb.flowmat.domain.workforce.application;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -167,9 +166,8 @@ public class WorkerAttendanceService implements WorkerAttendanceQuery {
     }
 
     private List<WorkerAttendance> lines(String projectId, String userId, Range range) {
-        ZoneId zone = calendars.zone(projectId);
-        return repository.findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
-            projectId, userId, range.from().atStartOfDay(zone).toOffsetDateTime(), range.to().plusDays(1).atStartOfDay(zone).toOffsetDateTime());
+        return repository.findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
+            projectId, userId, range.from(), range.to());
     }
 
     /** Every date of the range with the minutes of its closed stretches that count, by the date of the clock-in. */

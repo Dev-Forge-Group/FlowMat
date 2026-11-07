@@ -536,10 +536,15 @@ test('authenticated user can open workspace, select a node, and switch canvas to
   })
   await mockAuthApi(page)
   await mockWorkspaceApi(page)
+  await page.route('**/api/auth/login', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await route.fallback()
+  })
   await page.goto('/')
   await page.locator('input').nth(0).fill('demo-owner')
   await page.locator('input[type="password"]').fill('demo1234')
   await page.getByRole('button', { name: 'Log in' }).click()
+  await expect(page.getByText('안녕하세요, Demo Owner님')).toBeVisible()
 
   await page.goto('/projects/prj-e2e/workflows/wf-e2e')
   await expect(page.getByText('E2E Workflow')).toBeVisible()

@@ -12,6 +12,7 @@ import {
   BoxSelect,
   BringToFront,
   Copy,
+  FileCode,
   FileJson,
   Group,
   Image,
@@ -90,6 +91,7 @@ export const ribbonConfig: RibbonTabSkeleton[] = [
         buttons: [
           { id: 'export-json', icon: FileJson, label: 'Export JSON' },
           { id: 'export-png', icon: Image, label: 'Export PNG' },
+          { id: 'export-svg', icon: FileCode, label: 'Export SVG' },
         ],
       },
     ],

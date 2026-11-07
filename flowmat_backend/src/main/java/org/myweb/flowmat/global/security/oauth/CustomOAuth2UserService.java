@@ -88,7 +88,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         }
         String status = user.getUserStatus();
         return !"Y".equalsIgnoreCase(user.getDeleteYn())
-            && (status == null || (!"withdrawn".equalsIgnoreCase(status) && !"locked".equalsIgnoreCase(status)));
+            && (status == null || (!"withdrawn".equalsIgnoreCase(status) && !"locked".equalsIgnoreCase(status) && !"dormant".equalsIgnoreCase(status)));
     }
 
     private String asText(Object value) {

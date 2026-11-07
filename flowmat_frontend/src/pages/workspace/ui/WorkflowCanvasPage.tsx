@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import type {
   CanvasAnnotationPoint,
@@ -11,7 +11,8 @@ import { fetchWorkflowPresenceSnapshot } from '../../../entities/workflow/api/wo
 import { applyGraphChangesToCanvas } from '../../../entities/workflow/model/applyGraphChangesToCanvas'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
-import { sortedValidationIssues, validationSelection } from '../model/validationPanelModel'
+import { validationSelection } from '../model/validationPanelModel'
+import { ValidationIssueList } from './ValidationIssueList'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
@@ -24,10 +25,21 @@ import type { PresenceMessage, GraphChangeMessage } from '../../../entities/work
 import { Link, useNavigate } from 'react-router-dom'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { EditorPublish } from './EditorPublish'
-import { CanvasReadingChip } from './CanvasReadingChip'
-import { ProcessFinder } from './ProcessFinder'
-import { ReadingGuide } from './ReadingGuide'
+import { SemanticPassport } from './SemanticPassport'
+import { RouteProbe } from './RouteProbe'
+import { DiagramNav } from './DiagramNav'
+import { ReadingReceipts } from './ReadingReceipts'
+import './archifyReading.css'
+import { SemanticLens } from './SemanticLens'
+import { ProcessFinder, type FinderContext } from './ProcessFinder'
+import { DiagramGuide } from './DiagramGuide'
+import { RunPicker } from './RunPicker'
+import { ChangesPicker } from './ChangesPicker'
+import { LayoutWarningList } from './LayoutWarningList'
+import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
+import { useRevisionChanges } from '../model/useRevisionChanges'
 import { useCanvasReading } from '../model/useCanvasReading'
+import { useRunOverlay } from '../model/useRunOverlay'
 import type {
   WorkspaceEditorCommandApi,
   WorkspaceEditorSelectionSnapshot,
@@ -965,14 +977,58 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const fitViewRef = useRef<() => void>(() => {})
   const selectAllRef = useRef<() => void>(() => {})
   const exportPngRef = useRef<(filename: string) => void>(() => {})
+  const exportSvgRef = useRef<(filename: string) => void>(() => {})
   // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
-  const reading = useCanvasReading(canvas)
+  const revealRef = useRef<(processIds: string[]) => void>(() => {})
+  const handleRevealReady = useCallback((fn: (processIds: string[]) => void) => { revealRef.current = fn }, [])
+  const revealProcesses = useCallback((processIds: string[]) => revealRef.current(processIds), [])
+  // The canvas as drawn, measured when the workflow is checked (layout warnings; never part of publishing).
+  const layoutRef = useRef<(() => LayoutSnapshot) | null>(null)
+  const handleLayoutReady = useCallback((fn: () => LayoutSnapshot) => { layoutRef.current = fn }, [])
+  const [layoutFound, setLayoutFound] = useState<LayoutWarning[] | null>(null)
+  const checkLayout = useCallback(() => {
+    const measure = layoutRef.current
+    setLayoutFound(measure ? layoutWarnings(measure()) : null)
+  }, [])
+  const reading = useCanvasReading(canvas, revealProcesses)
   const readingRef = useRef(reading)
   readingRef.current = reading
-  const centerProcessRef = useRef<(processId: string) => void>(() => {})
-  const handleCenterReady = useCallback((fn: (processId: string) => void) => { centerProcessRef.current = fn }, [])
-  const [finderOpen, setFinderOpen] = useState(false)
-  const [guideOpen, setGuideOpen] = useState(false)
+  // A production run shown over the canvas (address `run=`): each process's mark from its latest step; view only.
+  const canvasProcessIds = useMemo(() => new Set(canvas.nodes.map((node) => node.processId)), [canvas.nodes])
+  // archify keeps one reading panel open at a time: the finder, the lens, the guide, or FlowMat's run and revision pickers.
+  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | null>(null)
+  const runView = useRunOverlay(canvas.workflow.workflowId, reading.run.id, canvasProcessIds, panel === 'runs')
+  const changesView = useRevisionChanges(canvas.workflow.workflowId, reading.changes.id, canvas)
+  // archify's view controls: the semantic radar (overview map), the camera stepper and the zoom it shows.
+  const [mapOpen, setMapOpen] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const cameraRef = useRef<{ zoomStep(direction: 1 | -1): void; reset(): void } | null>(null)
+  const handleCameraReady = useCallback((api: { zoomStep(direction: 1 | -1): void; reset(): void }) => {
+    cameraRef.current = api
+  }, [])
+  // The Semantic Passport follows the process in hand: the selected one, else the one being read. While a route is picked
+  // or shown the Route Probe owns the reading, as in archify, so the passport steps aside.
+  const routeOwnsReading = Boolean(reading.picking) || reading.state?.kind === 'route'
+  const passportProcessId = routeOwnsReading ? null
+    : selectedProcessId ?? (reading.state?.kind === 'focus' ? reading.state.processId : null)
+  const passportNode = passportProcessId ? canvas.nodeMap[passportProcessId] ?? null : null
+  // archify's route begin: the process in the passport is the start, else the start is picked first; the panels close.
+  const beginRoute = () => {
+    setPanel(null)
+    reading.startRoute(passportProcessId)
+  }
+  const toggleRoute = () => {
+    if (reading.picking) reading.cancelRoute()
+    else if (reading.state?.kind === 'route') reading.clear()
+    else beginRoute()
+  }
+  const finderContext: FinderContext = !reading.picking ? { kind: 'focus' }
+    : reading.picking.from == null ? { kind: 'route-source', badges: reading.picking.choices }
+      : { kind: 'route-target', fromName: reading.nameOf(reading.picking.from), badges: reading.picking.choices }
+  const linksOf = (processId: string) => {
+    const relations = reading.relationsOf(processId)
+    return relations.out.length + relations.in.length + relations.loop.length
+  }
 
   const deleteApiRef = useRef<{
     deleteSelection(): Promise<void>
@@ -1066,16 +1122,23 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           return
         }
 
-        // Reading: "/" finds a process, "?" opens the guide, Esc stops reading once the Pointer tool is back (above).
+        // Reading: "/" finds a process (or a route's start or end), "?" opens the guide; once the Pointer tool is back
+        // (above), Esc stops picking a route, then stops reading.
         if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '/' || e.key === '?')) {
           e.preventDefault()
-          if (e.key === '/') setFinderOpen(true)
-          else setGuideOpen(true)
+          setPanel(e.key === '/' ? 'finder' : 'guide')
           return
         }
-        if (e.key === 'Escape' && readingRef.current.active) {
+        // archify's view keys: M the semantic radar, + - 0 the camera stepper. (R, L and T stay the editor's tools.)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', '+', '=', '-', '0'].includes(e.key)) {
           e.preventDefault()
-          readingRef.current.clear()
+          if (e.key === 'm' || e.key === 'M') setMapOpen((open) => !open)
+          else if (e.key === '0') cameraRef.current?.reset()
+          else cameraRef.current?.zoomStep(e.key === '-' ? -1 : 1)
+          return
+        }
+        if (e.key === 'Escape' && readingRef.current.escape()) {
+          e.preventDefault()
           return
         }
 
@@ -1375,6 +1438,11 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
       disabled: canvas.nodes.length === 0,
       title: 'Export as PNG',
     },
+    'export-svg': {
+      onClick: () => exportSvgRef.current(canvas.workflow.workflowName),
+      disabled: canvas.nodes.length === 0,
+      title: 'Export as SVG (vector, the workflow only)',
+    },
     'save-editor-document': {
       onClick: () => void handleSaveEditorDocument(),
       disabled: !canEditAnnotations,
@@ -1557,11 +1625,13 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
 
       <section aria-label="Workflow validation" style={{ margin: '12px 16px 0' }}>
         <button type="button" onClick={() => {
+          checkLayout()
           if (showValidation) void validationQuery.refetch()
           else setShowValidation(true)
         }}>Check workflow</button>
         <EditorPublish workflowId={canvas.workflow.workflowId} projectId={canvas.workflow.projectId} editable={canEditAnnotations}
           onRefused={() => {
+            checkLayout()
             if (showValidation) void validationQuery.refetch()
             else setShowValidation(true)
           }} />
@@ -1573,24 +1643,25 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               <>
                 <p>{validationQuery.data.errors} errors, {validationQuery.data.warnings} warnings</p>
                 {validationQuery.data.issues.length === 0 && <p>No issues found.</p>}
-                <ul style={{ maxHeight: 180, overflowY: 'auto' }}>
-                  {sortedValidationIssues(validationQuery.data.issues).map((issue, index) => (
-                    <li key={`${issue.code}-${issue.connectionId ?? issue.ioId ?? issue.processId ?? index}`}>
-                      <button type="button" onClick={() => {
-                        const target = validationSelection(issue)
-                        if (target?.kind === 'connection') selectEdge(target.id)
-                        else if (target?.kind === 'process') {
-                          selectNode(target.id)
-                          if (target.ioId) useWorkspaceStore.getState().selectPort(target.ioId)
-                        }
-                      }}>
-                        {issue.severity}: {issue.code} — {issue.message}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <ValidationIssueList issues={validationQuery.data.issues} nameOf={reading.nameOf} onSelect={(issue) => {
+                  const target = validationSelection(issue)
+                  if (target?.kind === 'connection') selectEdge(target.id)
+                  else if (target?.kind === 'process') {
+                    selectNode(target.id)
+                    if (target.ioId) useWorkspaceStore.getState().selectPort(target.ioId)
+                  }
+                }} />
               </>
             )}
+            <LayoutWarningList warnings={layoutFound} nameOf={reading.nameOf} onSelect={(warning) => {
+              if (warning.code === 'LINE_OVER_PROCESS') {
+                reading.reveal([warning.from, warning.to, warning.processId])
+                selectEdge(warning.connectionId)
+              } else {
+                reading.reveal([...new Set(warning.ends.flat())])
+                selectEdge(warning.connectionIds[0])
+              }
+            }} />
           </div>
         )}
       </section>
@@ -1712,6 +1783,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onFitViewReady={(fn) => { fitViewRef.current = fn }}
               onSelectAllReady={(fn) => { selectAllRef.current = fn }}
               onExportReady={(fn) => { exportPngRef.current = fn }}
+              onSvgExportReady={(fn) => { exportSvgRef.current = fn }}
               onDeleteReady={(api) => { deleteApiRef.current = api }}
               onPresence={handlePresence}
               onGraphChange={handleGraphChange}
@@ -1724,8 +1796,14 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onEditorCommandReady={handleEditorCommandReady}
               editingPresence={editingPresence}
               remoteAnnotationPreviews={remoteAnnotationPreviews}
-              reading={reading.view?.highlight ?? null}
-              onCenterReady={handleCenterReady}
+              reading={reading.highlight}
+              onRevealReady={handleRevealReady}
+              mapOpen={mapOpen}
+              onCameraReady={handleCameraReady}
+              onZoomChange={setZoom}
+              runMarks={runView.marks}
+              changeMarks={changesView.changes}
+              onLayoutReady={handleLayoutReady}
               onEdgeReconnect={async (oldEdgeId, newConnection) => {
                 await deleteConnection(oldEdgeId)
                 await createConnection(newConnection)
@@ -1752,23 +1830,78 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               />
             )}
           </Suspense>
-          <CanvasReadingChip reading={reading} selectedProcessId={selectedProcessId}
-            onFind={() => setFinderOpen(true)} onGuide={() => setGuideOpen(true)} />
-          {finderOpen && (
-            <ProcessFinder
-              nodes={canvas.nodes}
-              onClose={() => setFinderOpen(false)}
-              onPick={(processId) => {
-                setFinderOpen(false)
+          {passportNode && (
+            <SemanticPassport key={passportNode.processId} reading={reading} node={passportNode}
+              onClose={() => {
+                clearSelection()
+                if (reading.state?.kind === 'focus') reading.clear()
+              }}
+              onFollow={(processId) => {
+                // Walks the graph: the process at the other end is selected and brought into view.
                 editorCommandApiRef.current?.clearSelection()
                 setEditorSelection(EMPTY_EDITOR_SELECTION)
                 selectNode(processId)
-                reading.focus(processId)
-                centerProcessRef.current(processId)
+                reading.reveal([processId])
+              }} />
+          )}
+          <RouteProbe reading={reading} onFind={() => setPanel('finder')} />
+          <ReadingReceipts
+            lens={reading.state?.kind === 'lens' && reading.view && panel !== 'lens'
+              ? { text: reading.view.text, onClear: reading.clear } : null}
+            run={runView.summary ? { text: runView.summary, onHide: () => reading.run.show(null) } : null}
+            changes={changesView.summary ? { text: changesView.summary, onHide: () => reading.changes.show(null) } : null} />
+          <DiagramNav
+            routeActive={routeOwnsReading} onRoute={toggleRoute}
+            mapOpen={mapOpen} onMap={() => setMapOpen((open) => !open)}
+            lensActive={reading.state?.kind === 'lens'} onLens={() => setPanel((open) => (open === 'lens' ? null : 'lens'))}
+            runsActive={reading.run.id != null} onRuns={() => setPanel((open) => (open === 'runs' ? null : 'runs'))}
+            changesActive={reading.changes.id != null}
+            onChanges={() => setPanel((open) => (open === 'changes' ? null : 'changes'))}
+            onFind={() => setPanel('finder')} onGuide={() => setPanel('guide')}
+            zoom={zoom} onZoomOut={() => cameraRef.current?.zoomStep(-1)} onReset={() => cameraRef.current?.reset()}
+            onZoomIn={() => cameraRef.current?.zoomStep(1)} />
+          {panel === 'runs' && (
+            <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
+              onClose={() => setPanel(null)} />
+          )}
+          {panel === 'changes' && (
+            <ChangesPicker revisions={changesView.revisions} loading={changesView.loading} shownId={reading.changes.id}
+              changes={changesView.changes} nameOf={reading.nameOf} onShow={reading.changes.show}
+              onReveal={(processId) => reading.reveal([processId])} onClose={() => setPanel(null)} />
+          )}
+          {panel === 'lens' && (
+            <SemanticLens kinds={reading.lens.kinds} chosen={reading.lens.chosen}
+              status={reading.state?.kind === 'lens' ? reading.view?.text ?? null : null}
+              onToggle={reading.lens.toggle} onClear={reading.clear} onClose={() => setPanel(null)} />
+          )}
+          {panel === 'finder' && (
+            <ProcessFinder
+              nodes={canvas.nodes}
+              context={finderContext}
+              linksOf={linksOf}
+              onClose={() => setPanel(null)}
+              onPick={(processId) => {
+                setPanel(null)
+                editorCommandApiRef.current?.clearSelection()
+                setEditorSelection(EMPTY_EDITOR_SELECTION)
+                selectNode(processId)
+                // While a route is picked the finder names its start (brought into view) or its end; else it reads the process.
+                const naming = reading.picking?.from === null
+                if (!reading.pick(processId)) reading.focus(processId)
+                else if (naming) reading.reveal([processId])
               }}
             />
           )}
-          {guideOpen && <ReadingGuide onClose={() => setGuideOpen(false)} />}
+          {panel === 'guide' && (
+            <DiagramGuide processes={canvas.nodes.length} connections={canvas.edges.length} onClose={() => setPanel(null)}
+              onAction={(action) => {
+                if (action === 'route') beginRoute()
+                else if (action === 'map') {
+                  setPanel(null)
+                  setMapOpen(true)
+                } else setPanel(action === 'find' ? 'finder' : action)
+              }} />
+          )}
           {/* Remote cursor overlay: cursor coordinates are window-relative, so subtract the canvas rect. */}
           {(() => {
             const rect = canvasContainerRef.current?.getBoundingClientRect()

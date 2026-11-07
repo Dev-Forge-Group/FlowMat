@@ -10,6 +10,12 @@ export interface WorkflowValidationIssue {
   ioId: string | null
   connectionId: string | null
   message: string
+  /** What the rule looked at: stored values, counts and allowed values. */
+  evidence?: Record<string, unknown>
+  /** Edits that clear this issue by the check's own rules; never general advice. */
+  supportedFixes?: string[]
+  /** Codes of the derived warnings this issue explains, which are not listed separately. */
+  suppresses?: string[]
 }
 
 export interface WorkflowValidationReport {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type SetStateAction } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import './inventory.css'
 import { useItemsQuery } from '../../../entities/catalog/api/useItemsQuery'
@@ -98,7 +98,13 @@ export function InventoryRoute() {
     purchaseUnitQty: '',
     details: EMPTY_ITEM_INFO,
   }
-  const [form, setForm] = useState(EMPTY_ITEM_FORM)
+  const [form, updateForm] = useState(EMPTY_ITEM_FORM)
+  const formRevision = useRef(0)
+
+  function setForm(next: SetStateAction<typeof EMPTY_ITEM_FORM>) {
+    formRevision.current += 1
+    updateForm(next)
+  }
 
   function resetForm() {
     setForm(EMPTY_ITEM_FORM)
@@ -146,6 +152,7 @@ export function InventoryRoute() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    const submittedRevision = formRevision.current
     try {
       if (editingItem) {
         await updateMutation.mutateAsync({
@@ -177,7 +184,7 @@ export function InventoryRoute() {
           details: itemInfoPayload(form.details),
         })
       }
-      resetForm()
+      if (formRevision.current === submittedRevision) resetForm()
     } catch {
       // Surfaced through the mutation error state below the form.
     }

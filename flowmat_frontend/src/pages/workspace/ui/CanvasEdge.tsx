@@ -8,6 +8,7 @@ import {
   Position,
   type EdgeProps,
 } from '@xyflow/react'
+import type { CSSProperties } from 'react'
 import type { CanvasEdgeViewModel } from '../../../entities/workflow/model/types'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 
@@ -15,7 +16,8 @@ type CanvasEdgeComponentProps = Omit<EdgeProps, 'data'> & {
   data: CanvasEdgeViewModel
 }
 
-const CONNECTION_TYPE_STYLE: Record<string, { stroke: string; strokeDasharray?: string }> = {
+/** Each kind of connection's colour and dash; the SVG export draws with the same ones. */
+export const CONNECTION_TYPE_STYLE: Record<string, { stroke: string; strokeDasharray?: string }> = {
   material: { stroke: '#94a3b8' },
   material_flow: { stroke: '#94a3b8' },
   fluid_flow: { stroke: '#38bdf8' },
@@ -99,12 +101,14 @@ export function CanvasEdge({
 
   const arrowColor = selected ? '#6366f1' : typeStyle.stroke
   const controlsVisible = hovered || selected
+  // The kind's own look, so an exported picture can draw a selected line as it is (CanvasViewport's plainSelectedLines).
+  const typeLook = { '--edge-type-stroke': typeStyle.stroke, '--edge-type-dash': typeStyle.strokeDasharray ?? 'none' } as CSSProperties
 
   return (
     <>
       <defs>
         <marker id={`${id}-arrow`} markerWidth="16" markerHeight="16" refX="8" refY="4" orient="auto">
-          <path d="M0,0 L0,8 L8,4 z" fill={arrowColor} />
+          <path d="M0,0 L0,8 L8,4 z" fill={arrowColor} style={typeLook} />
         </marker>
       </defs>
 
@@ -113,6 +117,7 @@ export function CanvasEdge({
         path={edgePath}
         markerEnd={`url(#${id}-arrow)`}
         style={{
+          ...typeLook,
           stroke: arrowColor,
           strokeWidth: selected ? 2.5 : 1.5,
           strokeDasharray: selected ? undefined : typeStyle.strokeDasharray,

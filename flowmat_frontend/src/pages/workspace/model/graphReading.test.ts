@@ -14,13 +14,16 @@ const bakery = graph([
 ])
 
 describe('readingGraph', () => {
-  it('takes processes and their saved connections, leaving out connections to processes that are gone', () => {
-    const node = (processId: string) => ({ processId }) as CanvasNodeViewModel
+  it('takes processes, their kinds and their saved connections, leaving out connections to processes that are gone', () => {
+    const node = (processId: string, nodeType?: string) => ({ processId, nodeType }) as CanvasNodeViewModel
     const edge = (connectionId: string, fromProcessId: string, toProcessId: string) =>
       ({ connectionId, fromProcessId, toProcessId }) as CanvasEdgeViewModel
-    expect(readingGraph({ nodes: [node('a'), node('b')], edges: [edge('ab', 'a', 'b'), edge('ax', 'a', 'gone')] })).toEqual({
-      nodeIds: ['a', 'b'], edges: [{ id: 'ab', from: 'a', to: 'b' }],
-    })
+    const graph = readingGraph({ nodes: [node('a'), node('b', 'decision'), node('c', 'Storage ')],
+      edges: [edge('ab', 'a', 'b'), edge('ax', 'a', 'gone')] })
+    expect(graph.nodeIds).toEqual(['a', 'b', 'c'])
+    expect(graph.edges).toEqual([{ id: 'ab', from: 'a', to: 'b' }])
+    // An unknown kind reads as a plain process; an alias folds into its kind.
+    expect([...graph.kinds!]).toEqual([['a', 'process'], ['b', 'output'], ['c', 'storage']])
   })
 })
 

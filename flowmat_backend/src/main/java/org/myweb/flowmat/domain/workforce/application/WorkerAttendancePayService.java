@@ -113,8 +113,8 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
         // The seconds of each work day's attendance before a stretch, as its overtime is its latest minutes (decision 24).
         Map<LocalDate, long[]> before = new HashMap<>();
         List<PremiumSpan> spans = new ArrayList<>();
-        for (WorkerAttendance row : attendance.findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
-                projectId, userId, from.atStartOfDay(zone).toOffsetDateTime(), to.plusDays(1).atStartOfDay(zone).toOffsetDateTime())) {
+        for (WorkerAttendance row : attendance.findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
+                projectId, userId, from, to)) {
             Worked day = row.isCancelled() || row.getClockOut() == null ? null : days.get(row.getWorkDate());
             // Whole minutes, as the day's attended minutes count them.
             long whole = day == null ? 0 : Duration.between(row.getClockIn(), row.getClockOut()).toMinutes() * 60;
@@ -224,9 +224,8 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
         // Attended and night minutes of each work day's closed stretches that count, by the date of the clock-in (AT6), from six
         // days before the first so that its week counts whole (decision 14).
         Map<LocalDate, int[]> minutes = new TreeMap<>();
-        for (WorkerAttendance row : attendance.findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
-                projectId, userId, first.minusDays(6).atStartOfDay(zone).toOffsetDateTime(),
-                last.plusDays(1).atStartOfDay(zone).toOffsetDateTime())) {
+        for (WorkerAttendance row : attendance.findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
+                projectId, userId, first.minusDays(6), last)) {
             if (row.isCancelled() || row.getClockOut() == null) {
                 continue;
             }
