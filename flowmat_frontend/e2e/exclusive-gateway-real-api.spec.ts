@@ -62,7 +62,10 @@ test('Exclusive gateway: the real editor saves a default, graph runs choose one 
     await test.step('the editor persists Default route to the real API', async () => {
       await page.goto(`/projects/${projectId}/workflows/${workflowId}`)
       await expect(page.locator('.react-flow__node')).toHaveCount(5)
+      // Fit View lives on the ribbon's View tab; the editor's own buttons are back on Home.
+      await page.getByRole('tab', { name: 'View', exact: true }).click()
       await page.getByRole('button', { name: 'Fit View', exact: true }).click()
+      await page.getByRole('tab', { name: 'Home', exact: true }).click()
       const edge = page.locator(`.react-flow__edge[data-id="${toRest}"] .react-flow__edge-interaction`)
       await expect(edge).toHaveCount(1)
       const point = await edge.evaluate((element) => {
