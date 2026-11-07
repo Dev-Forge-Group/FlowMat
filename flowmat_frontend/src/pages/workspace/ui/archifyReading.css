@@ -594,6 +594,11 @@
   font-family: var(--ax-font);
   pointer-events: none;
 }
+/* Beside an open passport (.focus-chip, rendered before the receipts), which sits above them on the left: the canvas
+   between the side panels is narrower than both side by side, and the passport would cover the receipts' buttons. */
+.focus-chip ~ .reading-receipts {
+  max-width: min(30rem, calc(100% - 2.5rem - min(22rem, 100% - 13rem)));
+}
 .reading-receipt {
   display: flex;
   flex-wrap: wrap;

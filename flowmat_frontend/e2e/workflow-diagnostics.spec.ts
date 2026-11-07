@@ -84,8 +84,9 @@ test('the workflow check shows fixes, explained warnings and evidence under each
   // An issue still selects what it is about.
   const terminal = check.locator('.validation-issues > li').filter({ has: page.getByRole('button', { name: /UNEXPECTED_TERMINAL/ }) })
   await expect(terminal.getByRole('list', { name: 'Suggested fixes' }).getByRole('listitem')).toHaveCount(2)
-  const chip = page.getByRole('region', { name: 'Canvas reading' })
-  await expect(chip).toContainText('Select a process to follow its connections.')
+  // The selected process opens in the Semantic Passport.
+  const passport = page.getByRole('region', { name: 'Left', exact: true })
+  await expect(passport).toHaveCount(0)
   await terminal.getByRole('button', { name: /UNEXPECTED_TERMINAL/ }).click()
-  await expect(chip.getByRole('button', { name: 'Upstream 0' })).toBeVisible()
+  await expect(passport).toContainText('Semantic passport')
 })
