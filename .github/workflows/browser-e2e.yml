@@ -107,6 +107,12 @@ jobs:
       - name: Run connector reference Node tests
         run: node --test scripts/connector-reference-api.test.mjs scripts/connector-reference-flow.test.mjs
 
+      # Compile first so the readiness wait below only covers application startup, not the first build of
+      # every module on a fresh runner.
+      - name: Build backend
+        working-directory: flowmat_backend
+        run: ./gradlew classes
+
       - name: Start backend
         working-directory: flowmat_backend
         env:
