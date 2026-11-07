@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createLineElement } from '../elements/LineElement'
-import { createTriangleElement } from '../elements/PolygonElement'
-import { toElementId } from '../model/ElementId'
+import { createLineElement, createTriangleElement, toElementId } from '../../../lib/flowmat-editor'
 import {
   annotationToEditorElement,
   annotationsToEditorDocument,
   editorElementToCreateAnnotationInput,
   editorElementToPatchAnnotationInput,
 } from './annotationEditorAdapter'
-import type { CanvasAnnotationViewModel } from '../../../entities/workflow/model/types'
+import type { CanvasAnnotationViewModel } from '../../workflow/model/types'
 
 describe('annotationEditorAdapter', () => {
   it('converts rectangle annotations to editor elements and create payloads', () => {
