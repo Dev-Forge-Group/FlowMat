@@ -1,1 +1,25 @@
 rootProject.name = 'flowmat_backend'
+
+// One Gradle module per bounded context (docs/architecture/domain-map.md §4), plus platform for the shared
+// global code and the user context it needs. The root project is the Spring Boot application: it assembles the
+// modules and holds the configuration, migrations, scheduled batches and all tests.
+[
+	'platform',
+	'project',
+	'notification',
+	'payment',
+	'catalog',
+	'bom',
+	'connector',
+	'workflow',
+	'flowrun',
+	'rule',
+	'inventory',
+	'quality',
+	'purchasing',
+	'workforce',
+	'production',
+].each { name ->
+	include ":modules:${name}"
+	project(":modules:${name}").projectDir = file("modules/${name}")
+}

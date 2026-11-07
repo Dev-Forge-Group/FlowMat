@@ -6,7 +6,7 @@
 
 **Accepted (2026-10-18, 사용자 결정 "Accept as recommended"). 로컬 구현 2eq(2026-10-18, `9500678`에서 커밋).** 같은 날 사용자 요청("ADR 초안부터")으로 초안을 썼고, 사용자가 권장안 그대로 수용 기준 6개를 닫았다.
 
-근거: [ADR-002](ADR-002-module-dependency.md) 결정 4와 "결정하지 않은 것", [주간 계획](../../status/WEEK-PLAN-2026-10-19.md) "남은 7줄", [`ProjectAccessService`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/project/application/ProjectAccessService.java).
+근거: [ADR-002](ADR-002-module-dependency.md) 결정 4와 "결정하지 않은 것", [주간 계획](../../status/WEEK-PLAN-2026-10-19.md) "남은 7줄", [`ProjectAccessService`](../../../flowmat_backend/modules/project/src/main/java/org/myweb/flowmat/domain/project/application/ProjectAccessService.java).
 
 ## 배경
 

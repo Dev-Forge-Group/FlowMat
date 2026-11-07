@@ -39,8 +39,8 @@
    - **Stage B**: 기존 코드를 고칠 때 그 파일의 위반을 공개 API로 바꾼다. 일괄 수정은 하지 않는다.
    - **Stage C**: 다른 도메인 Entity import 금지. 별도 결정이다. [ADR-018](ADR-018-entity-boundary.md)에서 정했다(2026-10-19 기준선 39줄 동결, 2026-10-25 0줄이 되어 동결을 풀었다).
 5. 첫 기준 구현은 다음 두 곳이며, 이것을 앞으로 cross-domain 호출의 표준 예제로 삼는다. 둘 다 2026-10-02에 구현했다.
-   - bom → catalog 4줄(2026-10-02 신규): 동결하지 않고 [`CatalogQuery`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/catalog/application/publicapi/CatalogQuery.java)로 바꾼다.
-   - `ProductionFlowRunAdapter`: [`FlowRunCommand`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/flowrun/application/publicapi/FlowRunCommand.java)로 바꿔 production이 Flow Run 저장 구현을 모르게 한다.
+   - bom → catalog 4줄(2026-10-02 신규): 동결하지 않고 [`CatalogQuery`](../../../flowmat_backend/modules/catalog/src/main/java/org/myweb/flowmat/domain/catalog/application/publicapi/CatalogQuery.java)로 바꾼다.
+   - `ProductionFlowRunAdapter`: [`FlowRunCommand`](../../../flowmat_backend/modules/flowrun/src/main/java/org/myweb/flowmat/domain/flowrun/application/publicapi/FlowRunCommand.java)로 바꿔 production이 Flow Run 저장 구현을 모르게 한다.
 6. `domain/erp`·`mes`·`scm`·`wms` 같은 대형 패키지를 만들지 않는다. 새 bounded context는 기존 어디에도 속하지 않는 책임이 분명할 때만 만든다.
 
 ## 결정하지 않은 것

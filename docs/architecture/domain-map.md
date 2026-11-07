@@ -7,7 +7,7 @@
 
 ## 1. Bounded context
 
-모두 `org.myweb.flowmat.domain.<context>` 아래에 있고 `api`·`application`·`domain`·`repository`로 나뉜다. 다른 context는 `application.publicapi`로만 쓴다(ADR-002).
+모두 `org.myweb.flowmat.domain.<context>` 아래에 있고 `api`·`application`·`domain`·`repository`로 나뉜다. 다른 context는 `application.publicapi`로만 쓴다(ADR-002). 2026-11-07부터 context마다 Gradle 모듈 `flowmat_backend/modules/<context>`에 있다. `user`와 `global`(websocket 제외)은 `modules/platform`에 함께 있다([ADR-035](adr/ADR-035-gradle-modules.md)).
 
 | 구분 | context | 책임 | 주요 엔티티 | 공개 API(`application.publicapi`) |
 |---|---|---|---|---|

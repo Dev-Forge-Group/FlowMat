@@ -1,0 +1,15 @@
+// Bounded context modules this one depends on directly (docs/architecture/domain-map.md §4).
+dependencies {
+	implementation project(':modules:platform')
+	implementation project(':modules:project')
+	implementation project(':modules:notification')
+	implementation project(':modules:catalog')
+	implementation project(':modules:bom')
+	implementation project(':modules:workflow')
+	implementation project(':modules:flowrun')
+	implementation project(':modules:rule')
+	implementation project(':modules:inventory')
+	implementation project(':modules:quality')
+	implementation project(':modules:purchasing')
+	implementation project(':modules:workforce')
+}

@@ -301,7 +301,7 @@ NT7 실제 API는 V74 임시 DB에서 workers 1/retries 0/trace off로 **1건 �
 ### 2026-10-12 V74 알림 보안·실제 API 검증 — 완료
 
 - **원인:** NT4 권한 상실/다른 프로젝트 알림의 `read-all` 2건 RED(관련 9건 중 2실패): 목록·개별 읽기와 달리 bulk 명령은 접근 권한을 확인하지 않아 marked 0/1 대신 2를 반환하고 숨겨진 행까지 읽음 처리했다.
-- **수정:** `flowmat_backend/src/main/java/org/myweb/flowmat/domain/notification/application/NotificationService.java`의 `markAllRead`에 기존 `readable(userId)`를 적용했다. 신규 `NotificationSecurityRegressionIntegrationTest.java`(10건), `flowmat_frontend/e2e/notification-reorder-real-api.spec.ts`(2건), `scripts/ci/notification-e2e-fixture.sql`. 원본 리드 서비스·계약·Flyway·결정 상태의 다른 부분은 바꾸지 않았다. 편집 전 git status/mtime 확인하고 담당 목록을 먼저 기록했다.
+- **수정:** `flowmat_backend/modules/notification/src/main/java/org/myweb/flowmat/domain/notification/application/NotificationService.java`의 `markAllRead`에 기존 `readable(userId)`를 적용했다. 신규 `NotificationSecurityRegressionIntegrationTest.java`(10건), `flowmat_frontend/e2e/notification-reorder-real-api.spec.ts`(2건), `scripts/ci/notification-e2e-fixture.sql`. 원본 리드 서비스·계약·Flyway·결정 상태의 다른 부분은 바꾸지 않았다. 편집 전 git status/mtime 확인하고 담당 목록을 먼저 기록했다.
 - **검증:** 격리 V74에서 `gradlew -p flowmat_backend test jacocoTestCoverageVerification build --offline --no-daemon --console=plain` **1,283건/210클래스, 실패·오류·제외 0**, 라인 **83.34%**, 분기 **70.20%**, gate/build exit 0(8m 27s). 관련 보안·알림·프로젝트 **86건 실패 0**(신규 10건 포함), 기존 NCR·창고·안전재고 등 **84건 실패 0**. 신규 롤백 테스트의 JPA flush 누락으로 첫 보완 실행에서 1실패가 있었으며 테스트를 고쳐 최종 통과했다(제품 결함으로 집계하지 않음).
 - **프런트·브라우저:** 해당 V74 snapshot `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 모두 exit 0, **633건/98파일 실패 0**. 전체 모의 Playwright **137통과/24의도적 제외/실패·flaky 0**, workers 1/retries 0(5.4m). 실 API 신규 2건 **2통과/실패·제외·flaky 0**(최종 9.7s, trace off): NCR·창고·작업지시 본문/ref/재배정 중복 방지·남의 알림 404·HTML 텍스트 렌더링·권한 상실 후 숨김/read-all 0, 위치 안전재고 하위 bin 합산·화면 변경/해제. 신규 스펙 strict TypeScript 검사 exit 0; 기존 ESLint 설정은 JS만 검사하므로 TS E2E를 ESLint로 검사했다고 주장하지 않는다.
 - **최신 후속 호환성:** 리드가 검증 중 2dj/NT7 소유자 재고 경보 알림을 추가해 별도 최신 snapshot을 만들었다(복사 중 SHA 변화 0). 알림 보안·리드 알림 3건·경보·안전재고·권한 **92건 실패·오류·제외 0** 및 프런트 **633건**·typecheck/lint/build exit 0. 1,283건 전체 결과는 NT7 추가 전 snapshot의 결과이며 최신 트리 전체 결과로 바꾸지 않는다. 실행 정책 편집의 추가 오류·검증은 별도 작업 중 항목에서 다룬다.
@@ -346,7 +346,7 @@ NT7 실제 API는 V74 임시 DB에서 workers 1/retries 0/trace off로 **1건 �
 
 ### 2026-10-10 P1 Facts 회귀 검토(오류 수정 담당)
 
-- **수정·검증 완료:** `flowmat_backend/src/main/java/org/myweb/flowmat/domain/inventory/application/StockFactsQueryImpl.java`, 새 `flowmat_backend/src/test/java/org/myweb/flowmat/StockFactsRegressionIntegrationTest.java`. 수정 전 StockFactsQueryImpl은 clean·mtime 2026-10-08이며 리드 예약 목록에 없었다. 리드의 ProductionPlanningReferences/첨부/LOT/setup 파일은 편집하지 않는다.
+- **수정·검증 완료:** `flowmat_backend/modules/inventory/src/main/java/org/myweb/flowmat/domain/inventory/application/StockFactsQueryImpl.java`, 새 `flowmat_backend/src/test/java/org/myweb/flowmat/StockFactsRegressionIntegrationTest.java`. 수정 전 StockFactsQueryImpl은 clean·mtime 2026-10-08이며 리드 예약 목록에 없었다. 리드의 ProductionPlanningReferences/첨부/LOT/setup 파일은 편집하지 않는다.
 - 범위: 잠금 전에 읽은 L1 캐시의 오래된 재고, 트랜잭션 잠금 유지·MANDATORY, BigDecimal/날짜/null 왕복 및 일괄 조회 수. P0 격리본을 보존하고 `C:/Users/Public/Documents/ESTsoft/CreatorTemp/flowmat-facts-review-20261010`에서 테스트 먼저 재현한다. 새 마이그레이션 없음.
 
 
@@ -714,22 +714,22 @@ V69 격리본과 해당 수정 기준으로 관련 **94건 통과**, 실패·오
 
 ### 2026-10-09 역할 변경 및 리드 인계
 
-- **검증 완료(P0, 더 이상 편집 중 아님):** `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/application/WorkOrderReadinessService.java`, `flowmat_backend/src/test/java/org/myweb/flowmat/domain/production/application/StockAllocationServiceTest.java`, `flowmat_backend/src/test/java/org/myweb/flowmat/RunCostIntegrationTest.java`. HEAD `9162c6d` + 이 3개 파일만 올린 별도 격리 복사본에서 전체 검증한다. 첨부 WIP·새 마이그레이션·기능 WIP를 섞지 않는다. 동결 목록은 ArchUnit 자동 축소만 허용한다.
+- **검증 완료(P0, 더 이상 편집 중 아님):** `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/application/WorkOrderReadinessService.java`, `flowmat_backend/src/test/java/org/myweb/flowmat/domain/production/application/StockAllocationServiceTest.java`, `flowmat_backend/src/test/java/org/myweb/flowmat/RunCostIntegrationTest.java`. HEAD `9162c6d` + 이 3개 파일만 올린 별도 격리 복사본에서 전체 검증한다. 첨부 WIP·새 마이그레이션·기능 WIP를 섞지 않는다. 동결 목록은 ArchUnit 자동 축소만 허용한다.
 - **첨부 작업 즉시 중단·리드 소유로 이관:** 파일을 삭제·원복하지 않았다. 아래 목록의 코드/설정/테스트는 이후 리드 승인 없이 수정하지 않는다.
   - `flowmat_backend/build.gradle`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/api/InstructionAttachmentController.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/exception/MultipartExceptionHandler.java` (2026-10-10 리드가 `production/api/InstructionAttachmentExceptionHandler`에서 이동)
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/api/dto/response/InstructionAttachmentResponse.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/application/InstructionAttachmentService.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/application/WorkInstructionService.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/domain/entity/InstructionAttachment.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/repository/InstructionAttachmentRepository.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/config/S3StorageConfiguration.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/config/StorageProperties.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/storage/LocalStorageService.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/storage/S3StorageService.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/storage/StorageService.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/global/storage/UploadValidation.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/api/InstructionAttachmentController.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/exception/MultipartExceptionHandler.java` (2026-10-10 리드가 `production/api/InstructionAttachmentExceptionHandler`에서 이동)
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/api/dto/response/InstructionAttachmentResponse.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/application/InstructionAttachmentService.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/application/WorkInstructionService.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/domain/entity/InstructionAttachment.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/repository/InstructionAttachmentRepository.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/config/S3StorageConfiguration.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/config/StorageProperties.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/storage/LocalStorageService.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/storage/S3StorageService.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/storage/StorageService.java`
+  - `flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/global/storage/UploadValidation.java`
   - `flowmat_backend/src/main/resources/application.yml`
   - `flowmat_backend/src/main/resources/db/migration/V59__instruction_attachment.sql`
   - `flowmat_backend/src/test/java/org/myweb/flowmat/InstructionAttachmentIntegrationTest.java`

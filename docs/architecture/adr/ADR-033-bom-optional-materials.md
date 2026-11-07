@@ -18,7 +18,7 @@
 ## 배경 (2026-11-02 코드·개발 DB 기준)
 
 - **열은 V1부터 있다.** `bom_line.optional_yn char(1) DEFAULT 'N'`이다. 줄 추가 API가 저장하지만 승인이 "optional materials are not supported yet"로 거절한다. 개발 DB 줄 48개는 모두 N이다.
-- **작업지시의 BOM revision은 바뀔 수 있다.** 초안은 BOM을 비워 둘 수 있고, 승인·일정 변경 때 계획일의 유효 revision으로 정해진다([`WorkOrderBomSelection`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/application/WorkOrderBomSelection.java)). 그래서 BOM 줄 id로 선택을 저장하면 revision이 바뀔 때 끊긴다.
+- **작업지시의 BOM revision은 바뀔 수 있다.** 초안은 BOM을 비워 둘 수 있고, 승인·일정 변경 때 계획일의 유효 revision으로 정해진다([`WorkOrderBomSelection`](../../../flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/application/WorkOrderBomSelection.java)). 그래서 BOM 줄 id로 선택을 저장하면 revision이 바뀔 때 끊긴다.
 - **승인된 작업지시는 고치지 않는다.** 수정 API는 초안만 받는다.
 - **선택을 둘 곳이 없다.** 작업지시마다 넣을지를 저장하려면 새 저장소가 필요하다.
 - **두 사용자 모두에게 필요하다.**

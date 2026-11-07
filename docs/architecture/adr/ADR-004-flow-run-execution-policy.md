@@ -24,7 +24,7 @@
 
 - Flow Run은 노드를 스스로 실행하지 않는다. 외부(사용자·API 호출자)가 단계를 `start`·`complete`·`fail`·`retry`로 보고한다([실행 모델](../execution-model.md) §5).
 - 실패 정책은 **연결**에 있다. `process_connection.failure_policy`(V25, CHECK `stop`·`skip`·`retry`, 기본 `stop`). 그래프 실행에서 단계가 실패하면 그 단계를 만든 진입 연결의 정책을 따른다(포트·연결 계약 GR-05).
-- `retry`는 [`FlowRunStepService`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunStepService.java)의 상수 `MAX_GRAPH_RETRIES = 3`으로, 처음 시도 뒤 **즉시** 최대 3회 새 시도(`running`)를 연다. 간격도 횟수 설정도 없다. 수동 실행은 사용자가 `POST …/retry`로 직접 다시 시도한다.
+- `retry`는 [`FlowRunStepService`](../../../flowmat_backend/modules/flowrun/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunStepService.java)의 상수 `MAX_GRAPH_RETRIES = 3`으로, 처음 시도 뒤 **즉시** 최대 3회 새 시도(`running`)를 연다. 간격도 횟수 설정도 없다. 수동 실행은 사용자가 `POST …/retry`로 직접 다시 시도한다.
 - 단계의 `scheduled_at`(V26): 그 시각 전에는 `start`가 409 `Step cannot start before its scheduledAt.`
 - 시도의 `retry_at`(V26): 열은 있고 응답에도 나오지만 **아무 코드도 쓰지 않는다**(항상 null).
 - 시간 제한이 없다. 외부가 보고하지 않으면 단계는 계속 `running`이다.

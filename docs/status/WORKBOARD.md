@@ -124,7 +124,7 @@
 ### 2026-11-02 리드 발견: Flow Run 이벤트 같은 시각 순서(간헐 실패) — 고침(로컬)
 
 - **결과(2026-11-02, 리드, 사용자 "ㄱ"·11-01 "오류 직접 해결해 너가"):** 아래 권장 수정 첫째안으로 고쳤다. 마이그레이션은 없다.
-  - [`FlowRunEventRecorder`](../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunEventRecorder.java)가 시각을 마이크로초(Postgres 정밀도)로 자르고, 앞서 준 시각 이하이면 1µs 뒤를 준다(원자적, 서버 하나 안에서). 규칙은 [Flow Run](../domain/flow-run.md) F19다.
+  - [`FlowRunEventRecorder`](../../flowmat_backend/modules/flowrun/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunEventRecorder.java)가 시각을 마이크로초(Postgres 정밀도)로 자르고, 앞서 준 시각 이하이면 1µs 뒤를 준다(원자적, 서버 하나 안에서). 규칙은 [Flow Run](../domain/flow-run.md) F19다.
   - 새 `FlowRunEventRecorderTest` 2건: 2,000건을 잇달아 기록하면 시각이 늘 뒤로 가고 마이크로초 단위다. 8개 스레드의 4,000건은 시각이 모두 다르다. 고치기 전 기록기로 돌리면 두 건 모두 실패했다.
   - 격리 사본에서 flow-run·게이트웨이·지연·연결·생산 단계·연결 실행 78개 클래스 681건이 통과했다.
   - 같은 사본(2hv·CSV 열 포함)에서 백엔드 전체 439개 클래스 3,239건이 실패 0으로 통과했다.
@@ -135,7 +135,7 @@
 - 같은 사본에서 다시 세 번 돌리니 모두 통과했다.
 
 **원인**
-- [`FlowRunEventRecorder`](../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunEventRecorder.java)는 `occurredAt`을 `OffsetDateTime.now(UTC)`로, `eventId`를 무작위 UUID로 정한다.
+- [`FlowRunEventRecorder`](../../flowmat_backend/modules/flowrun/src/main/java/org/myweb/flowmat/domain/flowrun/application/FlowRunEventRecorder.java)는 `occurredAt`을 `OffsetDateTime.now(UTC)`로, `eventId`를 무작위 UUID로 정한다.
 - 이벤트 목록은 `OrderByOccurredAtAscEventIdAsc`로 정렬한다.
 - 한 요청 안에서 잇달아 기록된 두 이벤트가 같은 시각을 받으면(Windows 시계는 눈금이 굵다) 순서가 무작위가 된다.
 - 테스트만의 문제가 아니다. 화면의 이벤트 목록에서도 같은 순간의 두 이벤트가 뒤바뀌어 보일 수 있다.

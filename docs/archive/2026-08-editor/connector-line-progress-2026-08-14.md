@@ -165,7 +165,7 @@ rhwp(Rust/WASM HWP 엔진)의 도형 그리기 UX 중 FlowMat에 없던 것만 �
 
 ## 참고 — 이번 세션에서 함께 고친 백엔드 파일
 
-- `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/editor/domain/WorkflowEditorDocument.java`
-- `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/editor/domain/WorkflowEditorElement.java`
+- `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/editor/domain/WorkflowEditorDocument.java`
+- `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/editor/domain/WorkflowEditorElement.java`
 
 프론트엔드는 `npm run dev`(Vite HMR)라 소스 수정이 즉시 반영되지만, 백엔드는 `./gradlew bootRun`이 코드 변경을 자동 반영하지 않으므로 **Java 파일을 고칠 때마다 사용자가 수동으로 재시작**해야 함(이번 세션에서 실제로 재시작 1회 필요했음).
