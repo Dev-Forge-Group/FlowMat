@@ -30,6 +30,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.request.PickListRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.WarehouseTaskCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.PickListResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.WarehouseTaskResponse;
+import org.myweb.flowmat.domain.inventory.application.PickWorkOrders.PickWorkOrder;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
 import org.myweb.flowmat.domain.inventory.domain.entity.WarehouseTask;
@@ -37,9 +38,6 @@ import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
 import org.myweb.flowmat.domain.inventory.repository.WarehouseTaskRepository;
-import org.myweb.flowmat.domain.production.application.publicapi.WorkOrderQuery;
-import org.myweb.flowmat.domain.production.application.publicapi.AllocationTransferCommand;
-import org.myweb.flowmat.domain.production.application.publicapi.WorkOrderView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -68,8 +66,8 @@ public class WarehouseTaskService {
     private final InventoryRepository inventoryRepository;
     private final CatalogQuery catalogQuery;
     private final LotMasterRepository lotMasterRepository;
-    private final WorkOrderQuery workOrderQuery;
-    private final AllocationTransferCommand allocationTransfers;
+    private final PickWorkOrders workOrders;
+    private final WorkOrderAllocations allocationTransfers;
     private final AllocatedStockTransferService allocatedStockTransferService;
     private final BomService bomService;
     private final StorageLocationService storageLocationService;
@@ -125,14 +123,14 @@ public class WarehouseTaskService {
         projectAccessService.requireProjectWriteAccess(projectId);
         taskRepository.lockProject(projectId);
         String staging = destination(projectId, request.stagingLocation());
-        WorkOrderView order = null;
+        PickWorkOrder order = null;
         Map<String, BigDecimal> needs = new LinkedHashMap<>();
         List<PickListRequest.Line> lines = request.lines() == null ? List.of() : request.lines();
         if (trimToNull(request.workOrderId()) != null) {
             if (!lines.isEmpty()) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Give a work order or lines to pick, not both.");
             }
-            order = workOrderQuery.findProjectWorkOrder(projectId, request.workOrderId().trim())
+            order = workOrders.findProjectWorkOrder(projectId, request.workOrderId().trim())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "The work order was not found in this project."));
             if (!order.acceptsRuns()) {
                 throw new BusinessException(ErrorCode.CONFLICT, "Work order " + order.workOrderNumber() + " is "
@@ -158,9 +156,9 @@ public class WarehouseTaskService {
             }
         }
 
-        List<AllocationTransferCommand.OpenAllocation> ownAllocations = order == null ? List.of() : allocationTransfers.lockOpen(projectId, order.workOrderId());
+        List<WorkOrderAllocations.OpenAllocation> ownAllocations = order == null ? List.of() : allocationTransfers.lockOpen(projectId, order.workOrderId());
         Map<String, BigDecimal> reservedByRecord = ownAllocations.stream().collect(Collectors.toMap(
-            AllocationTransferCommand.OpenAllocation::inventoryId, AllocationTransferCommand.OpenAllocation::remaining, BigDecimal::add));
+            WorkOrderAllocations.OpenAllocation::inventoryId, WorkOrderAllocations.OpenAllocation::remaining, BigDecimal::add));
         List<WarehouseTask> openTasks = taskRepository.findAllByProjectIdAndStatus(projectId, OPEN);
         Map<String, BigDecimal> plannedByAllocation = openTasks.stream().filter(task -> task.getAllocationId() != null)
             .collect(Collectors.toMap(WarehouseTask::getAllocationId, WarehouseTask::getQuantity, BigDecimal::add));
@@ -422,12 +420,12 @@ public class WarehouseTaskService {
     private List<WarehouseTaskResponse> responses(List<WarehouseTask> tasks) {
         Map<String, CatalogItemView> items = catalogQuery.findItems(distinct(tasks.stream().map(WarehouseTask::getItemId)));
         Map<String, LotMaster> lots = byId(lotMasterRepository.findAllById(distinct(tasks.stream().map(WarehouseTask::getLotId))), LotMaster::getLotId);
-        Map<String, WorkOrderView> orders = workOrderQuery.findWorkOrders(distinct(tasks.stream().map(WarehouseTask::getWorkOrderId)));
+        Map<String, PickWorkOrder> orders = workOrders.findWorkOrders(distinct(tasks.stream().map(WarehouseTask::getWorkOrderId)));
         return tasks.stream().map(task -> {
             CatalogItemView item = items.get(task.getItemId());
             LotMaster lot = lots.get(task.getLotId());
             // A putaway has no work order, and the map may be one that refuses a null key.
-            WorkOrderView order = task.getWorkOrderId() == null ? null : orders.get(task.getWorkOrderId());
+            PickWorkOrder order = task.getWorkOrderId() == null ? null : orders.get(task.getWorkOrderId());
             return new WarehouseTaskResponse(
                 task.getTaskId(), task.getProjectId(), task.getTaskNo(), task.getTaskType(), task.getStatus(), task.getInventoryId(),
                 task.getItemId(), item == null ? null : item.itemCode(), item == null ? null : item.itemName(),

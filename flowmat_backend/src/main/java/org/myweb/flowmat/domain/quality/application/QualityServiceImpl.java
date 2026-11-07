@@ -20,8 +20,6 @@ import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
-import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunQuery;
-import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectResolveRequest;

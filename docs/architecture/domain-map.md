@@ -1,6 +1,6 @@
 # 도메인 지도
 
-> **현행 문서** · 최종 확인 2026-10-02(코드 `45f5df0` + 작업 트리) · 패키지나 책임이 바뀌면 같은 변경에서 고친다.
+> **현행 문서** · 최종 확인 2026-10-02(코드 `45f5df0` + 작업 트리), 의존 방향 2026-11-07 · 패키지나 책임이 바뀌면 같은 변경에서 고친다.
 > 이전 판(2026-09-24): [archive/2026-09-architecture/enterprise-domain-map.md](../archive/2026-09-architecture/enterprise-domain-map.md)
 
 백엔드 `flowmat_backend`의 bounded context와 각자의 책임, 서로의 의존 규칙을 한곳에 모은다. 결정의 근거는 [ADR-002](adr/ADR-002-module-dependency.md)(모듈 의존)와 [ADR-003](adr/ADR-003-resource-port-contract.md)(Core와 도메인 확장)이다. 기능별 구현 여부는 [CURRENT_CAPABILITIES](../status/CURRENT_CAPABILITIES.md)가 기준이다.
@@ -16,8 +16,8 @@
 | Core 규칙 | `rule` | 실행 규칙 정의와 평가 | FlowRule | 없음 |
 | 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간) |
 | 제조 계획 | `bom` | BOM 작성·승인·revision, 전개·역전개·원가 누적 | BomHeader, BomLine | 없음 |
-| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(재고 행 유무) (2026-10-03) |
-| 제조 실행 | `production` | 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하 | WorkOrder, WorkOrderItem, ProductionRun, ProductionRunItem, RunStateSnapshot, ProductionRunCorrection, StockAllocation, WorkInstruction, RunInstructionCheck | `WorkOrderQuery`(작업지시 조회), `ProductionRunQuery`(실행 조회) (2026-10-03) |
+| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03) |
+| 제조 실행 | `production` | 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하 | WorkOrder, WorkOrderItem, ProductionRun, ProductionRunItem, RunStateSnapshot, ProductionRunCorrection, StockAllocation, WorkInstruction, RunInstructionCheck | `WorkOrderQuery`(작업지시 조회) (2026-10-03). 실행 조회는 quality가 정의한 `ProductionRunQuery`를 구현한다(§4) |
 | 제조 품질 | `quality` | 검사·불량, 검사 기준, 부적합·시정 조치 | QualityInspection, DefectLog, InspectionStandard, Nonconformity, CorrectiveAction | 없음 |
 | 플랫폼 | `project` | 데이터 격리·접근권한 집행 경계, 멤버·초대 | Project, ProjectMember, ProjectInvite | `ProjectMemberQuery`(활성 구성원 여부, 2026-10-03). `ProjectAccessService`는 여러 context가 직접 쓴다 |
 | 플랫폼 | `user` | 계정, 인증, 역할·권한, 로그인 이력 | User, Role, RolePermission, UserRole, SocialAccount, UserLoginHistory | 없음 |
@@ -66,6 +66,18 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 - 2026-10-18에 마지막 7건까지 없애고([ADR-012](adr/ADR-012-workflow-access-boundary.md)) 동결을 풀었다. 이제 위반이 하나라도 생기면 테스트가 실패한다.
 - Stage B(위반이 있는 파일을 고칠 때 공개 API로 바꾸기)는 2026-10-18에 끝났다(ADR-002).
 - 다른 context의 `application` 클래스(`UnitConverter`, `ProjectAccessService` 등)를 직접 쓰는 것은 아직 막지 않는다(ADR-002 보류 항목).
+- context 사이 의존은 한 방향만 둔다(2026-11-07부터 `ModuleBoundaryTest`가 순환을 막는다). 각 context를 따로 Gradle 모듈로 뗄 수 있게 하기 위해서다. 지금 가능한 순서는 다음과 같다. 오른쪽 context는 왼쪽을 쓸 수 있고, 왼쪽은 오른쪽을 모른다.
+
+  `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality` < `purchasing`·`workforce` < `production`
+
+- 왼쪽 context가 오른쪽 context의 기능이 필요하면, 왼쪽 context가 인터페이스를 정의하고 오른쪽 context가 구현한다(`ItemUsageCheck`와 같은 방식). 2026-11-07에 순환을 만들던 의존 3개(catalog → inventory, inventory → production, quality → production)를 이렇게 끊었다.
+
+  | 정의한 곳 | 인터페이스 | 구현한 곳 | 이전 방식 |
+  |---|---|---|---|
+  | catalog | `ItemStockCheck`(LOT 관리 전환 전 재고 행 유무) | inventory `StockItemStockCheck` | catalog가 inventory `StockQuery.hasStockRecords` 호출 |
+  | inventory | `PickWorkOrders`(피킹할 작업지시 조회) | production `InventoryPickWorkOrders` | inventory가 production `WorkOrderQuery` 호출 |
+  | inventory | `WorkOrderAllocations`(작업지시 할당 잠금·이동) | production `WorkOrderAllocationsImpl` | production 공개 API `AllocationTransferCommand` |
+  | quality | `ProductionRunQuery`(검사·추적용 실행 조회) | production `ProductionRunQueryImpl` | production 공개 API |
 
 ## 5. 새 기능을 어디에 둘지
 

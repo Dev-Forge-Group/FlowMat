@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.production.application.publicapi;
+package org.myweb.flowmat.domain.quality.application;
 
 import java.util.Collection;
 import java.util.List;
@@ -6,8 +6,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Production run reads for other bounded contexts, which use this instead of the production repositories
- * (docs/architecture/adr/ADR-002-module-dependency.md). Add an operation only when a caller needs it.
+ * The production run reads quality needs to inspect runs and trace their LOTs. Production owns the runs and implements
+ * this, so quality does not depend on production (production already depends on quality). Add an operation only when
+ * quality needs it (docs/architecture/adr/ADR-002-module-dependency.md).
  */
 public interface ProductionRunQuery {
 

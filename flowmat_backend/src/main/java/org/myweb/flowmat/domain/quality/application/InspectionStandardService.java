@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunQuery;
-import org.myweb.flowmat.domain.production.application.publicapi.ProductionRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.request.InspectionStandardRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.QualityInspectionCreateRequest;

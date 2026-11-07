@@ -1,6 +1,7 @@
 package org.myweb.flowmat.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -24,8 +25,8 @@ import java.util.regex.Pattern;
  * 2026-10-18 (docs/architecture/adr/ADR-012-workflow-access-boundary.md), so it has no frozen list and any violation
  * fails. Stage C (docs/architecture/adr/ADR-018-entity-boundary.md): a bounded context does not use another context's
  * {@code domain.entity} classes either. The 39 uses frozen when that rule came in (2026-10-19) were all removed by
- * 2026-10-25, so it has no frozen list either and any use fails. {@code global} and {@code batch} are not bounded
- * contexts and are not checked.
+ * 2026-10-25, so it has no frozen list either and any use fails. Since 2026-11-07 the contexts may not depend on each
+ * other in a cycle either. {@code global} and {@code batch} are not bounded contexts and are not checked.
  */
 @AnalyzeClasses(packages = "org.myweb.flowmat", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -41,6 +42,15 @@ class ModuleBoundaryTest {
     @ArchTest
     static final ArchRule entitiesStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
         .should(useOnlyTheirOwnContexts("entities", ENTITY));
+
+    /**
+     * Bounded contexts depend on each other in one direction only, so each can become its own Gradle module. When a lower
+     * context needs something a higher one owns, the lower context declares an interface and the higher one implements it
+     * (for example {@code catalog.application.ItemStockCheck}, implemented in inventory).
+     */
+    @ArchTest
+    static final ArchRule boundedContextsAreFreeOfCycles = slices().matching("org.myweb.flowmat.domain.(*)..")
+        .should().beFreeOfCycles();
 
     /** {@code kind} of another context, matched by {@code owned} whose first group is the owning context. */
     private static ArchCondition<JavaClass> useOnlyTheirOwnContexts(String kind, Pattern owned) {

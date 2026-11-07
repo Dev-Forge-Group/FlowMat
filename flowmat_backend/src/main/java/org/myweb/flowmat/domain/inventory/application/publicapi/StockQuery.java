@@ -9,9 +9,6 @@ import java.util.Optional;
  */
 public interface StockQuery {
 
-    /** Whether the item has a stock record that is not deleted, holding stock or not. */
-    boolean hasStockRecords(String itemId);
-
     /** The net stock change the ledger recorded for one source, such as a production run item; 0 without any. */
     BigDecimal quantityMovedBy(String referenceType, String referenceId);
 

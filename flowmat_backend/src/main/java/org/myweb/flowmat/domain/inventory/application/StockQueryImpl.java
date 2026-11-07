@@ -22,11 +22,6 @@ public class StockQueryImpl implements StockQuery {
     private final InventoryTransactionRepository inventoryTransactionRepository;
 
     @Override
-    public boolean hasStockRecords(String itemId) {
-        return inventoryRepository.existsByItemIdAndDeletedYn(itemId, NOT_DELETED);
-    }
-
-    @Override
     public BigDecimal quantityMovedBy(String referenceType, String referenceId) {
         return inventoryTransactionRepository.findAllByReferenceTypeAndReferenceId(referenceType, referenceId).stream()
             .map(InventoryTransaction::getQuantityDelta)

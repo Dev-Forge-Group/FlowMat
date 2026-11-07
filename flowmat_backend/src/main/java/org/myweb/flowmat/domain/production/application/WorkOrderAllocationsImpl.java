@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.production.application.publicapi.AllocationTransferCommand;
+import org.myweb.flowmat.domain.inventory.application.WorkOrderAllocations;
 import org.myweb.flowmat.domain.production.domain.entity.StockAllocation;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(propagation = Propagation.MANDATORY)
-public class AllocationTransferCommandImpl implements AllocationTransferCommand {
+public class WorkOrderAllocationsImpl implements WorkOrderAllocations {
     private final StockAllocationRepository allocations;
     private final WorkOrderRepository orders;
     private final StockRecordQuery stocks;

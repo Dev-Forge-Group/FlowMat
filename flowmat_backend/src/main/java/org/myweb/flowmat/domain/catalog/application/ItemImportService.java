@@ -24,7 +24,6 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
-import org.myweb.flowmat.domain.inventory.application.publicapi.StockQuery;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -50,7 +49,7 @@ public class ItemImportService {
 
     private final ItemRepository itemRepository;
     private final UnitMasterRepository unitMasterRepository;
-    private final StockQuery stockQuery;
+    private final ItemStockCheck itemStockCheck;
     private final ItemService itemService;
     private final ProjectAccessService projectAccessService;
     private final EntityManager entities;
@@ -246,7 +245,7 @@ public class ItemImportService {
         }
         if (lot != null && !lot.equals(item.getLotManageYn())) {
             // Checked here too so the whole file is refused before anything is saved.
-            if (stockQuery.hasStockRecords(item.getItemId())) {
+            if (itemStockCheck.hasStockRecords(item.getItemId())) {
                 problems.add("LOT tracking can only change while the item has no stock records");
                 return Plan.NOTHING;
             }

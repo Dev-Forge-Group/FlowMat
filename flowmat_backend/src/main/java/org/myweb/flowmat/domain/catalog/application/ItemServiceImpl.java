@@ -16,7 +16,6 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
-import org.myweb.flowmat.domain.inventory.application.publicapi.StockQuery;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -36,7 +35,7 @@ public class ItemServiceImpl implements ItemService {
     private final IdGenerator idGenerator;
     private final ProjectAccessService projectAccessService;
     private final UnitMasterRepository unitMasterRepository;
-    private final StockQuery stockQuery;
+    private final ItemStockCheck itemStockCheck;
     private final ItemCostHistoryService itemCostHistoryService;
     /** Other domains that still rely on an item; see {@link ItemUsageCheck}. */
     private final List<ItemUsageCheck> itemUsageChecks;
@@ -150,7 +149,7 @@ public class ItemServiceImpl implements ItemService {
         }
         if (request.lotManageYn() != null && !yn(request.lotManageYn()).equals(item.getLotManageYn())) {
             // Existing stock rows were created under the old rule; switching would leave them inconsistent.
-            if (stockQuery.hasStockRecords(item.getItemId())) {
+            if (itemStockCheck.hasStockRecords(item.getItemId())) {
                 throw new BusinessException(ErrorCode.CONFLICT,
                     "LOT tracking can only change while the item has no stock records.");
             }
