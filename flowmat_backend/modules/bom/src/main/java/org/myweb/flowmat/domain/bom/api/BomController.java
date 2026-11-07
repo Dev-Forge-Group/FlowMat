@@ -15,8 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomLineImportResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomWhereUsedResponse;
 import org.myweb.flowmat.domain.bom.application.BomApprovalService;
 import org.myweb.flowmat.domain.bom.application.BomCopyService;
@@ -45,7 +45,7 @@ public class BomController {
     private final BomLineImportService bomLineImportService;
 
     @GetMapping
-    public ApiResponse<List<BomResponse>> listBoms(
+    public ApiResponse<List<BomView>> listBoms(
         @RequestParam("projectId") String projectId,
         @RequestParam(value = "targetItemId", required = false) String targetItemId
     ) {
@@ -62,17 +62,17 @@ public class BomController {
     }
 
     @PostMapping
-    public ApiResponse<BomResponse> createBom(@Valid @RequestBody BomCreateRequest request) {
+    public ApiResponse<BomView> createBom(@Valid @RequestBody BomCreateRequest request) {
         return ApiResponse.ok(bomService.createBom(request));
     }
 
     @GetMapping("/{bomId}")
-    public ApiResponse<BomResponse> getBom(@PathVariable("bomId") String bomId) {
+    public ApiResponse<BomView> getBom(@PathVariable("bomId") String bomId) {
         return ApiResponse.ok(bomService.getBom(bomId));
     }
 
     @PutMapping("/{bomId}")
-    public ApiResponse<BomResponse> updateBom(@PathVariable("bomId") String bomId, @RequestBody BomUpdateRequest request) {
+    public ApiResponse<BomView> updateBom(@PathVariable("bomId") String bomId, @RequestBody BomUpdateRequest request) {
         return ApiResponse.ok(bomService.updateBom(bomId, request));
     }
 
@@ -83,7 +83,7 @@ public class BomController {
     }
 
     @PostMapping("/{bomId}/lines")
-    public ApiResponse<BomResponse> addLine(
+    public ApiResponse<BomView> addLine(
         @PathVariable("bomId") String bomId,
         @Valid @RequestBody BomLineCreateRequest request
     ) {
@@ -101,12 +101,12 @@ public class BomController {
 
     /** Another product's first draft, from this BOM's base and materials. */
     @PostMapping("/{bomId}/copy")
-    public ApiResponse<BomResponse> copy(@PathVariable("bomId") String bomId, @Valid @RequestBody BomCopyRequest request) {
+    public ApiResponse<BomView> copy(@PathVariable("bomId") String bomId, @Valid @RequestBody BomCopyRequest request) {
         return ApiResponse.ok(bomCopyService.copy(bomId, request));
     }
 
     @DeleteMapping("/{bomId}/lines/{bomLineId}")
-    public ApiResponse<BomResponse> deleteLine(
+    public ApiResponse<BomView> deleteLine(
         @PathVariable("bomId") String bomId,
         @PathVariable("bomLineId") String bomLineId
     ) {
@@ -114,12 +114,12 @@ public class BomController {
     }
 
     @PostMapping("/{bomId}/submit")
-    public ApiResponse<BomResponse> submit(@PathVariable("bomId") String bomId) {
+    public ApiResponse<BomView> submit(@PathVariable("bomId") String bomId) {
         return ApiResponse.ok(bomApprovalService.submit(bomId));
     }
 
     @PostMapping("/{bomId}/approve")
-    public ApiResponse<BomResponse> approve(
+    public ApiResponse<BomView> approve(
         @PathVariable("bomId") String bomId,
         @RequestBody(required = false) BomApproveRequest request
     ) {
@@ -128,7 +128,7 @@ public class BomController {
     }
 
     @PostMapping("/{bomId}/reject")
-    public ApiResponse<BomResponse> reject(
+    public ApiResponse<BomView> reject(
         @PathVariable("bomId") String bomId,
         @RequestBody(required = false) BomApproveRequest request
     ) {
@@ -136,7 +136,7 @@ public class BomController {
     }
 
     @PostMapping("/{bomId}/retire")
-    public ApiResponse<BomResponse> retire(
+    public ApiResponse<BomView> retire(
         @PathVariable("bomId") String bomId,
         @RequestBody(required = false) BomApproveRequest request
     ) {
@@ -144,7 +144,7 @@ public class BomController {
     }
 
     @PostMapping("/{bomId}/revisions")
-    public ApiResponse<BomResponse> createRevision(@PathVariable("bomId") String bomId,
+    public ApiResponse<BomView> createRevision(@PathVariable("bomId") String bomId,
         @RequestBody(required = false) BomRevisionRequest request) {
         return ApiResponse.ok(bomService.createRevision(bomId, request == null ? null : request.requestId()));
     }
@@ -155,7 +155,7 @@ public class BomController {
     }
 
     @GetMapping("/{bomId}/requirements")
-    public ApiResponse<BomRequirementResponse> requirements(
+    public ApiResponse<BomRequirement> requirements(
         @PathVariable("bomId") String bomId,
         @RequestParam("quantity") BigDecimal quantity
     ) {

@@ -13,7 +13,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
-import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.production.api.dto.request.WorkOrderCreateRequest;
@@ -246,7 +245,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         String normalizedBomId = ProductionText.trimToNull(bomId, "bomId");
         if (normalizedBomId != null) {
             BomRevisionView bom = findBom(order, normalizedBomId);
-            if (BomStatus.RETIRED.code().equals(bom.bomStatus())) {
+            if (bom.retired()) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST,
                     "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is retired; pick a current revision.");
             }

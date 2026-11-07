@@ -37,6 +37,7 @@
 | [ADR-033](ADR-033-bom-optional-materials.md) | BOM 선택 자재 | **Accepted** 2026-11-02(2026-10-24 사용자 위임으로 권장안, 로컬 구현 2hx, 마이그레이션 V133 — 개발 DB 미적용) | 선택 자재는 기본 제외, 작업지시가 품목으로 골라 V133 표에 저장(초안만 수정, 저장·승인 때 검사), 작업지시 계산만 넣고 작업지시 없는 계산은 `optionals`로 따로 |
 | [ADR-034](ADR-034-bom-scrap-performance.md) | BOM 줄 실제 손실 집계 | **Accepted** 2026-11-02(2026-10-24 사용자 위임으로 권장안, 로컬 구현 2hy, 읽기 전용) | revision의 끝난 실행을 모아 자재마다 순량 대비 실제 손실률과 계획 스크랩률, 대체 투입은 주 자재 몫 |
 | [ADR-035](ADR-035-gradle-modules.md) | bounded context별 Gradle 모듈 | **Accepted** 2026-11-07(사용자 결정) | context마다 `flowmat_backend/modules/<context>` 모듈, global·user는 platform, 루트는 애플리케이션과 모든 테스트. 의존 방향을 빌드로 강제 |
+| [ADR-036](ADR-036-cross-context-contract-types.md) | context 사이 계약 타입 | **Accepted** 2026-11-07(이전 계획 5단계) | 다른 context의 웹 DTO·enum 대신 publicapi 타입(`BomRequirement`·`BomView`·`BomQuery`·`StockMovementCommand`), 상태는 view의 코드와 메서드. 다른 context의 `api`·`domain` 타입 사용을 ArchUnit으로 금지 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

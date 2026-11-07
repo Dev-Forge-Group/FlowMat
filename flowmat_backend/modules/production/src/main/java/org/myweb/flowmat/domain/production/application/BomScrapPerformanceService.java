@@ -10,10 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomLineResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
-import org.myweb.flowmat.domain.bom.application.BomTree;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
@@ -41,7 +40,7 @@ public class BomScrapPerformanceService {
     private static final int SCALE = 4;
     private static final String NOT_DELETED = "N";
 
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final BomStructureQuery bomStructure;
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
@@ -59,10 +58,10 @@ public class BomScrapPerformanceService {
 
     public BomScrapPerformanceResponse performance(String bomId) {
         // Checks read access to the BOM's project.
-        BomResponse bom = bomService.getBom(bomId);
+        BomView bom = bomQuery.getBom(bomId);
         Map<String, BigDecimal> scrapRates = new HashMap<>();
-        for (BomLineResponse line : bom.lines()) {
-            if (BomTree.isMaterial(line.lineType()) && !line.phantom() && line.substituteFor() == null) {
+        for (BomLineView line : bom.lines()) {
+            if (line.material() && !line.phantom() && line.substituteFor() == null) {
                 scrapRates.put(line.childItemId(), line.scrapRate() == null ? BigDecimal.ZERO : line.scrapRate());
             }
         }
@@ -115,7 +114,7 @@ public class BomScrapPerformanceService {
 
         Map<String, CatalogItemView> named = catalogQuery.findItems(totals.keySet());
         List<BomScrapPerformanceResponse.Line> lines = new ArrayList<>();
-        for (BomLineResponse line : bom.lines()) {
+        for (BomLineView line : bom.lines()) {
             Total total = totals.get(line.childItemId());
             if (total == null || line.substituteFor() != null) {
                 continue;

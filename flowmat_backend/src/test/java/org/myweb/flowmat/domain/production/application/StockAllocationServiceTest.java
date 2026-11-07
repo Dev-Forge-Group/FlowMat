@@ -23,11 +23,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
-import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
-import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.StockMovement;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.production.api.dto.request.StockAllocationRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.StockAllocationResponse;
@@ -46,11 +46,11 @@ class StockAllocationServiceTest {
     @Mock private StockAllocationRepository allocationRepository;
     @Mock private WorkOrderRepository workOrderRepository;
     @Mock private ProductionRunRepository productionRunRepository;
-    @Mock private BomService bomService;
+    @Mock private BomQuery bomQuery;
     @Mock private OpenRunInputs openRunInputs;
     @Mock private ProductionPlanningReferences references;
     @Mock private org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
-    @Mock private InventoryCommandService inventoryCommandService;
+    @Mock private StockMovementCommand stockMovements;
     @Mock private ProjectAccessService projectAccessService;
     @Mock private IdGenerator idGenerator;
     @Mock private WorkOrderOptionalItems optionalItems;
@@ -88,7 +88,7 @@ class StockAllocationServiceTest {
         assertThatThrownBy(() -> service.allocate("order", request(quantity)))
             .isInstanceOf(BusinessException.class).hasMessageContaining("lines.quantity").hasMessageContaining("0.0001");
         verify(allocationRepository, never()).saveAndFlush(any());
-        verifyNoInteractions(inventoryCommandService);
+        verifyNoInteractions(stockMovements);
     }
 
     @Test
@@ -117,7 +117,7 @@ class StockAllocationServiceTest {
 
         assertThat(response.plan()).isEmpty();
         verify(allocationRepository, never()).saveAndFlush(any());
-        verifyNoInteractions(inventoryCommandService);
+        verifyNoInteractions(stockMovements);
     }
 
     private void givenBomWithRecordedInput(String used) {
@@ -125,9 +125,9 @@ class StockAllocationServiceTest {
         order.setTargetItemId("product");
         order.setTargetQuantity(BigDecimal.ONE);
         BigDecimal required = new BigDecimal("0.001");
-        when(bomService.requirementsForRun("bom", "project", "product", BigDecimal.ONE, null, List.of())).thenReturn(
-            new BomRequirementResponse("bom", 1, "product", BigDecimal.ONE, BigDecimal.ONE,
-                List.of(new BomRequirementResponse.Line("line", "item", required, "kg", required,
+        when(bomQuery.requirementsForRun("bom", "project", "product", BigDecimal.ONE, null, List.of())).thenReturn(
+            new BomRequirement("bom", 1, "product", BigDecimal.ONE, BigDecimal.ONE,
+                List.of(new BomRequirement.Line("line", "item", required, "kg", required,
                     "kg", required, BigDecimal.ONE, null, null)), null, false, List.of()));
         when(openRunInputs.forOrder("order")).thenReturn(Map.of("item", new BigDecimal(used)));
     }
@@ -138,9 +138,9 @@ class StockAllocationServiceTest {
 
     private void assertReservation(StockAllocationResponse response, String expected) {
         ArgumentCaptor<StockAllocation> allocation = ArgumentCaptor.forClass(StockAllocation.class);
-        ArgumentCaptor<InventoryMovement> movement = ArgumentCaptor.forClass(InventoryMovement.class);
+        ArgumentCaptor<StockMovement> movement = ArgumentCaptor.forClass(StockMovement.class);
         verify(allocationRepository).saveAndFlush(allocation.capture());
-        verify(inventoryCommandService).apply(movement.capture());
+        verify(stockMovements).apply(movement.capture());
         assertThat(allocation.getValue().getQuantity()).isEqualByComparingTo(expected);
         assertThat(movement.getValue().reservedDelta()).isEqualByComparingTo(expected);
         assertThat(response.plan()).hasSize(1);

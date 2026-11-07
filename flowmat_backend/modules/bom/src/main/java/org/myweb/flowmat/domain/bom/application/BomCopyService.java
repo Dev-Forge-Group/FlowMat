@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomCopyRequest;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomCreateRequest;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomLineCreateRequest;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomLineResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -24,8 +24,8 @@ public class BomCopyService {
     private final BomService bomService;
 
     @Transactional
-    public BomResponse copy(String bomId, BomCopyRequest request) {
-        BomResponse source = bomService.getBom(bomId);
+    public BomView copy(String bomId, BomCopyRequest request) {
+        BomView source = bomService.getBom(bomId);
         String target = request.targetItemId().trim();
         if (target.equals(source.targetItemId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Pick another product; for this one make a new revision.");
@@ -34,9 +34,9 @@ public class BomCopyService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "That product is a material of this BOM, so it cannot be made from it.");
         }
         String name = request.bomName() == null || request.bomName().isBlank() ? source.bomName() : request.bomName().trim();
-        BomResponse copy = bomService.createBom(new BomCreateRequest(source.projectId(), target, name, source.baseQuantity(),
+        BomView copy = bomService.createBom(new BomCreateRequest(source.projectId(), target, name, source.baseQuantity(),
             source.baseUnit(), "Copied from " + source.bomName() + " v" + source.bomVersion()));
-        for (BomLineResponse line : source.lines()) {
+        for (BomLineView line : source.lines()) {
             copy = bomService.addLine(copy.bomId(), new BomLineCreateRequest(line.childItemId(), line.quantity(), line.unit(),
                 line.scrapRate(), line.optionalYn(), line.substituteGroup(), line.sortOrder(), line.note(), line.lineType(),
                 line.phantom(), null, line.priority()));

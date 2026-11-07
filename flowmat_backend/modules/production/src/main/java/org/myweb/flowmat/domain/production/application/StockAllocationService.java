@@ -15,15 +15,14 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
-import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
-import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.Kind;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.StockMovement;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
-import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
-import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.production.api.dto.request.StockAllocationRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.StockAllocationResponse;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
@@ -61,9 +60,9 @@ public class StockAllocationService {
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
     private final WorkOrderRepository workOrderRepository;
     private final ProductionRunRepository productionRunRepository;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final OpenRunInputs openRunInputs;
-    private final InventoryCommandService inventoryCommandService;
+    private final StockMovementCommand stockMovements;
     private final ProjectAccessService projectAccessService;
     private final IdGenerator idGenerator;
     private final WorkOrderOptionalItems optionalItems;
@@ -85,7 +84,7 @@ public class StockAllocationService {
                 + order.getWorkOrderStatus() + "; allocate for an approved or started order.");
         }
         lockAllocations(order);
-        Map<String, List<BomRequirementResponse.Substitute>> substitutes = new HashMap<>();
+        Map<String, List<BomRequirement.Substitute>> substitutes = new HashMap<>();
         Map<String, BigDecimal> needs = needs(order, request, substitutes);
         String actor = projectAccessService.requireCurrentUserId();
         Map<String, BigDecimal> before = new HashMap<>();
@@ -99,7 +98,7 @@ public class StockAllocationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "An item to allocate was not found in this project."));
             BigDecimal already = before.getOrDefault(item.itemId(), BigDecimal.ZERO);
             // A substitute already allocated to the order counts as this material (ADR-032 decision 6).
-            for (BomRequirementResponse.Substitute substitute : substitutes.getOrDefault(item.itemId(), List.of())) {
+            for (BomRequirement.Substitute substitute : substitutes.getOrDefault(item.itemId(), List.of())) {
                 BigDecimal held = before.get(substitute.childItemId());
                 if (held != null && substitute.mainPerUnit() != null) {
                     already = already.add(scale(held.multiply(substitute.mainPerUnit())));
@@ -175,7 +174,7 @@ public class StockAllocationService {
             if (take.signum() <= 0) {
                 continue;
             }
-            inventoryCommandService.apply(new InventoryMovement(inventoryId, InventoryTransactionType.RELEASE, BigDecimal.ZERO, take.negate(),
+            stockMovements.apply(new StockMovement(inventoryId, Kind.RELEASE, BigDecimal.ZERO, take.negate(),
                 REFERENCE, allocation.getAllocationId(), "Used by production run item " + runItemId, null, actor));
             allocation.setConsumedQuantity(allocation.getConsumedQuantity().add(take));
             closeIfSettled(allocation);
@@ -264,14 +263,14 @@ public class StockAllocationService {
         allocation.setCreatedBy(actor);
         allocation.setCreatedAt(OffsetDateTime.now());
         allocationRepository.saveAndFlush(allocation);
-        inventoryCommandService.apply(new InventoryMovement(row.inventoryId(), InventoryTransactionType.RESERVE,
+        stockMovements.apply(new StockMovement(row.inventoryId(), Kind.RESERVE,
             BigDecimal.ZERO, quantity, REFERENCE, allocation.getAllocationId(), note, null, actor));
     }
 
     private void releaseRest(WorkOrder order, StockAllocation allocation, String actor) {
         BigDecimal rest = allocation.remaining();
         if (rest.signum() > 0) {
-            inventoryCommandService.apply(new InventoryMovement(allocation.getInventoryId(), InventoryTransactionType.RELEASE,
+            stockMovements.apply(new StockMovement(allocation.getInventoryId(), Kind.RELEASE,
                 BigDecimal.ZERO, rest.negate(), REFERENCE, allocation.getAllocationId(),
                 "Released from work order " + order.getWorkOrderNumber(), null, actor));
             allocation.setReleasedQuantity(allocation.getReleasedQuantity().add(rest));
@@ -292,7 +291,7 @@ public class StockAllocationService {
      * as its main material (ADR-032 decision 6). {@code substitutes} gets each BOM material's substitutes.
      */
     private Map<String, BigDecimal> needs(WorkOrder order, StockAllocationRequest request,
-                                          Map<String, List<BomRequirementResponse.Substitute>> substitutes) {
+                                          Map<String, List<BomRequirement.Substitute>> substitutes) {
         Map<String, BigDecimal> needs = new LinkedHashMap<>();
         List<StockAllocationRequest.Line> lines = request == null || request.lines() == null ? List.of() : request.lines();
         if (!lines.isEmpty()) {
@@ -335,10 +334,10 @@ public class StockAllocationService {
         // Phantoms expand as the order's run will freeze them: the planned day's revision (docs/domain/multi-level-bom.md P3).
         LocalDate phantomDay = order.getPlannedStartAt() == null ? null
             : projectCalendar.date(order.getProjectId(), order.getPlannedStartAt().toInstant());
-        BomRequirementResponse requirement = bomService.requirementsForRun(order.getBomId(), order.getProjectId(), order.getTargetItemId(),
+        BomRequirement requirement = bomQuery.requirementsForRun(order.getBomId(), order.getProjectId(), order.getTargetItemId(),
             remaining, phantomDay, optionalItems.of(order.getWorkOrderId()));
         Map<String, BigDecimal> used = openRunInputs.forOrder(order.getWorkOrderId());
-        for (BomRequirementResponse.Line line : requirement.lines()) {
+        for (BomRequirement.Line line : requirement.lines()) {
             BigDecimal need = scale(line.requiredItemQuantity().subtract(line.covered(used)));
             if (need.signum() > 0) {
                 needs.merge(line.childItemId(), need, BigDecimal::add);
@@ -359,7 +358,7 @@ public class StockAllocationService {
             .filter(row -> row.availableQuantity() != null && row.availableQuantity().signum() > 0)
             .filter(row -> {
                 LotView lot = row.lotId() == null ? null : lots.get(row.lotId());
-                return row.lotId() == null || (lot != null && LotStatus.fromCode(lot.lotStatus()).usable() && !lot.isExpiredOn(today));
+                return row.lotId() == null || (lot != null && lot.usable() && !lot.isExpiredOn(today));
             })
             .sorted(Comparator
                 .comparing((StockView row) -> row.lotId() == null ? null : lots.get(row.lotId()).expiryDate(),

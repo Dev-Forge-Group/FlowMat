@@ -55,7 +55,8 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 ## 4. 의존 규칙과 지금의 위반
 
 - 다른 context의 repository를 직접 쓰지 않는다. 새 위반은 [`ModuleBoundaryTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleBoundaryTest.java)가 막는다.
-- 다른 context의 `domain.entity`도 새로 쓰지 않는다. 2026-10-19의 39줄은 동결돼 있고 줄이기만 한다([ADR-018](adr/ADR-018-entity-boundary.md)).
+- 다른 context의 `domain.entity`도 쓰지 않는다. 2026-10-19에 동결한 39줄은 2026-10-25에 모두 없어져, 새로 쓰면 바로 실패한다([ADR-018](adr/ADR-018-entity-boundary.md)).
+- 다른 context의 웹 계층(`api`) 타입과 entity 밖의 `domain` 타입(enum 등)도 쓰지 않는다. 함께 쓰는 타입은 `publicapi`에 두고, 상태는 view의 코드와 메서드로 넘긴다. 예외는 flowrun이 실행하는 workflow의 정의 언어(`PortSchema`, `ConditionExpression`)다([ADR-036](adr/ADR-036-cross-context-contract-types.md)).
 - 위반은 2026-10-03에 84건이었고 동결해 두었다. 그때 많은 방향은 다음과 같았다.
   - inventory → catalog 20
   - production → catalog 16

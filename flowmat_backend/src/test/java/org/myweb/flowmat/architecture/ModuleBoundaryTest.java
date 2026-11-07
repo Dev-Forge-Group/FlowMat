@@ -26,7 +26,9 @@ import java.util.regex.Pattern;
  * fails. Stage C (docs/architecture/adr/ADR-018-entity-boundary.md): a bounded context does not use another context's
  * {@code domain.entity} classes either. The 39 uses frozen when that rule came in (2026-10-19) were all removed by
  * 2026-10-25, so it has no frozen list either and any use fails. Since 2026-11-07 the contexts may not depend on each
- * other in a cycle either. {@code global} and {@code batch} are not bounded contexts and are not checked.
+ * other in a cycle either, nor use another context's web layer ({@code api}) or its other domain types such as enums
+ * (docs/architecture/adr/ADR-036-cross-context-contract-types.md). {@code global} and {@code batch} are not bounded
+ * contexts and are not checked.
  */
 @AnalyzeClasses(packages = "org.myweb.flowmat", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -34,6 +36,14 @@ class ModuleBoundaryTest {
     private static final Pattern CONTEXT = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)(\\..*)?$");
     private static final Pattern REPOSITORY = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.repository(\\..*)?$");
     private static final Pattern ENTITY = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.domain\\.entity(\\..*)?$");
+    private static final Pattern WEB = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.api(\\..*)?$");
+    private static final Pattern DOMAIN = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.domain(\\..*)?$");
+    /**
+     * Not checked by the domain type rule: entities, which have their own rule, and workflow's definition language (port
+     * schemas and condition expressions), which flowrun executes as published (ADR-036).
+     */
+    private static final Pattern NOT_DOMAIN_TYPES = Pattern.compile(
+        "^org\\.myweb\\.flowmat\\.domain\\.(\\w+\\.domain\\.entity|workflow\\.domain\\.contract|workflow\\.domain\\.expression)(\\..*)?$");
 
     @ArchTest
     static final ArchRule repositoriesStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
@@ -42,6 +52,16 @@ class ModuleBoundaryTest {
     @ArchTest
     static final ArchRule entitiesStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
         .should(useOnlyTheirOwnContexts("entities", ENTITY));
+
+    /** Another context's request and response types change with its HTTP API; contexts share publicapi types instead. */
+    @ArchTest
+    static final ArchRule webLayersStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
+        .should(useOnlyTheirOwnContexts("web layer", WEB));
+
+    /** Enums and other domain types besides entities: another context reads statuses as codes from publicapi views. */
+    @ArchTest
+    static final ArchRule domainTypesStayInsideTheirBoundedContext = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
+        .should(useOnlyTheirOwnContexts("domain types", DOMAIN, NOT_DOMAIN_TYPES));
 
     /**
      * Bounded contexts depend on each other in one direction only, so each can become its own Gradle module. When a lower
@@ -54,6 +74,11 @@ class ModuleBoundaryTest {
 
     /** {@code kind} of another context, matched by {@code owned} whose first group is the owning context. */
     private static ArchCondition<JavaClass> useOnlyTheirOwnContexts(String kind, Pattern owned) {
+        return useOnlyTheirOwnContexts(kind, owned, null);
+    }
+
+    /** As above, leaving out the classes {@code except} matches. */
+    private static ArchCondition<JavaClass> useOnlyTheirOwnContexts(String kind, Pattern owned, Pattern except) {
         return new ArchCondition<>("use only their own bounded context's " + kind) {
             // One violation per top-level class and foreign class (a nested class counts as its top-level class), named
             // without signatures or line numbers.
@@ -73,7 +98,8 @@ class ModuleBoundaryTest {
                 for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
                     JavaClass target = dependency.getTargetClass().getBaseComponentType();
                     Matcher other = owned.matcher(target.getPackageName());
-                    if (other.matches() && !other.group(1).equals(own.group(1))) {
+                    if (other.matches() && !other.group(1).equals(own.group(1))
+                        && (except == null || !except.matcher(target.getPackageName()).matches())) {
                         uses.add(topLevelName(origin) + " uses " + topLevelName(target));
                     }
                 }

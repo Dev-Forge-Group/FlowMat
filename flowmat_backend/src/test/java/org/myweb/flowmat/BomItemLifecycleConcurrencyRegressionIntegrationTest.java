@@ -42,7 +42,7 @@ import org.myweb.flowmat.domain.bom.application.BomRevisionLock;
 import org.myweb.flowmat.domain.bom.application.BomService;
 import org.myweb.flowmat.domain.bom.application.BomCopyService;
 import org.myweb.flowmat.domain.bom.application.BomLineImportService;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 
 import org.myweb.flowmat.domain.catalog.application.ItemService;
 import org.myweb.flowmat.domain.catalog.api.dto.request.ItemUpdateRequest;
@@ -538,7 +538,7 @@ class BomItemLifecycleConcurrencyRegressionIntegrationTest extends IntegrationTe
         String second = item();
         assertThat(asOwner(() -> boms.addLine(source, line(first))).saved()).isTrue();
         assertThat(asOwner(() -> boms.addLine(source, line(second, 2))).saved()).isTrue();
-        BomResponse before = bom(source);
+        BomView before = bom(source);
         assertThat(before.lines()).extracting(entry -> entry.childItemId()).containsExactly(first, second);
         String target = item();
         Result result = whileItemWriteLocked(second,
@@ -557,7 +557,7 @@ class BomItemLifecycleConcurrencyRegressionIntegrationTest extends IntegrationTe
         String first = item();
         String second = item();
         assertThat(asOwner(() -> boms.addLine(bom, line(old))).saved()).isTrue();
-        BomResponse before = bom(bom);
+        BomView before = bom(bom);
         BomLineImportRequest request = new BomLineImportRequest(false, true, List.of(
             new BomLineImportRequest.Row("BL-" + first, "1", "kg", null, "material"),
             new BomLineImportRequest.Row("BL-" + second, "1", "kg", null, "material")));
@@ -608,8 +608,8 @@ class BomItemLifecycleConcurrencyRegressionIntegrationTest extends IntegrationTe
         return id.get();
     }
 
-    private BomResponse bom(String id) {
-        AtomicReference<BomResponse> response = new AtomicReference<>();
+    private BomView bom(String id) {
+        AtomicReference<BomView> response = new AtomicReference<>();
         assertThat(asOwner(() -> response.set(boms.getBom(id))).saved()).isTrue();
         return response.get();
     }

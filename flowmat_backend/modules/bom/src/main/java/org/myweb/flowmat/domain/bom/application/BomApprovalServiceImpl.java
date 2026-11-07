@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
 import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
@@ -46,7 +46,7 @@ public class BomApprovalServiceImpl implements BomApprovalService {
     private final NotificationCommand notifications;
 
     @Override
-    public BomResponse submit(String bomId) {
+    public BomView submit(String bomId) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectWriteAccess(header.getProjectId());
         List<BomLine> lines = lines(header);
@@ -71,7 +71,7 @@ public class BomApprovalServiceImpl implements BomApprovalService {
     }
 
     @Override
-    public BomResponse approve(String bomId, String note, boolean endEarlier) {
+    public BomView approve(String bomId, String note, boolean endEarlier) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectOwnerAccess(header.getProjectId());
         List<BomLine> lines = lines(header);
@@ -96,7 +96,7 @@ public class BomApprovalServiceImpl implements BomApprovalService {
     }
 
     @Override
-    public BomResponse reject(String bomId, String note) {
+    public BomView reject(String bomId, String note) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectOwnerAccess(header.getProjectId());
         if (note == null || note.isBlank()) {
@@ -123,7 +123,7 @@ public class BomApprovalServiceImpl implements BomApprovalService {
     }
 
     @Override
-    public BomResponse retire(String bomId, String note) {
+    public BomView retire(String bomId, String note) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectOwnerAccess(header.getProjectId());
         transition(header, BomStatus.RETIRED);

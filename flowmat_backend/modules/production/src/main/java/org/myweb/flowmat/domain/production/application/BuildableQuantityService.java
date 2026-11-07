@@ -10,11 +10,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomLineResponse;
-import org.myweb.flowmat.domain.bom.application.BomTree;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
-import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
@@ -37,13 +35,13 @@ public class BuildableQuantityService {
 
     private static final int SCALE = 4;
 
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final CatalogQuery catalogQuery;
     private final UnitConverter unitConverter;
     private final UsableStock usableStock;
 
     public BuildableQuantityResponse buildable(String bomId) {
-        BomResponse bom = bomService.getBom(bomId);
+        BomView bom = bomQuery.getBom(bomId);
         Stock stock = stock(bom.projectId(), List.of(bom));
         return compute(bom, stock);
     }
@@ -53,12 +51,12 @@ public class BuildableQuantityService {
      * unit that has since gone) comes back with the reason instead of failing the rest.
      */
     public List<BuildableQuantityResponse> approved(String projectId) {
-        List<BomResponse> boms = bomService.listBoms(projectId, null).stream()
-            .filter(bom -> BomStatus.APPROVED.code().equals(bom.bomStatus()))
+        List<BomView> boms = bomQuery.listBoms(projectId, null).stream()
+            .filter(BomView::approved)
             .toList();
         Stock stock = stock(projectId.trim(), boms);
         List<BuildableQuantityResponse> result = new ArrayList<>();
-        for (BomResponse bom : boms) {
+        for (BomView bom : boms) {
             try {
                 result.add(compute(bom, stock));
             } catch (BusinessException e) {
@@ -73,9 +71,9 @@ public class BuildableQuantityService {
     private record Stock(Map<String, CatalogItemView> items, Map<String, BigDecimal> usable) {
     }
 
-    private Stock stock(String projectId, List<BomResponse> boms) {
+    private Stock stock(String projectId, List<BomView> boms) {
         Set<String> materials = boms.stream()
-            .flatMap(bom -> bom.lines().stream().filter(line -> BomTree.isMaterial(line.lineType())).map(BomLineResponse::childItemId))
+            .flatMap(bom -> bom.lines().stream().filter(BomLineView::material).map(BomLineView::childItemId))
             .collect(Collectors.toSet());
         Set<String> itemIds = new HashSet<>(materials);
         boms.forEach(bom -> itemIds.add(bom.targetItemId()));
@@ -83,7 +81,7 @@ public class BuildableQuantityService {
         return new Stock(items, materials.isEmpty() ? Map.of() : usableStock.byItem(projectId, materials));
     }
 
-    private BuildableQuantityResponse compute(BomResponse bom, Stock stock) {
+    private BuildableQuantityResponse compute(BomView bom, Stock stock) {
         CatalogItemView target = stock.items().get(bom.targetItemId());
         if (target == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The BOM's product no longer exists.");
@@ -96,16 +94,16 @@ public class BuildableQuantityService {
 
         Map<String, BigDecimal> needs = new LinkedHashMap<>();
         Map<String, String> itemUnits = new LinkedHashMap<>();
-        if (bom.lines().stream().anyMatch(BomLineResponse::phantom)) {
+        if (bom.lines().stream().anyMatch(BomLineView::phantom)) {
             // A phantom is never stocked: count the materials it goes through instead (multi-level-bom.md P2, P4).
-            for (var line : bomService.calculateRequirements(bom.bomId(), batch).lines()) {
+            for (var line : bomQuery.calculateRequirements(bom.bomId(), batch).lines()) {
                 needs.merge(line.childItemId(), line.requiredItemQuantity().setScale(SCALE, RoundingMode.HALF_UP), BigDecimal::add);
                 itemUnits.putIfAbsent(line.childItemId(), line.itemUnit());
             }
         }
-        for (BomLineResponse line : needs.isEmpty() ? bom.lines() : List.<BomLineResponse>of()) {
+        for (BomLineView line : needs.isEmpty() ? bom.lines() : List.<BomLineView>of()) {
             // The batch is planned on main lines without optional materials (ADR-032 decision 5, ADR-033 decision 7).
-            if (!BomTree.isMaterial(line.lineType()) || line.substituteFor() != null || "Y".equals(line.optionalYn())) {
+            if (!line.material() || line.substituteFor() != null || "Y".equals(line.optionalYn())) {
                 continue;
             }
             CatalogItemView child = stock.items().get(line.childItemId());

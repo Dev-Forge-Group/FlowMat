@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomExplosionResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
@@ -54,7 +54,7 @@ public class BomExplosionService {
         projectAccessService.requireProjectReadAccess(header.getProjectId());
         BigDecimal quantity = quantity(quantityText);
         java.time.LocalDate day = on != null ? on : projectCalendar.today(header.getProjectId());
-        BomRequirementResponse top = bomService.requirementsForRun(bomId, header.getProjectId(), null, quantity, day);
+        BomRequirement top = bomService.requirementsForRun(bomId, header.getProjectId(), null, quantity, day);
 
         Walk walk = new Walk(header.getProjectId(), day,
             BomTree.approvedByItem(bomHeaderRepository, header.getProjectId(), day));
@@ -112,9 +112,9 @@ public class BomExplosionService {
             this.approved = approved;
         }
 
-        private void level(BomRequirementResponse requirement, String parentItemId, int level, Set<String> path) {
+        private void level(BomRequirement requirement, String parentItemId, int level, Set<String> path) {
             deepest = Math.max(deepest, level);
-            for (BomRequirementResponse.Line line : requirement.lines()) {
+            for (BomRequirement.Line line : requirement.lines()) {
                 String child = line.childItemId();
                 BomHeader own = approved.get(child);
                 // Approval keeps loops out; the path check and the level limit only guard against a tree changed meanwhile.
@@ -126,7 +126,7 @@ public class BomExplosionService {
                     units.putIfAbsent(child, line.itemUnit());
                     continue;
                 }
-                BomRequirementResponse below;
+                BomRequirement below;
                 try {
                     below = bomService.requirementsForRun(own.getBomId(), projectId, child, line.requiredItemQuantity(), day);
                 } catch (BusinessException exception) {

@@ -20,8 +20,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryTransferRequest;
@@ -69,7 +69,7 @@ public class WarehouseTaskService {
     private final PickWorkOrders workOrders;
     private final WorkOrderAllocations allocationTransfers;
     private final AllocatedStockTransferService allocatedStockTransferService;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final StorageLocationService storageLocationService;
     private final InventoryTransferService inventoryTransferService;
     private final ProjectAccessService projectAccessService;
@@ -142,9 +142,9 @@ public class WarehouseTaskService {
             BigDecimal quantity = request.quantity() != null ? request.quantity() : order.targetQuantity();
             // Phantoms expand through the revision of the order's planned day (docs/domain/multi-level-bom.md P3).
             LocalDate phantomDay = order.plannedStartAt() == null ? null : projectCalendar.date(projectId, order.plannedStartAt().toInstant());
-            BomRequirementResponse requirement = bomService.requirementsForRun(order.bomId(), projectId, order.targetItemId(), quantity,
+            BomRequirement requirement = bomQuery.requirementsForRun(order.bomId(), projectId, order.targetItemId(), quantity,
                 phantomDay, order.optionalItemIds());
-            for (BomRequirementResponse.Line line : requirement.lines()) {
+            for (BomRequirement.Line line : requirement.lines()) {
                 needs.merge(line.childItemId(), line.requiredItemQuantity(), BigDecimal::add);
             }
         } else {

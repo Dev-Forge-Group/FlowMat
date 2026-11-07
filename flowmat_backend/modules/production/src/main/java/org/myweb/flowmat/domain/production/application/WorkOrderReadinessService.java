@@ -16,8 +16,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWindow;
@@ -62,7 +62,7 @@ public class WorkOrderReadinessService {
     private final ProductionPlanningReferences references;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
     private final ProductionRunRepository productionRunRepository;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final OpenRunInputs openRunInputs;
     private final CatalogQuery catalog;
     private final StockAllocationRepository stockAllocationRepository;
@@ -355,12 +355,12 @@ public class WorkOrderReadinessService {
     }
 
     private List<Material> materials(WorkOrder order, BomRevisionView bom, BigDecimal remaining, List<Check> checks) {
-        BomRequirementResponse requirement;
+        BomRequirement requirement;
         try {
             // Phantoms expand as the order's run will freeze them: the planned day's revision (docs/domain/multi-level-bom.md P3).
             LocalDate phantomDay = order.getPlannedStartAt() == null ? null
                 : projectCalendar.date(order.getProjectId(), order.getPlannedStartAt().toInstant());
-            requirement = bomService.requirementsForRun(bom.bomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay,
+            requirement = bomQuery.requirementsForRun(bom.bomId(), order.getProjectId(), order.getTargetItemId(), remaining, phantomDay,
                 optionalItems.of(order.getWorkOrderId()));
         } catch (BusinessException exception) {
             checks.add(new Check("materials", FAIL, "Materials could not be calculated: " + exception.getMessage()));
@@ -397,7 +397,7 @@ public class WorkOrderReadinessService {
         List<String> covered = new ArrayList<>();
         // What this order's unfinished runs already put in has left stock, so it is not needed again.
         Map<String, BigDecimal> alreadyUsed = openRunInputs.forOrder(order.getWorkOrderId());
-        for (BomRequirementResponse.Line line : requirement.lines()) {
+        for (BomRequirement.Line line : requirement.lines()) {
             CatalogItemView item = references.item(line.childItemId()).orElse(null);
             boolean lotTracked = item != null && "Y".equals(item.lotManageYn());
             BigDecimal available = BigDecimal.ZERO;
@@ -428,7 +428,7 @@ public class WorkOrderReadinessService {
                 // Approved substitutes in usable stock, as this material, may cover it (ADR-032 decision 7).
                 BigDecimal cover = BigDecimal.ZERO;
                 List<String> inStock = new ArrayList<>();
-                for (BomRequirementResponse.Substitute substitute : line.substitutes()) {
+                for (BomRequirement.Substitute substitute : line.substitutes()) {
                     BigDecimal held = stock.stream().filter(row -> substitute.childItemId().equals(row.itemId()))
                         .map(row -> free(row, lotStatus, expiredLots, ownAllocated)).filter(amount -> amount.signum() > 0)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);

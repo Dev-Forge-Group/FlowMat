@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
@@ -37,7 +38,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class InventoryCommandService {
+public class InventoryCommandService implements StockMovementCommand {
 
     static final String QUARANTINED = "quarantined";
     /** A LOT waiting for its receipt checks (docs/domain/lot-release.md); its rows are quarantined until quality releases it. */
@@ -58,6 +59,15 @@ public class InventoryCommandService {
     private final LotStatusResync lotStatusResync;
     private final StockAlertService stockAlertService;
     private final StorageConditionGuard storageConditionGuard;
+
+    /** Another context's movement: the inventory transaction type of the same name. */
+    @Override
+    @Transactional
+    public void apply(StockMovement movement) {
+        apply(new InventoryMovement(movement.inventoryId(), InventoryTransactionType.valueOf(movement.kind().name()),
+            movement.quantityDelta(), movement.reservedDelta(), movement.referenceType(), movement.referenceId(), movement.note(),
+            movement.requestId(), movement.actorUserId()));
+    }
 
     /** Applies the movement if it keeps every stock invariant, and records it. */
     @Transactional
@@ -172,6 +182,7 @@ public class InventoryCommandService {
      * today's stock like any other movement. Used when that source is cancelled; the external reversal endpoint refuses
      * production movements so the run and the stock cannot drift apart.
      */
+    @Override
     @Transactional
     public int reverseMovementsOf(String referenceType, String referenceId, String reason, String actorUserId) {
         int reversed = 0;

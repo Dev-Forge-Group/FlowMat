@@ -13,13 +13,12 @@ import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
-import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.Kind;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.StockMovement;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
-import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
-import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectResolveRequest;
@@ -55,7 +54,7 @@ public class QualityServiceImpl implements QualityService {
     private final LotQuery lotQuery;
     private final CatalogQuery catalogQuery;
     private final StockRecordQuery stockRecordQuery;
-    private final InventoryCommandService inventoryCommandService;
+    private final StockMovementCommand stockMovements;
     private final IdGenerator idGenerator;
     private final InspectionStandardService inspectionStandardService;
 
@@ -256,9 +255,9 @@ public class QualityServiceImpl implements QualityService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Scrap from stock of the defective item"
                 + (defect.getLotId() != null ? " and LOT" : "") + ".");
         }
-        inventoryCommandService.apply(new InventoryMovement(
+        stockMovements.apply(new StockMovement(
             row.inventoryId(),
-            InventoryTransactionType.ADJUSTMENT,
+            Kind.ADJUSTMENT,
             quantity.negate(),
             BigDecimal.ZERO,
             "defect_log",
@@ -361,19 +360,19 @@ public class QualityServiceImpl implements QualityService {
 
     /** Quarantines the whole LOT through the stock command path, pointing the movement at the inspection. */
     private void quarantine(LotView lot, QualityInspection inspection, String actor) {
-        if (LotStatus.QUARANTINED.code().equals(lot.lotStatus())) {
+        if (lot.quarantined()) {
             return;
         }
-        if (LotStatus.CLOSED.code().equals(lot.lotStatus())) {
+        if (lot.closed()) {
             throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.lotNo() + " is closed, so it cannot be quarantined.");
         }
         List<String> rows = stockRecordQuery.findLotStockIds(lot.lotId());
         if (rows.isEmpty()) {
             throw new BusinessException(ErrorCode.CONFLICT, "LOT " + lot.lotNo() + " has no stock record to quarantine.");
         }
-        inventoryCommandService.apply(new InventoryMovement(
+        stockMovements.apply(new StockMovement(
             rows.get(0),
-            InventoryTransactionType.QUARANTINE,
+            Kind.QUARANTINE,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
             "quality_inspection",

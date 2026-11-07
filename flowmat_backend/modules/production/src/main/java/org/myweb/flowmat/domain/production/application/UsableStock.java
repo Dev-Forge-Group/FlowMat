@@ -42,7 +42,7 @@ public class UsableStock {
         for (StockView row : rows) {
             LotView lot = row.lotId() == null ? null : lots.get(row.lotId());
             if ("quarantined".equals(row.inventoryStatus())
-                || lot != null && ("closed".equals(lot.lotStatus()) || lot.isExpiredOn(today))) {
+                || lot != null && (lot.closed() || lot.isExpiredOn(today))) {
                 continue;
             }
             usable.merge(row.itemId(), row.availableQuantity() == null ? BigDecimal.ZERO : row.availableQuantity(), BigDecimal::add);

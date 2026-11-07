@@ -15,7 +15,6 @@ import org.myweb.flowmat.domain.catalog.application.UnitConverter;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
-import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.RunInputAllocationRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.ProductionRunItemResponse;
@@ -96,7 +95,7 @@ public class RunInputAllocationService {
         List<StockView> usable = stock.stream()
             .filter(row -> {
                 LotView lot = lots.get(row.lotId());
-                return lot != null && LotStatus.fromCode(lot.lotStatus()).usable() && !lot.isExpiredOn(today);
+                return lot != null && lot.usable() && !lot.isExpiredOn(today);
             })
             .sorted(Comparator
                 .comparing((StockView row) -> lots.get(row.lotId()).expiryDate(), Comparator.nullsLast(Comparator.naturalOrder()))

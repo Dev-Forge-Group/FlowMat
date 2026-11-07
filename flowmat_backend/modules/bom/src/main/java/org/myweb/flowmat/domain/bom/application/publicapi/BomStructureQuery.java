@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import org.myweb.flowmat.domain.bom.application.BomTree;
 
 /**
  * The project's approved BOM structure for other bounded contexts, which use this instead of the BOM repositories
@@ -16,6 +17,15 @@ public interface BomStructureQuery {
 
     /** Item → the materials of any of its approved revisions, whatever their periods, for loops and low-level codes. */
     Map<String, List<String>> approvedChildren(String projectId);
+
+    /**
+     * Low-level code of every item in a tree such as {@link #approvedChildren}: the lowest level it appears on under any
+     * item (0 at the top). Planning works through items in this order, so an item's demand is complete before its own BOM
+     * is exploded.
+     */
+    static Map<String, Integer> lowLevelCodes(Map<String, List<String>> tree) {
+        return BomTree.lowLevelCodes(tree);
+    }
 
     /** The items of a revision's lines in the order the BOM lists them; empty for an unknown revision. */
     List<String> lineItemIds(String bomId);

@@ -33,11 +33,11 @@ import org.myweb.flowmat.domain.inventory.application.publicapi.StockRuleFactsQu
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockViewQuery;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
-import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
-import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.Kind;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunFinishRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
 import org.myweb.flowmat.domain.production.api.dto.response.ProductionRunResponse;
@@ -65,12 +65,12 @@ class ProductionRunServiceImplTest {
     @Mock private ProductionRunItemRepository productionRunItemRepository;
     @Mock private ProjectAccessService projectAccessService;
     @Mock private WorkflowAccess workflowAccess;
-    @Mock private InventoryCommandService inventoryCommandService;
+    @Mock private StockMovementCommand stockMovements;
     @Mock private FlowRuleEngineService flowRuleEngineService;
     @Mock private IdGenerator idGenerator;
     @Mock private WorkOrderRepository workOrderRepository;
     @Mock private UnitConverter unitConverter;
-    @Mock private BomService bomService;
+    @Mock private BomQuery bomQuery;
     @Mock private org.myweb.flowmat.domain.inventory.application.LotService lotService;
     @Mock private ProductionFlowRunAdapter productionFlowRunAdapter;
     @Mock private StockAllocationService stockAllocationService;
@@ -114,9 +114,9 @@ class ProductionRunServiceImplTest {
 
         // Stock moves only through the inventory command (conditional atomic UPDATE + history), never a direct save.
         verify(stockViews).findActiveStock("inv-1");
-        verify(inventoryCommandService).apply(argThat(movement ->
+        verify(stockMovements).apply(argThat(movement ->
             movement.inventoryId().equals(inventory.inventoryId())
-                && movement.type() == InventoryTransactionType.PRODUCTION_INPUT
+                && movement.kind() == Kind.PRODUCTION_INPUT
                 && movement.quantityDelta().compareTo(new BigDecimal("-0.5")) == 0
                 && movement.note().contains("500 g = 0.5 kg")
                 && movement.actorUserId().equals("user-1")));
@@ -178,7 +178,7 @@ class ProductionRunServiceImplTest {
         productionRunService.recordRunItem("run-1",
             new ProductionRunItemRecordRequest(null, null, "inv-1", "item-1", "input", BigDecimal.ONE, null, "kg"));
 
-        verifyNoInteractions(inventoryCommandService, stockAllocationService, lotService);
+        verifyNoInteractions(stockMovements, stockAllocationService, lotService);
     }
 
     @Test
@@ -195,7 +195,7 @@ class ProductionRunServiceImplTest {
         productionRunService.recordRunItem("run-1",
             new ProductionRunItemRecordRequest(null, null, "inv-1", "item-1", "output", BigDecimal.ONE, null, "kg"));
 
-        verifyNoInteractions(lotService, inventoryCommandService);
+        verifyNoInteractions(lotService, stockMovements);
     }
 
     @Test
@@ -228,7 +228,7 @@ class ProductionRunServiceImplTest {
         productionRunService.recordCorrectionItem(run, "correction-1", "input", "item-1", "inv-1",
             BigDecimal.ONE, "kg");
 
-        verifyNoInteractions(inventoryCommandService, stockAllocationService, lotService);
+        verifyNoInteractions(stockMovements, stockAllocationService, lotService);
     }
 
     @Test
@@ -299,7 +299,7 @@ class ProductionRunServiceImplTest {
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
         assertEquals(field + " does not match the selected processIoId.", exception.getMessage());
         verify(productionRunItemRepository, never()).save(any());
-        verifyNoInteractions(inventoryCommandService, stockAllocationService, lotService);
+        verifyNoInteractions(stockMovements, stockAllocationService, lotService);
     }
 
     private void givenItem() {
@@ -470,7 +470,7 @@ class ProductionRunServiceImplTest {
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
         assertEquals("plannedOutputQty must be 0 or more.", exception.getMessage());
         verify(productionRunRepository, never()).save(any());
-        verifyNoInteractions(workOrderRepository, bomService, productionFlowRunAdapter, flowRuleEngineService);
+        verifyNoInteractions(workOrderRepository, bomQuery, productionFlowRunAdapter, flowRuleEngineService);
     }
 
     @Test
@@ -488,7 +488,7 @@ class ProductionRunServiceImplTest {
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
         assertEquals("plannedQty must be 0 or more.", exception.getMessage());
         verify(productionRunItemRepository, never()).save(any());
-        verifyNoInteractions(inventoryCommandService, stockAllocationService, flowRuleEngineService);
+        verifyNoInteractions(stockMovements, stockAllocationService, flowRuleEngineService);
     }
 
     @Test

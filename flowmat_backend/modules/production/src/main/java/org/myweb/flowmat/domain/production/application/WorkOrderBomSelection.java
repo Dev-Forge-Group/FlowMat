@@ -6,7 +6,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.EffectiveBomView;
-import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -39,7 +38,7 @@ class WorkOrderBomSelection {
             if (!order.getProjectId().equals(bom.projectId()) || !Objects.equals(order.getTargetItemId(), bom.targetItemId())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "bomId must produce targetItemId in this project.");
             }
-            if (!BomStatus.APPROVED.code().equals(bom.bomStatus())) {
+            if (!bom.approved()) {
                 if (approving) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST,
                         "BOM " + bom.bomName() + " v" + bom.bomVersion() + " is " + bom.bomStatus()

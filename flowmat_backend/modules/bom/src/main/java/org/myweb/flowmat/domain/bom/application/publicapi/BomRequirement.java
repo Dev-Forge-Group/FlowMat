@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.bom.api.dto.response;
+package org.myweb.flowmat.domain.bom.application.publicapi;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -9,7 +9,7 @@ import java.util.Map;
  * Material needed for a production quantity: productionQuantity / baseQuantity × line quantity, then converted to
  * each material item's unit (docs/domain/inventory-bom-lot-contract.md §5).
  */
-public record BomRequirementResponse(
+public record BomRequirement(
     String bomId,
     Integer bomVersion,
     String targetItemId,
@@ -30,11 +30,11 @@ public record BomRequirementResponse(
     List<Line> optionals
 ) {
 
-    public BomRequirementResponse {
+    public BomRequirement {
         optionals = optionals == null ? List.of() : List.copyOf(optionals);
     }
 
-    public BomRequirementResponse(String bomId, Integer bomVersion, String targetItemId, BigDecimal productionQuantity,
+    public BomRequirement(String bomId, Integer bomVersion, String targetItemId, BigDecimal productionQuantity,
                                   BigDecimal baseQuantity, List<Line> lines, BigDecimal materialCost, boolean costComplete,
                                   List<Output> outputs) {
         this(bomId, bomVersion, targetItemId, productionQuantity, baseQuantity, lines, materialCost, costComplete, outputs, List.of());

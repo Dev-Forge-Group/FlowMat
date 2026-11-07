@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogDisposalCostQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderWasteDisposalResponse;
@@ -40,7 +40,7 @@ public class WorkOrderWasteDisposalService {
 
     private final WorkOrderRepository workOrders;
     private final ProductionRunRepository runs;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final CatalogQuery catalog;
     private final CatalogDisposalCostQuery disposalCosts;
     private final ProjectCalendarQuery projectCalendar;
@@ -66,16 +66,16 @@ public class WorkOrderWasteDisposalService {
         }
         LocalDate phantomDay = order.getPlannedStartAt() == null ? null
             : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant());
-        BomRequirementResponse requirement;
+        BomRequirement requirement;
         try {
-            requirement = bomService.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining, phantomDay,
+            requirement = bomQuery.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining, phantomDay,
                 optionalItems.of(order.getWorkOrderId()));
         } catch (BusinessException exception) {
             return empty(order, remaining, "The BOM could not be used: " + exception.getMessage());
         }
         Map<String, BigDecimal> quantities = new LinkedHashMap<>();
         Map<String, Boolean> convertible = new LinkedHashMap<>();
-        for (BomRequirementResponse.Output output : requirement.outputs() == null ? List.<BomRequirementResponse.Output>of()
+        for (BomRequirement.Output output : requirement.outputs() == null ? List.<BomRequirement.Output>of()
             : requirement.outputs()) {
             if (!"waste".equals(output.lineType())) continue;
             convertible.putIfAbsent(output.itemId(), true);

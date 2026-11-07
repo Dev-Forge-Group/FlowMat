@@ -17,9 +17,9 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomCreateRequest;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomLineCreateRequest;
 import org.myweb.flowmat.domain.bom.api.dto.request.BomUpdateRequest;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomLineResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomResponse;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomWhereUsedResponse;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
@@ -59,7 +59,7 @@ public class BomServiceImpl implements BomService {
     private final ProjectCalendarQuery projectCalendar;
 
     @Override
-    public List<BomResponse> listBoms(String projectId, String targetItemId) {
+    public List<BomView> listBoms(String projectId, String targetItemId) {
         if (projectId == null || projectId.isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "projectId is required.");
         }
@@ -134,7 +134,7 @@ public class BomServiceImpl implements BomService {
     }
 
     @Override
-    public BomResponse getBom(String bomId) {
+    public BomView getBom(String bomId) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectReadAccess(header.getProjectId());
         return toResponse(header);
@@ -142,7 +142,7 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional
-    public BomResponse createBom(BomCreateRequest request) {
+    public BomView createBom(BomCreateRequest request) {
         String projectId = request.projectId().trim();
         projectAccessService.requireProjectWriteAccess(projectId);
         CatalogItemView target = findProjectItem(request.targetItemId(), projectId);
@@ -175,7 +175,7 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional
-    public BomResponse updateBom(String bomId, BomUpdateRequest request) {
+    public BomView updateBom(String bomId, BomUpdateRequest request) {
         BomHeader header = findEditableBom(bomId);
         if (request.bomName() != null && !request.bomName().isBlank()) {
             header.setBomName(request.bomName().trim());
@@ -204,7 +204,7 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional
-    public BomResponse addLine(String bomId, BomLineCreateRequest request) {
+    public BomView addLine(String bomId, BomLineCreateRequest request) {
         BomHeader header = findEditableBom(bomId);
         CatalogItemView child = findProjectItem(request.childItemId(), header.getProjectId());
         child = lockReferenceItem(request.childItemId(), header.getProjectId());
@@ -241,7 +241,7 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional
-    public BomResponse deleteLine(String bomId, String bomLineId) {
+    public BomView deleteLine(String bomId, String bomLineId) {
         BomHeader header = findEditableBom(bomId);
         BomLine line = bomLineRepository.findById(bomLineId)
             .filter(found -> found.getBomId().equals(header.getBomId()))
@@ -305,13 +305,13 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional
-    public BomResponse createRevision(String bomId) {
+    public BomView createRevision(String bomId) {
         return createRevision(bomId, null);
     }
 
     @Override
     @Transactional
-    public BomResponse createRevision(String bomId, UUID requestId) {
+    public BomView createRevision(String bomId, UUID requestId) {
         BomHeader source = findBom(bomId);
         projectAccessService.requireProjectWriteAccess(source.getProjectId());
         revisionLock.lockHeader(source);
@@ -379,7 +379,7 @@ public class BomServiceImpl implements BomService {
     }
 
     @Override
-    public BomRequirementResponse calculateRequirements(String bomId, BigDecimal productionQuantity) {
+    public BomRequirement calculateRequirements(String bomId, BigDecimal productionQuantity) {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectReadAccess(header.getProjectId());
         return requirements(header, productionQuantity, projectCalendar.today(header.getProjectId()), new java.util.HashSet<>(),
@@ -387,7 +387,7 @@ public class BomServiceImpl implements BomService {
     }
 
     @Override
-    public BomRequirementResponse requirementsForRun(
+    public BomRequirement requirementsForRun(
         String bomId,
         String projectId,
         String targetItemId,
@@ -397,7 +397,7 @@ public class BomServiceImpl implements BomService {
     }
 
     @Override
-    public BomRequirementResponse requirementsForRun(
+    public BomRequirement requirementsForRun(
         String bomId,
         String projectId,
         String targetItemId,
@@ -408,7 +408,7 @@ public class BomServiceImpl implements BomService {
     }
 
     @Override
-    public BomRequirementResponse requirementsForRun(
+    public BomRequirement requirementsForRun(
         String bomId,
         String projectId,
         String targetItemId,
@@ -440,7 +440,7 @@ public class BomServiceImpl implements BomService {
      * (docs/domain/multi-level-bom.md P2-P4). {@code phantoms} holds the phantom items being expanded, against loops. An
      * optional line is planned only when {@code picked} holds its item (ADR-033).
      */
-    private BomRequirementResponse requirements(BomHeader header, BigDecimal productionQuantity, java.time.LocalDate phantomDay,
+    private BomRequirement requirements(BomHeader header, BigDecimal productionQuantity, java.time.LocalDate phantomDay,
                                                 java.util.Set<String> phantoms, java.util.Set<String> picked) {
         requirePositive(productionQuantity, "Production quantity");
         CatalogItemView target = findProjectItem(header.getTargetItemId(), header.getProjectId());
@@ -448,9 +448,9 @@ public class BomServiceImpl implements BomService {
         requirePositive(base, "Base quantity");
         BigDecimal factor = productionQuantity.divide(base, FACTOR_SCALE, RoundingMode.HALF_UP);
 
-        List<BomRequirementResponse.Line> result = new ArrayList<>();
-        List<BomRequirementResponse.Output> outputs = new ArrayList<>();
-        List<BomRequirementResponse.Line> optionals = new ArrayList<>();
+        List<BomRequirement.Line> result = new ArrayList<>();
+        List<BomRequirement.Output> outputs = new ArrayList<>();
+        List<BomRequirement.Line> optionals = new ArrayList<>();
         BigDecimal materialCost = BigDecimal.ZERO;
         boolean costComplete = true;
         List<BomLine> bomLines = lines(header.getBomId());
@@ -472,7 +472,7 @@ public class BomServiceImpl implements BomService {
             UnitConverter.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), child.unitId());
             if (!material) {
                 // By-products and waste come out of the batch; nothing is consumed or costed for them.
-                outputs.add(new BomRequirementResponse.Output(line.getBomLineId(), child.itemId(), line.getLineType(),
+                outputs.add(new BomRequirement.Output(line.getBomLineId(), child.itemId(), line.getLineType(),
                     line.getQuantity(), line.getUnit(), required, conversion.toUnitCode(),
                     conversion.quantity().setScale(STOCK_SCALE, RoundingMode.HALF_UP)));
                 continue;
@@ -485,21 +485,21 @@ public class BomServiceImpl implements BomService {
             BigDecimal scrapRate = line.getScrapRate() != null ? line.getScrapRate() : BigDecimal.ZERO;
             if ("Y".equals(line.getOptionalYn()) && !picked.contains(child.itemId())) {
                 // Left out unless a work order picked it, and listed apart (ADR-033 decisions 2 and 7).
-                optionals.add(new BomRequirementResponse.Line(line.getBomLineId(), child.itemId(), line.getQuantity(), line.getUnit(),
+                optionals.add(new BomRequirement.Line(line.getBomLineId(), child.itemId(), line.getQuantity(), line.getUnit(),
                     required, conversion.toUnitCode(), itemQuantity, rate, unitCost, lineCost, null, scrapRate));
                 continue;
             }
             if ("Y".equals(line.getPhantomYn())) {
-                BomRequirementResponse expanded = phantom(header, child, itemQuantity, phantomDay, phantoms, picked);
-                for (BomRequirementResponse.Line inner : expanded.lines()) {
-                    result.add(new BomRequirementResponse.Line(inner.bomLineId(), inner.childItemId(), inner.lineQuantity(),
+                BomRequirement expanded = phantom(header, child, itemQuantity, phantomDay, phantoms, picked);
+                for (BomRequirement.Line inner : expanded.lines()) {
+                    result.add(new BomRequirement.Line(inner.bomLineId(), inner.childItemId(), inner.lineQuantity(),
                         inner.lineUnit(), inner.requiredQuantity(), inner.itemUnit(), inner.requiredItemQuantity(),
                         inner.conversionRate(), inner.unitCost(), inner.lineCost(),
                         inner.viaItemId() != null ? inner.viaItemId() : child.itemId(), inner.scrapRate(), inner.substitutes()));
                 }
                 outputs.addAll(expanded.outputs());
-                for (BomRequirementResponse.Line inner : expanded.optionals()) {
-                    optionals.add(new BomRequirementResponse.Line(inner.bomLineId(), inner.childItemId(), inner.lineQuantity(),
+                for (BomRequirement.Line inner : expanded.optionals()) {
+                    optionals.add(new BomRequirement.Line(inner.bomLineId(), inner.childItemId(), inner.lineQuantity(),
                         inner.lineUnit(), inner.requiredQuantity(), inner.itemUnit(), inner.requiredItemQuantity(),
                         inner.conversionRate(), inner.unitCost(), inner.lineCost(),
                         inner.viaItemId() != null ? inner.viaItemId() : child.itemId(), inner.scrapRate()));
@@ -513,7 +513,7 @@ public class BomServiceImpl implements BomService {
             } else {
                 materialCost = materialCost.add(lineCost);
             }
-            result.add(new BomRequirementResponse.Line(
+            result.add(new BomRequirement.Line(
                 line.getBomLineId(),
                 child.itemId(),
                 line.getQuantity(),
@@ -530,7 +530,7 @@ public class BomServiceImpl implements BomService {
                     header.getProjectId())
             ));
         }
-        return new BomRequirementResponse(
+        return new BomRequirement(
             header.getBomId(), header.getBomVersion(), header.getTargetItemId(), productionQuantity, base, result,
             materialCost.setScale(STOCK_SCALE, RoundingMode.HALF_UP), costComplete, outputs, optionals);
     }
@@ -539,9 +539,9 @@ public class BomServiceImpl implements BomService {
      * What the same production takes of each substitute instead of its main line, with the substitute's own scrap
      * (ADR-032 decisions 2 and 5). {@code mainQuantity}: the main line's need in its item's unit, before rounding.
      */
-    private List<BomRequirementResponse.Substitute> substitutes(List<BomLine> lines, BigDecimal factor, BigDecimal mainQuantity,
+    private List<BomRequirement.Substitute> substitutes(List<BomLine> lines, BigDecimal factor, BigDecimal mainQuantity,
                                                                  String projectId) {
-        List<BomRequirementResponse.Substitute> result = new ArrayList<>();
+        List<BomRequirement.Substitute> result = new ArrayList<>();
         for (BomLine line : lines) {
             CatalogItemView item = findProjectItem(line.getChildItemId(), projectId);
             BigDecimal required = factor.multiply(line.getQuantity().multiply(BomTree.scrapFactor(line)))
@@ -552,7 +552,7 @@ public class BomServiceImpl implements BomService {
             BigDecimal lineCost = unitCost == null ? null : itemQuantity.multiply(unitCost).setScale(STOCK_SCALE, RoundingMode.HALF_UP);
             BigDecimal mainPerUnit = conversion.quantity().signum() > 0
                 ? mainQuantity.divide(conversion.quantity(), 12, RoundingMode.HALF_UP) : null;
-            result.add(new BomRequirementResponse.Substitute(line.getBomLineId(), item.itemId(), line.getQuantity(), line.getUnit(),
+            result.add(new BomRequirement.Substitute(line.getBomLineId(), item.itemId(), line.getQuantity(), line.getUnit(),
                 required, conversion.toUnitCode(), itemQuantity, unitCost, lineCost,
                 line.getScrapRate() != null ? line.getScrapRate() : BigDecimal.ZERO, line.getPriority(), mainPerUnit));
         }
@@ -560,7 +560,7 @@ public class BomServiceImpl implements BomService {
     }
 
     /** The phantom item's BOM revision effective on the day, for the quantity of it the line needs (P2-P3). */
-    private BomRequirementResponse phantom(BomHeader parent, CatalogItemView item, BigDecimal quantity, java.time.LocalDate day,
+    private BomRequirement phantom(BomHeader parent, CatalogItemView item, BigDecimal quantity, java.time.LocalDate day,
                                            java.util.Set<String> phantoms, java.util.Set<String> picked) {
         if (phantoms.contains(item.itemId()) || phantoms.size() >= BomTree.MAX_LEVELS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Phantom " + item.itemCode() + " goes through itself or more than "
@@ -628,13 +628,13 @@ public class BomServiceImpl implements BomService {
         return bomLineRepository.findAllByBomIdOrderBySortOrderAscBomLineIdAsc(bomId);
     }
 
-    BomResponse toResponse(BomHeader header) {
+    BomView toResponse(BomHeader header) {
         return toResponse(header, lines(header.getBomId()));
     }
 
-    static BomResponse toResponse(BomHeader header, List<BomLine> lines) {
+    static BomView toResponse(BomHeader header, List<BomLine> lines) {
         Map<String, BomLine> mainOf = BomTree.mainLines(lines);
-        return new BomResponse(
+        return new BomView(
             header.getBomId(),
             header.getProjectId(),
             header.getTargetItemId(),
@@ -646,7 +646,7 @@ public class BomServiceImpl implements BomService {
             header.getApprovedBy(),
             header.getApprovedAt(),
             header.getNote(),
-            lines.stream().map(line -> new BomLineResponse(
+            lines.stream().map(line -> new BomLineView(
                 line.getBomLineId(),
                 line.getChildItemId(),
                 line.getQuantity(),

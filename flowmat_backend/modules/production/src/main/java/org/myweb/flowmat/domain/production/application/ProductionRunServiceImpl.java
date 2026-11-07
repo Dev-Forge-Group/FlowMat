@@ -13,15 +13,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.catalog.application.UnitConverter;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
-import org.myweb.flowmat.domain.inventory.application.InventoryCommandService;
-import org.myweb.flowmat.domain.inventory.application.InventoryMovement;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.Kind;
+import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.StockMovement;
 import org.myweb.flowmat.domain.inventory.application.LotService;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
-import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunFinishRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunStartRequest;
@@ -77,12 +77,12 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private final CatalogItemRuleFactsQuery ruleFacts;
     private final StockViewQuery stockViews;
     private final StockRuleFactsQuery stockRuleFactsQuery;
-    private final InventoryCommandService inventoryCommandService;
+    private final StockMovementCommand stockMovements;
     private final FlowRuleEngineService flowRuleEngineService;
     private final IdGenerator idGenerator;
     private final WorkOrderRepository workOrderRepository;
     private final UnitConverter unitConverter;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final LotService lotService;
     private final ProductionFlowRunAdapter productionFlowRunAdapter;
     private final StockAllocationService stockAllocationService;
@@ -147,10 +147,10 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         java.time.LocalDate phantomDay = workOrder != null && workOrder.getPlannedStartAt() != null
             ? projectCalendar.date(workOrder.getProjectId(), workOrder.getPlannedStartAt().toInstant())
             : null;
-        BomRequirementResponse bom = bomId == null
+        BomRequirement bom = bomId == null
             ? null
             // The run freezes the optional materials its order picked; a run without an order takes none (ADR-033 decision 6).
-            : bomService.requirementsForRun(bomId, request.projectId().trim(), targetItemId, request.plannedOutputQty(), phantomDay,
+            : bomQuery.requirementsForRun(bomId, request.projectId().trim(), targetItemId, request.plannedOutputQty(), phantomDay,
                 workOrder != null ? optionalItems.of(workOrder.getWorkOrderId()) : List.of());
         if (bom != null && targetItemId == null) {
             targetItemId = bom.targetItemId();
@@ -188,7 +188,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         productionFlowRunAdapter.onStarted(savedRun);
 
         if (bom != null) {
-            for (BomRequirementResponse.Line line : bom.lines()) {
+            for (BomRequirement.Line line : bom.lines()) {
                 ProductionRunItem planned = new ProductionRunItem();
                 planned.setProductionRunItemId(idGenerator.generate());
                 planned.setProductionRunId(savedRun.getProductionRunId());
@@ -318,7 +318,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         BigDecimal returned = reallocate ? returnedToOrder(run, item) : null;
 
         // Stock first: if the produced stock was already used, the reversal fails and nothing else changes.
-        inventoryCommandService.reverseMovementsOf("production_run_item", item.getProductionRunItemId(),
+        stockMovements.reverseMovementsOf("production_run_item", item.getProductionRunItemId(),
             "Run " + run.getRunNumber() + " item cancelled: " + normalizedReason, actor);
         if (returned != null) {
             // What the input took goes back to the order rather than to free stock (docs/domain/stock-allocation.md R4).
@@ -438,7 +438,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     @Transactional
     public void voidForCorrection(ProductionRun run, ProductionRunItem item, String correctionId, int correctionNo, String reason,
         String actor) {
-        inventoryCommandService.reverseMovementsOf("production_run_item", item.getProductionRunItemId(),
+        stockMovements.reverseMovementsOf("production_run_item", item.getProductionRunItemId(),
             "Run " + run.getRunNumber() + " correction #" + correctionNo + ": " + reason, actor);
         item.setCancelledYn("Y");
         item.setCancelledBy(actor);
@@ -812,13 +812,13 @@ public class ProductionRunServiceImpl implements ProductionRunService {
             ? BigDecimal.ZERO
             : conversion.quantity().setScale(4, RoundingMode.HALF_UP);
 
-        InventoryTransactionType type;
+        Kind type;
         BigDecimal quantityDelta;
         if ("input".equals(runItem.getDirection())) {
-            type = InventoryTransactionType.PRODUCTION_INPUT;
+            type = Kind.PRODUCTION_INPUT;
             quantityDelta = actualQty.negate();
         } else if ("output".equals(runItem.getDirection())) {
-            type = InventoryTransactionType.PRODUCTION_OUTPUT;
+            type = Kind.PRODUCTION_OUTPUT;
             quantityDelta = actualQty;
         } else {
             return;
@@ -829,7 +829,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
 
         // Conditional atomic UPDATE: concurrent runs cannot lose updates, and consuming more than is available
         // (or quarantined stock) is refused instead of driving the record negative.
-        inventoryCommandService.apply(new InventoryMovement(
+        stockMovements.apply(new StockMovement(
             inventory.inventoryId(),
             type,
             quantityDelta,

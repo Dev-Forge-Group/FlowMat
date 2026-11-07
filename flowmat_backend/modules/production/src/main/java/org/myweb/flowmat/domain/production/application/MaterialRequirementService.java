@@ -12,9 +12,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.bom.api.dto.response.BomRequirementResponse;
-import org.myweb.flowmat.domain.bom.application.BomService;
-import org.myweb.flowmat.domain.bom.application.BomTree;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
@@ -48,7 +47,7 @@ public class MaterialRequirementService {
 
     private final WorkOrderRepository workOrderRepository;
     private final ProductionRunRepository productionRunRepository;
-    private final BomService bomService;
+    private final BomQuery bomQuery;
     private final CatalogQuery catalogQuery;
     private final UsableStock usableStock;
     private final ProjectAccessService projectAccessService;
@@ -94,10 +93,10 @@ public class MaterialRequirementService {
             if (remaining.signum() <= 0) {
                 continue;
             }
-            BomRequirementResponse requirement;
+            BomRequirement requirement;
             try {
                 // Phantom lines go through the revision of the order's planned day (multi-level-bom.md P3).
-                requirement = bomService.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining,
+                requirement = bomQuery.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining,
                     order.getPlannedStartAt() == null ? null : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant()),
                     picks.getOrDefault(order.getWorkOrderId(), List.of()));
             } catch (BusinessException exception) {
@@ -106,7 +105,7 @@ public class MaterialRequirementService {
             }
             counted++;
             Map<String, BigDecimal> used = alreadyUsed.getOrDefault(order.getWorkOrderId(), Map.of());
-            for (BomRequirementResponse.Line line : requirement.lines()) {
+            for (BomRequirement.Line line : requirement.lines()) {
                 // A substitute an open run put in counts as its main material (ADR-032 decision 6).
                 BigDecimal need = line.requiredItemQuantity().subtract(line.covered(used)).max(BigDecimal.ZERO);
                 required.merge(line.childItemId(), need, BigDecimal::add);
@@ -188,7 +187,7 @@ public class MaterialRequirementService {
         if (approved.isEmpty()) {
             return;
         }
-        Map<String, Integer> levels = BomTree.lowLevelCodes(bomStructure.approvedChildren(projectId));
+        Map<String, Integer> levels = BomStructureQuery.lowLevelCodes(bomStructure.approvedChildren(projectId));
         Set<String> done = new HashSet<>();
         while (true) {
             String next = required.keySet().stream()
@@ -208,14 +207,14 @@ public class MaterialRequirementService {
                 continue;
             }
             String code = catalogQuery.findActiveItem(next).map(CatalogItemView::itemCode).orElse(next);
-            BomRequirementResponse below;
+            BomRequirement below;
             try {
-                below = bomService.requirementsForRun(approved.get(next), projectId, next, toMake);
+                below = bomQuery.requirementsForRun(approved.get(next), projectId, next, toMake);
             } catch (BusinessException exception) {
                 problems.add(code + ": " + exception.getMessage());
                 continue;
             }
-            for (BomRequirementResponse.Line line : below.lines()) {
+            for (BomRequirement.Line line : below.lines()) {
                 required.merge(line.childItemId(), line.requiredItemQuantity(), BigDecimal::add);
                 units.putIfAbsent(line.childItemId(), line.itemUnit());
                 needs.computeIfAbsent(line.childItemId(), id -> new ArrayList<>())
