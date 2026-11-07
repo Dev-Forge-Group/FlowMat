@@ -9,7 +9,6 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useReactFlow } from '@xyflow/react'
 import {
-  annotationsToEditorDocument,
   angleBetween,
   boxCenter,
   cloneEditorElement,
@@ -40,7 +39,6 @@ import {
   translateElement,
   ungroupEditorElements,
   updateElement,
-  editorElementToPatchAnnotationInput,
   type AnchorSide,
   type Box2,
   type EditorDocument,
@@ -51,6 +49,10 @@ import {
   type ResizeHandle,
   type Vec2,
 } from '../../../lib/flowmat-editor'
+import {
+  annotationsToEditorDocument,
+  editorElementToPatchAnnotationInput,
+} from '../../../entities/canvas-annotation/model/annotationEditorAdapter'
 import {
   AnchorPointOverlay,
   ArrowMarkerDefs,

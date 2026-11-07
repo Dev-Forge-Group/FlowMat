@@ -1,4 +1,3 @@
-export * from './adapters/annotationEditorAdapter'
 export * from './adapters/editorDocumentBackendAdapter'
 export * from './core/Editor'
 export * from './core/EditorStore'

@@ -1,22 +1,22 @@
-import { createEllipseElement } from '../elements/EllipseElement'
-import { createPolygonElement } from '../elements/PolygonElement'
-import { createRectangleElement } from '../elements/RectangleElement'
-import { createTextElement } from '../elements/TextElement'
-import type { EditorDocument } from '../model/EditorDocument'
-import { createEmptyEditorDocument } from '../model/EditorDocument'
-import type {
-  EditorElement,
-  LineStyle,
-  PolygonElement,
-  ShapeStyle,
-  TextStyle,
-} from '../model/EditorElement'
-import { toElementId } from '../model/ElementId'
-import type { CanvasAnnotationViewModel } from '../../../entities/workflow/model/types'
+import {
+  createEllipseElement,
+  createEmptyEditorDocument,
+  createPolygonElement,
+  createRectangleElement,
+  createTextElement,
+  toElementId,
+  type EditorDocument,
+  type EditorElement,
+  type LineStyle,
+  type PolygonElement,
+  type ShapeStyle,
+  type TextStyle,
+} from '../../../lib/flowmat-editor'
+import type { CanvasAnnotationViewModel } from '../../workflow/model/types'
 import type {
   CreateCanvasAnnotationInput,
   PatchCanvasAnnotationInput,
-} from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
+} from '../api/canvasAnnotationApi'
 
 export type AnnotationAdapterErrorCode =
   | 'unsupported_annotation'
