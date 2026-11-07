@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  Controls,
   MiniMap,
   useViewport,
   getBezierPath,
@@ -45,8 +44,12 @@ import {
 } from '../../../entities/workflow/model/nodeCatalog'
 import type { PatchCanvasAnnotationInput } from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
 import type { CanvasReadingHighlight } from '../model/canvasReadingModel'
+import type { RunMark } from '../model/runOverlay'
+import type { ChangeMark } from '../model/revisionChanges'
+import type { LayoutLine, LayoutSnapshot } from '../model/layoutChecks'
 import { CanvasNode } from './CanvasNode'
-import { CanvasEdge } from './CanvasEdge'
+import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
+import { workflowSvg } from '../model/workflowSvg'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
 import { useWorkspaceStore } from '../model/workspaceStore'
@@ -288,10 +291,47 @@ function AnnotationPreviewLayer({
   )
 }
 
-function ExportController({ onReady }: { onReady?: (fn: (filename: string) => void) => void }) {
-  const { getNodes } = useReactFlow()
+function ExportController({ onReady, onSvgReady }: {
+  onReady?: (fn: (filename: string) => void) => void
+  onSvgReady?: (fn: (filename: string) => void) => void
+}) {
+  const { getNodes, getEdges } = useReactFlow()
   const getNodesRef = useRef(getNodes)
   getNodesRef.current = getNodes
+  const getEdgesRef = useRef(getEdges)
+  getEdgesRef.current = getEdges
+
+  // The vector picture: the boxes React Flow measured and the paths it drew, each line in its kind's own look.
+  useEffect(() => {
+    onSvgReady?.((filename: string) => {
+      const nodes = (getNodesRef.current() as unknown as RfNode[]).filter((node) => node.type === 'flowmatNode')
+      if (nodes.length === 0) return
+      const measured = (node: RfNode) => (node as unknown as { measured?: { width?: number; height?: number } }).measured
+      const processes = nodes.map((node) => ({ id: node.id, x: node.position.x, y: node.position.y,
+        width: measured(node)?.width ?? node.width, height: measured(node)?.height ?? node.height,
+        name: node.data.name, kind: node.data.nodeType }))
+      const connections = (getEdgesRef.current() as unknown as RfEdge[]).flatMap((edge) => {
+        const path = document.querySelector<SVGPathElement>(
+          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
+        const d = path?.getAttribute('d')
+        if (!path || !d) return []
+        const look = CONNECTION_TYPE_STYLE[edge.data.connectionType] ?? { stroke: '#94a3b8' }
+        const length = typeof path.getTotalLength === 'function' ? path.getTotalLength() : 0
+        const at = (distance: number) => {
+          const point = path.getPointAtLength(distance)
+          return { x: point.x, y: point.y }
+        }
+        return [{ id: edge.id, d, stroke: look.stroke, dash: look.strokeDasharray ?? null, label: edge.data.label,
+          labelAt: length > 0 ? at(length / 2) : null, ends: length > 0 ? [at(0), at(length)] as const : null }]
+      })
+      const url = URL.createObjectURL(new Blob([workflowSvg(filename, processes, connections)], { type: 'image/svg+xml' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${filename}.svg`
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    })
+  }, [onSvgReady])
 
   useEffect(() => {
     onReady?.((filename: string) => {
@@ -303,9 +343,10 @@ function ExportController({ onReady }: { onReady?: (fn: (filename: string) => vo
       const viewport = getViewportForBounds(bounds, W, H, 0.1, 2, 0.1)
       const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
       if (!el) return
-      // The picture is the workflow itself: reading highlights stay out of it.
+      // The picture is the workflow itself: reading highlights and the selection stay out of it.
       const frame = el.closest('.workspace-canvas-viewport')
       frame?.classList.add('reading-exporting')
+      const restoreLines = plainSelectedLines(el)
       void toPng(el, {
         backgroundColor: '#f4f3f8',
         width: W,
@@ -321,10 +362,53 @@ function ExportController({ onReady }: { onReady?: (fn: (filename: string) => vo
         a.href = dataUrl
         a.download = `${filename}.png`
         a.click()
-      }).finally(() => frame?.classList.remove('reading-exporting'))
+      }).finally(() => {
+        restoreLines()
+        frame?.classList.remove('reading-exporting')
+      })
     })
   }, [onReady])
 
+  return null
+}
+
+/**
+ * The picture copies a line's markup, not its computed style, so a selected line would keep its selection colour: for
+ * the export, each selected line and its arrow take the look of their kind (CanvasEdge.tsx keeps it in variables).
+ * Returns what puts them back.
+ */
+function plainSelectedLines(root: HTMLElement): () => void {
+  const undo: (() => void)[] = []
+  const restyle = (element: SVGElement, apply: (style: CSSStyleDeclaration, stroke: string, dash: string) => void) => {
+    const stroke = element.style.getPropertyValue('--edge-type-stroke')
+    if (!stroke) return
+    const before = element.getAttribute('style')
+    apply(element.style, stroke, element.style.getPropertyValue('--edge-type-dash'))
+    undo.push(() => (before == null ? element.removeAttribute('style') : element.setAttribute('style', before)))
+  }
+  root.querySelectorAll<SVGPathElement>('.react-flow__edge.selected path.react-flow__edge-path').forEach((path) =>
+    restyle(path, (style, stroke, dash) => {
+      style.stroke = stroke
+      style.strokeWidth = '1.5'
+      style.strokeDasharray = dash && dash !== 'none' ? dash : ''
+    }))
+  root.querySelectorAll<SVGPathElement>('.react-flow__edge.selected marker path').forEach((path) =>
+    restyle(path, (style, stroke) => { style.fill = stroke }))
+  return () => undo.forEach((restore) => restore())
+}
+
+/** Reports the zoom when the canvas first shows and after each move or zoom ends, for the view controls' percentage. */
+function ZoomReporter({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
+  const { getZoom } = useReactFlow()
+  const report = useRef(onZoomChange)
+  report.current = onZoomChange
+  useEffect(() => {
+    report.current?.(getZoom())
+    // The first fit may land after mount.
+    const timer = window.setTimeout(() => report.current?.(getZoom()), 400)
+    return () => window.clearTimeout(timer)
+  }, [getZoom])
+  useOnViewportChange({ onEnd: (viewport: Viewport) => report.current?.(viewport.zoom) })
   return null
 }
 
@@ -384,6 +468,8 @@ interface Props {
   onSelectAllReady?(fn: () => void): void
   onAnnotationSelectionReady?(getSelectedAnnotationIds: () => string[]): void
   onExportReady?(fn: (filename: string) => void): void
+  /** A way to download the workflow as a vector picture (workflowSvg.ts). */
+  onSvgExportReady?(fn: (filename: string) => void): void
   onEdgeReconnect?(oldEdgeId: string, newConnection: ConnectCompletePayload): void
   onPresence?(msg: PresenceMessage): void
   onGraphChange?(msg: GraphChangeMessage): void
@@ -407,8 +493,20 @@ interface Props {
   remoteAnnotationPreviews?: ReadonlyMap<string, { points: { x: number; y: number }[]; annotationType: string }>
   /** What is being read (a process's neighbours, upstream, downstream or a route); the rest recedes. View only. */
   reading?: CanvasReadingHighlight | null
-  /** A way to bring one process into view, for the process finder. */
-  onCenterReady?(fn: (processId: string) => void): void
+  /** A way to bring processes into view (a lone one with room around it), for reading the canvas. */
+  onRevealReady?(fn: (processIds: string[]) => void): void
+  /** A production run shown over the canvas: each process's mark from its latest step. View only. */
+  runMarks?: ReadonlyMap<string, RunMark> | null
+  /** What the draft changed since a published revision: added or changed processes and connections. View only. */
+  changeMarks?: { processes: ReadonlyMap<string, ChangeMark>; connections: ReadonlyMap<string, ChangeMark> } | null
+  /** A way to measure the canvas as drawn (process boxes and the lines' paths), for the layout warnings. */
+  onLayoutReady?(fn: () => LayoutSnapshot): void
+  /** archify's Semantic Radar: the overview map, shown only while it is open. */
+  mapOpen?: boolean
+  /** archify's camera stepper: zoom in or out to the next 25% step (25%–300%), or back to the whole canvas. */
+  onCameraReady?(api: { zoomStep(direction: 1 | -1): void; reset(): void }): void
+  /** The zoom when the canvas first shows and after each move ends. */
+  onZoomChange?(zoom: number): void
 }
 
 type RfNode = {
@@ -498,6 +596,7 @@ export function CanvasViewport({
   onSelectAllReady,
   onAnnotationSelectionReady,
   onExportReady,
+  onSvgExportReady,
   onEdgeReconnect,
   onPresence,
   onGraphChange,
@@ -512,10 +611,18 @@ export function CanvasViewport({
   editingPresence,
   remoteAnnotationPreviews,
   reading = null,
-  onCenterReady,
+  onRevealReady,
+  runMarks = null,
+  changeMarks = null,
+  onLayoutReady,
+  mapOpen = false,
+  onCameraReady,
+  onZoomChange,
 }: Props) {
   const storageKey = `flowmat-viewport-${workflowId}`
   const savedViewport = useMemo(() => loadSavedViewport(storageKey), [storageKey])
+  // A link that opens a reading opens on what it reads rather than on the last saved view.
+  const [initialReading] = useState(() => (reading && reading.nodeIds.size > 0 ? [...reading.nodeIds] : null))
   const { resolvedTheme } = useTheme()
   const selectNode = useWorkspaceStore((s) => s.selectNode)
   const selectEdge = useWorkspaceStore((s) => s.selectEdge)
@@ -552,10 +659,56 @@ export function CanvasViewport({
 
   useEffect(() => {
     if (!reactFlowInstance) return
-    onCenterReady?.((processId) => {
-      void reactFlowInstance.fitView({ nodes: [{ id: processId }], padding: 0.8, maxZoom: 1.25, duration: 300 })
+    onRevealReady?.((processIds) => {
+      if (processIds.length === 0) return
+      const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      const lone = processIds.length === 1
+      void reactFlowInstance.fitView({ nodes: processIds.map((id) => ({ id })), padding: lone ? 0.8 : 0.2,
+        maxZoom: lone ? 1.25 : 1, duration: still ? 0 : 300 })
     })
-  }, [onCenterReady, reactFlowInstance])
+  }, [onRevealReady, reactFlowInstance])
+
+  // archify's camera stepper: 25% steps between 25% and 300%, and back to the whole canvas.
+  useEffect(() => {
+    if (!reactFlowInstance) return
+    const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    onCameraReady?.({
+      zoomStep(direction) {
+        const zoom = reactFlowInstance.getZoom()
+        const next = direction > 0
+          ? Math.min(3, (Math.floor(zoom * 4 + 1e-6) + 1) / 4)
+          : Math.max(0.25, (Math.ceil(zoom * 4 - 1e-6) - 1) / 4)
+        void reactFlowInstance.zoomTo(next, { duration: still() ? 0 : 200 })
+      },
+      reset() {
+        void reactFlowInstance.fitView({ padding: 0.15, duration: still() ? 0 : 300 })
+      },
+    })
+  }, [onCameraReady, reactFlowInstance])
+
+  // The layout warnings measure what was drawn: each line's path, sampled every few canvas pixels, and each process's box.
+  useEffect(() => {
+    if (!reactFlowInstance) return
+    onLayoutReady?.(() => {
+      const boxes = reactFlowInstance.getNodes().filter((node) => node.type === 'flowmatNode').map((node) => ({
+        id: node.id, x: node.position.x, y: node.position.y,
+        width: node.measured?.width ?? node.width ?? 0, height: node.measured?.height ?? node.height ?? 0 }))
+      const lines: LayoutLine[] = []
+      for (const edge of reactFlowInstance.getEdges()) {
+        const path = document.querySelector<SVGPathElement>(
+          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
+        if (!path || typeof path.getTotalLength !== 'function') continue
+        const length = path.getTotalLength()
+        const steps = Math.max(1, Math.ceil(length / 6))
+        const points = Array.from({ length: steps + 1 }, (_, index) => {
+          const point = path.getPointAtLength((length * index) / steps)
+          return { x: point.x, y: point.y }
+        })
+        lines.push({ id: edge.id, from: edge.source, to: edge.target, points })
+      }
+      return { boxes, lines }
+    })
+  }, [onLayoutReady, reactFlowInstance])
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -948,13 +1101,26 @@ export function CanvasViewport({
   )
 
   // Reading marks every process and connection as part of what is read or receding (index.css "Canvas reading").
-  const readingNodes = useMemo(() => (reading
-    ? localNodes.map((node) => ({ ...node, className: reading.nodeIds.has(node.id)
-      ? `reading-on reading-${reading.tone}${node.id === reading.origin ? ' reading-origin' : ''}` : 'reading-dim' }))
-    : localNodes), [localNodes, reading])
-  const readingEdges = useMemo(() => (reading
-    ? localEdges.map((edge) => ({ ...edge, className: reading.edgeIds.has(edge.id) ? `reading-on reading-${reading.tone}` : 'reading-dim' }))
-    : localEdges), [localEdges, reading])
+  // A run shown over the canvas adds each process's mark beside it ("run-mark run-<mark>"); a compared revision adds
+  // what changed since it on the other corner ("change-mark change-<mark>") and on connections ("change-<mark>").
+  const readingNodes = useMemo(() => (reading || runMarks || changeMarks
+    ? localNodes.map((node) => {
+      const read = !reading ? ''
+        : reading.nodeIds.has(node.id) ? `reading-on reading-${reading.tone}${node.id === reading.origin ? ' reading-origin' : ''}`
+          : reading.nearIds?.has(node.id) ? 'reading-near' : 'reading-dim'
+      const mark = runMarks?.get(node.id)
+      const change = changeMarks?.processes.get(node.id)
+      return { ...node, className: [read, mark ? `run-mark run-${mark}` : '', change ? `change-mark change-${change}` : '']
+        .filter(Boolean).join(' ') }
+    })
+    : localNodes), [localNodes, reading, runMarks, changeMarks])
+  const readingEdges = useMemo(() => (reading || changeMarks
+    ? localEdges.map((edge) => {
+      const read = !reading ? '' : reading.edgeIds.has(edge.id) ? `reading-on reading-${reading.tone}` : 'reading-dim'
+      const change = changeMarks?.connections.get(edge.id)
+      return { ...edge, className: [read, change ? `change-${change}` : ''].filter(Boolean).join(' ') }
+    })
+    : localEdges), [localEdges, reading, changeMarks])
 
   return (
     <div
@@ -1018,12 +1184,14 @@ export function CanvasViewport({
           })
         }}
         onlyRenderVisibleElements={localNodes.length > 50}
-        {...(savedViewport
-          ? { defaultViewport: savedViewport }
-          : { fitView: true, fitViewOptions: { padding: 0.15 } }
+        {...(initialReading
+          ? { fitView: true, fitViewOptions: { nodes: initialReading.map((id) => ({ id })), padding: 0.2, maxZoom: 1 } }
+          : savedViewport
+            ? { defaultViewport: savedViewport }
+            : { fitView: true, fitViewOptions: { padding: 0.15 } }
         )}
         minZoom={0.1}
-        maxZoom={2.5}
+        maxZoom={3}
         snapToGrid
         snapGrid={[8, 8]}
         deleteKeyCode={null}
@@ -1053,10 +1221,11 @@ export function CanvasViewport({
         />
         <InternalsUpdater nodeIds={nodesToUpdateInternals} />
         <ViewportPersister storageKey={storageKey} />
-        <ExportController onReady={onExportReady} />
+        <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} />
+        <ZoomReporter onZoomChange={onZoomChange} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
-        <Controls />
-        <MiniMap zoomable pannable nodeStrokeWidth={2} />
+        {/* archify's Semantic Radar: the overview map opens from MAP (M) instead of always taking room. */}
+        {mapOpen && <MiniMap zoomable pannable nodeStrokeWidth={2} ariaLabel="Semantic radar" />}
       </ReactFlow>
     </div>
   )

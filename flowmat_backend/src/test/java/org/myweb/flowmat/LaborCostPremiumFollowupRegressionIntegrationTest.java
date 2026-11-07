@@ -163,22 +163,22 @@ class LaborCostPremiumFollowupRegressionIntegrationTest extends IntegrationTestS
         for (String user : workers) {
             verify(pay, times(1)).paidDays(projectId, user, first, last);
             verify(attendance, times(1))
-                .findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
-                    eq(projectId), eq(user), any(OffsetDateTime.class), any(OffsetDateTime.class));
+                .findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
+                    eq(projectId), eq(user), any(LocalDate.class), any(LocalDate.class));
         }
         verify(pay, times(2)).paidDays(eq(projectId), anyString(), any(LocalDate.class), any(LocalDate.class));
 
-        ArgumentCaptor<OffsetDateTime> attendanceFrom = ArgumentCaptor.forClass(OffsetDateTime.class);
-        ArgumentCaptor<OffsetDateTime> attendanceTo = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<LocalDate> attendanceFrom = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<LocalDate> attendanceTo = ArgumentCaptor.forClass(LocalDate.class);
         verify(attendance, times(2))
-            .findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
+            .findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
                 eq(projectId), anyString(), attendanceFrom.capture(), attendanceTo.capture());
         // Weekly pay can legitimately load earlier days. Require coverage and one read, not its internal lookback length.
-        for (OffsetDateTime from : attendanceFrom.getAllValues()) {
-            assertFalse(from.toInstant().isAfter(first.atStartOfDay(PROJECT_ZONE).toInstant()), from.toString());
+        for (LocalDate from : attendanceFrom.getAllValues()) {
+            assertFalse(from.isAfter(first), from.toString());
         }
-        for (OffsetDateTime to : attendanceTo.getAllValues()) {
-            assertFalse(to.toInstant().isBefore(last.plusDays(1).atStartOfDay(PROJECT_ZONE).toInstant()), to.toString());
+        for (LocalDate to : attendanceTo.getAllValues()) {
+            assertFalse(to.isBefore(last), to.toString());
         }
 
         ArgumentCaptor<LocalDate> holidayFrom = ArgumentCaptor.forClass(LocalDate.class);

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useHolidayMutations, useHolidaysQuery } from '../../../entities/catalog/api/useEquipment'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 
@@ -17,6 +17,7 @@ function weekday(date: string): string {
 export function HolidaysPanel({ projectId }: { projectId: string }) {
   const holidaysQuery = useHolidaysQuery(projectId)
   const { add, remove } = useHolidayMutations(projectId)
+  const inputRevision = useRef(0)
   const [date, setDate] = useState('')
   const [name, setName] = useState('')
   const holidays = holidaysQuery.data ?? []
@@ -25,10 +26,12 @@ export function HolidaysPanel({ projectId }: { projectId: string }) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    const submittedRevision = inputRevision.current
     add.mutate(
       { date, name: name.trim() || undefined },
       {
         onSuccess: () => {
+          if (inputRevision.current !== submittedRevision) return
           setDate('')
           setName('')
         },
@@ -49,11 +52,11 @@ export function HolidaysPanel({ projectId }: { projectId: string }) {
       <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', fontSize: 12 }}>
         <label style={{ display: 'grid', gap: 4 }}>
           <span>Date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <input type="date" value={date} onChange={(e) => { inputRevision.current += 1; setDate(e.target.value) }} required />
         </label>
         <label style={{ display: 'grid', gap: 4, flex: 1, minWidth: 140 }}>
           <span>Name</span>
-          <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="e.g. Founding day" />
+          <input value={name} maxLength={100} onChange={(e) => { inputRevision.current += 1; setName(e.target.value) }} placeholder="e.g. Founding day" />
         </label>
         <button type="submit" disabled={add.isPending || !date}>
           Add holiday

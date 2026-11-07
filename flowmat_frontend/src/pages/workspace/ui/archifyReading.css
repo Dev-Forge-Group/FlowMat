@@ -1,0 +1,631 @@
+/* ==========================================================================
+   archify reading chrome on the FlowMat canvas: Semantic Passport, Route Probe, diagram view controls and reading
+   receipts. Values, layout and wording follow archify's viewer (viewer/viewer.css and template.source.html,
+   https://github.com/tt-a1i/archify, Apache-2.0). Variable names carry an --ax- prefix so they never meet FlowMat's
+   own; the light and dark sets follow FlowMat's data-theme and, without one, the system preference.
+   ========================================================================== */
+
+:root {
+  --ax-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ax-text: #111827;
+  --ax-text-muted: #5b6474;
+  --ax-text-faint: #6b7280;
+  --ax-panel: #ffffff;
+  --ax-panel-border: #e5e7eb;
+  --ax-frontend-fill: rgba(34, 211, 238, 0.15);
+  --ax-frontend-stroke: #0891b2;
+  --ax-backend-fill: rgba(52, 211, 153, 0.18);
+  --ax-backend-stroke: #059669;
+  --ax-database-fill: rgba(167, 139, 250, 0.2);
+  --ax-database-stroke: #7c3aed;
+  --ax-cloud-fill: rgba(251, 191, 36, 0.18);
+  --ax-cloud-stroke: #d97706;
+  --ax-security-fill: rgba(251, 113, 133, 0.15);
+  --ax-security-stroke: #e11d48;
+  --ax-toolbar-bg: rgba(255, 255, 255, 0.92);
+  --ax-toolbar-border: #cbd5e1;
+  --ax-toolbar-text: #334155;
+  --ax-toolbar-hover: #f1f5f9;
+  --ax-toolbar-menu-bg: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  --ax-text: #ffffff;
+  --ax-text-muted: #94a3b8;
+  --ax-text-faint: #7d8da1;
+  --ax-panel: rgba(15, 23, 42, 0.5);
+  --ax-panel-border: #1e293b;
+  --ax-frontend-fill: rgba(8, 51, 68, 0.4);
+  --ax-frontend-stroke: #22d3ee;
+  --ax-backend-fill: rgba(6, 78, 59, 0.4);
+  --ax-backend-stroke: #34d399;
+  --ax-database-fill: rgba(76, 29, 149, 0.4);
+  --ax-database-stroke: #a78bfa;
+  --ax-cloud-fill: rgba(120, 53, 15, 0.3);
+  --ax-cloud-stroke: #fbbf24;
+  --ax-security-fill: rgba(136, 19, 55, 0.4);
+  --ax-security-stroke: #fb7185;
+  --ax-toolbar-bg: rgba(15, 23, 42, 0.8);
+  --ax-toolbar-border: #334155;
+  --ax-toolbar-text: #e2e8f0;
+  --ax-toolbar-hover: rgba(15, 23, 42, 0.95);
+  --ax-toolbar-menu-bg: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ax-text: #ffffff;
+    --ax-text-muted: #94a3b8;
+    --ax-text-faint: #7d8da1;
+    --ax-panel: rgba(15, 23, 42, 0.5);
+    --ax-panel-border: #1e293b;
+    --ax-frontend-fill: rgba(8, 51, 68, 0.4);
+    --ax-frontend-stroke: #22d3ee;
+    --ax-backend-fill: rgba(6, 78, 59, 0.4);
+    --ax-backend-stroke: #34d399;
+    --ax-database-fill: rgba(76, 29, 149, 0.4);
+    --ax-database-stroke: #a78bfa;
+    --ax-cloud-fill: rgba(120, 53, 15, 0.3);
+    --ax-cloud-stroke: #fbbf24;
+    --ax-security-fill: rgba(136, 19, 55, 0.4);
+    --ax-security-stroke: #fb7185;
+    --ax-toolbar-bg: rgba(15, 23, 42, 0.8);
+    --ax-toolbar-border: #334155;
+    --ax-toolbar-text: #e2e8f0;
+    --ax-toolbar-hover: rgba(15, 23, 42, 0.95);
+    --ax-toolbar-menu-bg: #0f172a;
+  }
+}
+
+/* ---------- Semantic Passport (archify .focus-chip / .relationship-lens) ---------- */
+.focus-chip {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 12;
+  display: block;
+  width: min(22rem, calc(100% - 13rem));
+  max-width: calc(100% - 2rem);
+  overflow: hidden;
+  border: 1px solid var(--ax-frontend-stroke);
+  border-radius: 0.85rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+  font-family: var(--ax-font);
+  font-size: 0.6875rem;
+}
+.focus-chip button,
+.route-probe button,
+.diagram-nav button,
+.reading-receipt button {
+  border: 0;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  cursor: pointer;
+}
+.focus-chip button:hover,
+.focus-chip button:focus-visible { background: var(--ax-toolbar-hover); }
+.focus-chip button:focus-visible {
+  outline: 2px solid var(--ax-frontend-stroke);
+  outline-offset: 1px;
+}
+.relationship-lens-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.9rem 0.75rem 0.65rem;
+  border-bottom: 1px solid var(--ax-toolbar-border);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--ax-frontend-fill) 34%, transparent), transparent 72%);
+}
+.relationship-lens-copy { min-width: 0; }
+.relationship-lens-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.18rem;
+}
+.relationship-lens-actions button {
+  padding: 0.3rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.625rem;
+  white-space: nowrap;
+}
+.relationship-lens-actions .relationship-lens-close {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  place-items: center;
+  color: var(--ax-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+.relationship-lens-actions .relationship-lens-copy-link { color: var(--ax-frontend-stroke); }
+.relationship-lens-eyebrow {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--ax-frontend-stroke);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.relationship-lens-title {
+  display: block;
+  overflow: hidden;
+  color: var(--ax-text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.semantic-passport-detail {
+  display: block;
+  margin-top: 0.12rem;
+  overflow: hidden;
+  color: var(--ax-text-muted);
+  font-size: 0.625rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.semantic-passport-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.24rem;
+  margin-top: 0.42rem;
+}
+.semantic-passport-meta span,
+.semantic-passport-meta code {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.14rem 0.34rem;
+  border: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ax-panel) 68%, transparent);
+  color: var(--ax-text-faint);
+  font: inherit;
+  font-size: 0.5rem;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.semantic-passport-meta [data-passport="kind"] {
+  border-color: color-mix(in srgb, var(--ax-frontend-stroke) 50%, var(--ax-toolbar-border));
+  color: var(--ax-frontend-stroke);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.relationship-lens-summary {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--ax-text-faint);
+  font-size: 0.5625rem;
+}
+.semantic-passport-reach {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.52rem;
+  padding-top: 0.48rem;
+  border-top: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 76%, transparent);
+}
+.semantic-passport-reach-label {
+  color: var(--ax-text-faint);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.semantic-passport-reach-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+.semantic-passport-reach-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.32rem 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 86%, transparent);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--ax-panel) 70%, transparent);
+  color: var(--ax-text-muted);
+  text-align: left;
+}
+.semantic-passport-reach-actions button:hover:not(:disabled),
+.semantic-passport-reach-actions button:focus-visible {
+  border-color: color-mix(in srgb, var(--ax-frontend-stroke) 62%, var(--ax-toolbar-border));
+  color: var(--ax-text);
+}
+.semantic-passport-reach-actions button:disabled { cursor: default; opacity: 0.5; }
+.semantic-passport-reach-actions button[data-reach="upstream"] {
+  --ax-reach-color: var(--ax-database-stroke);
+  --ax-reach-fill: var(--ax-database-fill);
+}
+.semantic-passport-reach-actions button[data-reach="downstream"] {
+  --ax-reach-color: var(--ax-backend-stroke);
+  --ax-reach-fill: var(--ax-backend-fill);
+}
+.semantic-passport-reach-actions button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--ax-reach-color) 72%, var(--ax-toolbar-border));
+  background: color-mix(in srgb, var(--ax-reach-fill) 48%, transparent);
+  color: var(--ax-text);
+}
+.semantic-passport-reach-actions strong {
+  color: var(--ax-reach-color, var(--ax-frontend-stroke));
+  font-size: 0.625rem;
+}
+.semantic-passport-reach-status {
+  color: var(--ax-text-faint);
+  font-size: 0.525rem;
+  line-height: 1.4;
+}
+.relationship-lens-list {
+  max-height: min(18rem, 46vh);
+  overflow: auto;
+  padding: 0.4rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ax-frontend-stroke) transparent;
+}
+.relationship-lens-group + .relationship-lens-group { margin-top: 0.35rem; }
+.relationship-lens-group-title {
+  display: block;
+  padding: 0.24rem 0.38rem 0.16rem;
+  color: var(--ax-text-faint);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.focus-chip .relationship-lens-row {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+  gap: 0.06rem 0.45rem;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.35rem;
+  text-align: left;
+}
+.focus-chip .relationship-lens-row:hover,
+.focus-chip .relationship-lens-row:focus-visible {
+  background: var(--ax-toolbar-hover);
+  box-shadow: inset 2px 0 0 var(--ax-frontend-stroke);
+}
+.relationship-lens-direction {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: var(--ax-frontend-stroke);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.relationship-lens-row[data-direction="in"] .relationship-lens-direction { color: var(--ax-database-stroke); }
+.relationship-lens-row[data-direction="loop"] .relationship-lens-direction { color: var(--ax-security-stroke); }
+.relationship-lens-row strong {
+  overflow: hidden;
+  color: var(--ax-text);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relationship-lens-row small {
+  overflow: hidden;
+  color: var(--ax-text-faint);
+  font-size: 0.5625rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relationship-lens-empty {
+  margin: 0;
+  padding: 0.75rem;
+  color: var(--ax-text-faint);
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+/* ---------- Route Probe (archify .route-probe) ---------- */
+.route-probe {
+  position: absolute;
+  left: 1rem;
+  bottom: 4.25rem;
+  z-index: 12;
+  width: min(46rem, calc(100% - 2rem));
+  min-width: 18rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ax-backend-stroke) 62%, var(--ax-toolbar-border));
+  border-radius: 0.82rem;
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--ax-backend-fill) 50%, transparent), transparent 62%),
+    var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+  font-family: var(--ax-font);
+  font-size: 0.75rem;
+}
+/* Picking needs one line of guidance; the panel widens only for a traced route. */
+.route-probe:not([data-state="result"]) { width: min(22rem, calc(100% - 2rem)); min-width: 0; }
+.route-probe[data-state="error"] { border-color: color-mix(in srgb, var(--ax-security-stroke) 72%, var(--ax-toolbar-border)); }
+.route-probe[data-state="error"] .route-probe-status { color: var(--ax-security-stroke); }
+.route-probe-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.625rem 0.75rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 80%, transparent);
+}
+.route-probe-copy { min-width: 0; }
+.route-probe-eyebrow {
+  display: block;
+  color: var(--ax-backend-stroke);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.route-probe-title {
+  display: block;
+  margin-top: 0.14rem;
+  overflow: hidden;
+  color: var(--ax-toolbar-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.route-probe-actions { display: flex; gap: 0.2rem; }
+.route-probe button {
+  min-height: 1.55rem;
+  padding: 0.25rem 0.42rem;
+  border-radius: 0.36rem;
+}
+.route-probe button:hover,
+.route-probe button:focus-visible { background: var(--ax-toolbar-hover); }
+.route-probe button:focus-visible {
+  outline: 2px solid var(--ax-backend-stroke);
+  outline-offset: 1px;
+}
+.route-probe button:disabled { cursor: default; opacity: 0.34; }
+.route-probe .route-probe-copy-link { color: var(--ax-frontend-stroke); }
+.route-probe .route-probe-find { color: var(--ax-backend-stroke); }
+.route-probe-path {
+  display: flex;
+  align-items: center;
+  min-height: 2.2rem;
+  padding: 0.42rem 0.58rem 0.24rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+.route-probe-step { display: inline-flex; align-items: center; flex: none; }
+.route-probe button.route-probe-node {
+  flex: none;
+  max-width: 9.5rem;
+  overflow: hidden;
+  min-height: 1.75rem;
+  padding: 0.22rem 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--ax-backend-stroke) 46%, var(--ax-toolbar-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ax-backend-fill) 52%, transparent);
+  color: var(--ax-text);
+  font-size: 0.56rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-probe button.route-probe-node[data-endpoint="start"] { border-color: var(--ax-frontend-stroke); color: var(--ax-frontend-stroke); }
+.route-probe button.route-probe-node[data-endpoint="end"] { border-color: var(--ax-security-stroke); color: var(--ax-security-stroke); }
+.route-probe-node[data-route-journey-state="past"] { opacity: 0.66; }
+.route-probe-node[data-route-journey-state="future"] { opacity: 0.48; }
+.route-probe button.route-probe-node[aria-current="step"] {
+  border-color: var(--ax-backend-stroke);
+  background: color-mix(in srgb, var(--ax-backend-fill) 82%, var(--ax-toolbar-menu-bg));
+  color: var(--ax-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ax-backend-stroke) 42%, transparent),
+    0 0 14px color-mix(in srgb, var(--ax-backend-stroke) 34%, transparent);
+  opacity: 1;
+}
+.route-probe-arrow {
+  flex: none;
+  padding: 0 0.28rem;
+  color: var(--ax-text-faint);
+  font-size: 0.65rem;
+}
+.route-probe-status {
+  display: block;
+  min-height: 1.45rem;
+  padding: 0.5rem 0.75rem 0.625rem;
+  color: var(--ax-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.route-journey-controls {
+  display: grid;
+  grid-template-columns: 2rem minmax(5.8rem, auto) 2rem minmax(4.8rem, auto);
+  justify-content: start;
+  gap: 0.22rem;
+  padding: 0.08rem 0.58rem 0.28rem;
+}
+.route-journey-controls button {
+  min-height: 1.8rem;
+  border: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 86%, transparent);
+  background: color-mix(in srgb, var(--ax-toolbar-bg) 72%, transparent);
+  font-size: 0.54rem;
+  font-weight: 700;
+}
+.route-probe .route-journey-play { color: var(--ax-backend-stroke); }
+.route-probe .route-journey-overview { color: var(--ax-frontend-stroke); }
+.route-journey-controls[data-playing="true"] .route-journey-play {
+  border-color: color-mix(in srgb, var(--ax-backend-stroke) 64%, var(--ax-toolbar-border));
+  background: color-mix(in srgb, var(--ax-backend-fill) 62%, transparent);
+}
+
+/* ---------- Diagram view controls (archify .diagram-nav) ---------- */
+.diagram-nav {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  max-width: calc(100% - 2rem);
+  padding: 0.25rem;
+  gap: 0.0625rem;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--ax-panel-border) 80%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--ax-toolbar-menu-bg) 84%, transparent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 28px -14px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(14px) saturate(1.2);
+  font-family: var(--ax-font);
+  scrollbar-width: none;
+}
+.diagram-nav button {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.4rem;
+  border-radius: 0.5rem;
+  color: var(--ax-text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.diagram-nav button:hover,
+.diagram-nav button:focus-visible { color: var(--ax-text); background: var(--ax-toolbar-hover); }
+.diagram-nav button:focus-visible { outline: 2px solid var(--ax-frontend-stroke); outline-offset: 1px; }
+.diagram-nav button:disabled { opacity: 0.38; cursor: default; }
+.diagram-nav button[aria-pressed="true"],
+.diagram-nav button[aria-expanded="true"] {
+  color: var(--ax-frontend-stroke);
+  background: color-mix(in srgb, var(--ax-frontend-fill) 60%, transparent);
+}
+.diagram-nav .diagram-nav-mode { min-width: auto; padding-inline: 0.6rem; }
+.diagram-nav .diagram-nav-find,
+.diagram-nav [data-view="out"] { position: relative; margin-left: 0.375rem; }
+.diagram-nav .diagram-nav-find::before {
+  position: absolute;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  left: -0.19rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--ax-panel-border) 90%, transparent);
+  content: "";
+  pointer-events: none;
+}
+.diagram-nav-icon {
+  display: block;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: auto;
+  background: currentColor;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+.diagram-nav-icon.find {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='8.5' cy='8.5' r='4.5' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='m12 12 4 4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='8.5' cy='8.5' r='4.5' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='m12 12 4 4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.diagram-nav-icon.guide {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='black' stroke-width='1.7'/%3E%3Cpath d='M7.8 7.3a2.4 2.4 0 014.6.9c0 1.8-2.4 2-2.4 3.7M10 14.9h.01' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='black' stroke-width='1.7'/%3E%3Cpath d='M7.8 7.3a2.4 2.4 0 014.6.9c0 1.8-2.4 2-2.4 3.7M10 14.9h.01' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.diagram-nav-icon.minus {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.diagram-nav-icon.plus {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 5v10M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 5v10M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+/* Zoom out / level / zoom in join into one stepper well. */
+.diagram-nav [data-view="out"],
+.diagram-nav [data-view="reset"],
+.diagram-nav [data-view="in"] {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ax-panel-border) 38%, transparent);
+}
+.diagram-nav [data-view="out"] { border-radius: 0.5rem 0 0 0.5rem; }
+.diagram-nav [data-view="in"] { border-radius: 0 0.5rem 0.5rem 0; }
+.diagram-nav [data-view="reset"] {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 3.4rem;
+  padding-inline: 0.35rem;
+}
+.diagram-nav-detail {
+  color: color-mix(in srgb, var(--ax-toolbar-text) 52%, transparent);
+  font-size: 0.44rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.07em;
+}
+.diagram-nav-percent {
+  color: var(--ax-text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ---------- Reading receipts (lens, run, compared revision) ---------- */
+.reading-receipts {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 11;
+  display: grid;
+  gap: 0.35rem;
+  max-width: min(30rem, calc(100% - 2rem));
+  font-family: var(--ax-font);
+  pointer-events: none;
+}
+.reading-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 86%, transparent);
+  border-radius: 0.6rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 10px 28px -14px rgba(15, 23, 42, 0.28);
+  font-size: 0.625rem;
+  pointer-events: auto;
+}
+.reading-receipt-label {
+  color: var(--ax-frontend-stroke);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.reading-receipt[data-receipt="run"] .reading-receipt-label { color: var(--ax-backend-stroke); }
+.reading-receipt[data-receipt="changes"] .reading-receipt-label { color: var(--ax-cloud-stroke); }
+.reading-receipt button {
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.35rem;
+  color: var(--ax-frontend-stroke);
+}
+.reading-receipt button:hover,
+.reading-receipt button:focus-visible { background: var(--ax-toolbar-hover); }
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-nav button { transition: none; }
+}

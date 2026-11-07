@@ -2,6 +2,7 @@ package org.myweb.flowmat.domain.workforce.api.dto.request;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import org.myweb.flowmat.global.util.WholeNumberDeserializer;
+import org.myweb.flowmat.global.util.StrictBooleanDeserializer;
 
 /**
  * The project's pay premiums from a date (docs/architecture/adr/ADR-028-pay-premiums.md). Each premium is optional; send none to
@@ -29,10 +30,10 @@ public record LaborPremiumRuleRequest(
     @JsonDeserialize(using = WholeNumberDeserializer.class) Integer weeklyOvertimeAfterMinutes,
     @JsonDeserialize(using = WholeNumberDeserializer.class) Integer weeklyOvertimePercent,
     @JsonDeserialize(using = WholeNumberDeserializer.class) Integer weekStartsOn,
-    Boolean restDaysAsHolidays,
+    @JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean restDaysAsHolidays,
     @JsonDeserialize(using = WholeNumberDeserializer.class) Integer holidayOvertimeAfterMinutes,
     @JsonDeserialize(using = WholeNumberDeserializer.class) Integer holidayOvertimePercent,
-    Boolean followProject,
+    @JsonDeserialize(using = StrictBooleanDeserializer.class) Boolean followProject,
     String reason
 ) {
 }

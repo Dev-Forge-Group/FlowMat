@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { rawFlowRunEventsJson, validatedFlowRunEventPayloadJson, type FlowRunEvent } from '../model/flowRunEventsJson'
+import { FlowRunEventTimeline } from './FlowRunEventTimeline'
 import { FlowRunJsonValue } from './FlowRunJsonValue'
 
 type EventStep = { stepId: string; nodeId: string; sequenceNo: number }
@@ -96,6 +97,7 @@ export function FlowRunEventLog({
       <button type="button" disabled={visibleEvents.length === 0 || !eventDownload}
         onClick={downloadVisibleEvents}>Download visible events (JSON)</button>
     </div>}
+    <FlowRunEventTimeline events={visibleEvents} steps={steps} nodes={nodes} />
     {eventDownloadError && <p role="alert">{eventDownloadError}</p>}
     {eventDownload?.legacy && visibleEvents.length > 0 && <p className="inspector-hint">
       Legacy event JSON response: numeric precision may already be lost in the download.

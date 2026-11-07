@@ -30,6 +30,7 @@ import { useBomRequirementsQuery } from '../../../entities/bom/api/useBoms'
 import { finishByProductNote, finishOutput } from '../../inventory/model/bomLineTypeModel'
 import { ChecklistFinishNote, RunInstructionChecklist } from './RunInstructionChecklist'
 import { RunStepsPanel } from './RunStepsPanel'
+import { RunStepTiming } from './RunStepTiming'
 import { RunStatusBadge, formatQty, isRunOpen } from './runDisplay'
 import { ItemScanInput } from '../../inventory/ui/ItemScanInput'
 import { stagingPlacesFor } from '../../inventory/model/warehouseTaskModel'
@@ -348,6 +349,7 @@ export function RunDetailRoute() {
                 onRecord={fillFromOutput}
               />
               <RunStepsPanel runId={runId} open={isRunOpen(run.runStatus)} />
+              <RunStepTiming runId={runId} />
               <RunInstructionChecklist projectId={projectId} runId={runId} />
             </section>
 

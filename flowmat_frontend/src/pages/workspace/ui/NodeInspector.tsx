@@ -35,6 +35,8 @@ interface Props {
   onPortUpdate(input: UpdateProcessIoInput): Promise<void>
   onPortDelete(processIoId: string): Promise<void>
   onOpenRuleBuilder(target: RuleTargetInput): void
+  /** The process's connections, read only, shown under its fields (the one detail place, as archify keeps it). */
+  connections?: React.ReactNode
 }
 
 const COLOR_OPTIONS = ['slate', 'sky', 'emerald', 'amber', 'violet', 'rose', 'gray']
@@ -48,6 +50,7 @@ export function NodeInspector({
   onPortCreate,
   onPortUpdate,
   onPortDelete,
+  connections,
 }: Props) {
   const paletteDefinitions = useMemo(() => getWorkflowPaletteDefinitions(), [])
   const [processName, setProcessName] = useState('')
@@ -162,6 +165,7 @@ export function NodeInspector({
           x {node.position.x.toFixed(0)} | y {node.position.y.toFixed(0)}
         </dd>
       </dl>
+      {connections}
 
       <form
         onSubmit={handleNodeSubmit}

@@ -19,6 +19,8 @@ import org.myweb.flowmat.global.security.JwtProvider;
 import org.myweb.flowmat.global.security.RefreshTokenCookieService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
@@ -82,6 +84,9 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
         }
 
         User user = userContext.getUser();
+        if (!canLogin(user)) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("access_denied"), "blocked_user");
+        }
         String accessToken = jwtProvider.generateAccessToken(user.getUserId(), user.getUserRole());
         String refreshToken = jwtProvider.generateRefreshToken(user.getUserId());
         String jti = jwtProvider.resolveJti(refreshToken);
@@ -160,7 +165,8 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
         return user != null
             && !"Y".equalsIgnoreCase(user.getDeleteYn())
             && !"withdrawn".equalsIgnoreCase(user.getUserStatus())
-            && !"locked".equalsIgnoreCase(user.getUserStatus());
+            && !"locked".equalsIgnoreCase(user.getUserStatus())
+            && !"dormant".equalsIgnoreCase(user.getUserStatus());
     }
 
     private boolean isAdditionalInfoRequired(User user) {

@@ -1,3 +1,4 @@
+import { getWorkflowNodeDefinition } from '../../../entities/workflow/model/nodeCatalog'
 import type { CanvasEdgeViewModel, CanvasNodeViewModel } from '../../../entities/workflow/model/types'
 
 /**
@@ -8,6 +9,8 @@ import type { CanvasEdgeViewModel, CanvasNodeViewModel } from '../../../entities
 export interface ReadingGraph {
   nodeIds: string[]
   edges: { id: string; from: string; to: string }[]
+  /** Each process's kind as the palette names it (aliases folded, an unknown kind read as a plain process). */
+  kinds?: ReadonlyMap<string, string>
 }
 
 export type ReachDirection = 'upstream' | 'downstream'
@@ -37,7 +40,8 @@ export function readingGraph(canvas: { nodes: CanvasNodeViewModel[]; edges: Canv
   const edges = canvas.edges
     .filter((edge) => known.has(edge.fromProcessId) && known.has(edge.toProcessId))
     .map((edge) => ({ id: edge.connectionId, from: edge.fromProcessId, to: edge.toProcessId }))
-  return { nodeIds, edges }
+  const kinds = new Map(canvas.nodes.map((node) => [node.processId, getWorkflowNodeDefinition(node.nodeType).nodeType]))
+  return { nodeIds, edges, kinds }
 }
 
 /** The process, the processes it is connected to either way, and those connections. */
