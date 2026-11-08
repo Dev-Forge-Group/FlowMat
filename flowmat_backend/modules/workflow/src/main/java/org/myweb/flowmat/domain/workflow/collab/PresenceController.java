@@ -85,7 +85,8 @@ public class PresenceController {
                 && message.cursorY() == null
                 && message.editingProcessId() == null;
             case CURSOR_MOVED -> message.cursorX() != null && message.cursorY() != null;
-            case NODE_EDITING -> hasRequiredLength(message.editingProcessId(), 128);
+            // No process means the sender stopped editing (it deselected); a process id was checked above.
+            case NODE_EDITING -> true;
             case ANNOTATION_DRAWING -> message.annotation() != null;
         };
     }
