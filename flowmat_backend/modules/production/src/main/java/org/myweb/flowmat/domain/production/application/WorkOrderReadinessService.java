@@ -41,7 +41,6 @@ import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -67,9 +66,8 @@ public class WorkOrderReadinessService {
     private final CatalogQuery catalog;
     private final StockAllocationRepository stockAllocationRepository;
 
-    /** LOTs expiring within this many days are called out (same setting as the stock alerts). */
-    @Value("${app.stock-alert.expiry-warning-days:7}")
-    private int expiryWarningDays;
+    /** LOTs expiring within the stock alerts' warning window are called out: the same setting, read from inventory. */
+    private final org.myweb.flowmat.domain.inventory.application.publicapi.StockAlertSettings stockAlertSettings;
     private final ProjectAccess projectAccessService;
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
@@ -412,7 +410,7 @@ public class WorkOrderReadinessService {
                     if (row.lotId() != null) {
                         usableLots.add(row.lotId());
                         LotView lot = lotsById.get(row.lotId());
-                        if (lot != null && lot.expiryDate() != null && !lot.expiryDate().isAfter(today.plusDays(expiryWarningDays))) {
+                        if (lot != null && lot.expiryDate() != null && !lot.expiryDate().isAfter(today.plusDays(stockAlertSettings.expiryWarningDays()))) {
                             expiringSoon.putIfAbsent(lot.lotId(), "LOT " + lot.lotNo() + " of "
                                 + (item != null ? item.itemCode() : line.childItemId()) + " expires on " + lot.expiryDate());
                         }
