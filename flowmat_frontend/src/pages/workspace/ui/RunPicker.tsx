@@ -24,7 +24,7 @@ export function RunPicker({ runs, loading, shownId, onShow, onClose }: {
     <div
       role="dialog"
       aria-label="Show a run"
-      className="canvas-reading-popup canvas-reading-popup--side"
+      className="canvas-reading-popup"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()
