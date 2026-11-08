@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerLaborRateRequest;
@@ -44,7 +44,7 @@ public class WorkerLaborRateService implements WorkerLaborRateQuery {
     private static final int MAX_DECIMALS = 4;
 
     private final WorkerLaborRateRepository repository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
     private final IdGenerator ids;

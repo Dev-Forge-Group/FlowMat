@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockReturnCommand;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ public class StockReturnService implements StockReturnCommand {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryCommandService inventoryCommandService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     @Override
     @Transactional

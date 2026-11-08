@@ -11,7 +11,7 @@ import org.myweb.flowmat.domain.notification.application.publicapi.NotificationS
 import org.myweb.flowmat.domain.notification.application.publicapi.NotificationSubscriptionView;
 import org.myweb.flowmat.domain.notification.domain.entity.NotificationSubscription;
 import org.myweb.flowmat.domain.notification.repository.NotificationSubscriptionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -31,7 +31,7 @@ public class NotificationSubscriptionService implements NotificationSubscription
     private static final int MAX_DAYS = 30;
 
     private final NotificationSubscriptionRepository repository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     @Transactional(readOnly = true)

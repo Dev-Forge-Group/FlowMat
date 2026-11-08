@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
@@ -35,7 +35,7 @@ public class OpenRunInputs {
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
+    private final UnitConversion unitConverter;
 
     /** For one order: material id → recorded input. */
     public Map<String, BigDecimal> forOrder(String workOrderId) {

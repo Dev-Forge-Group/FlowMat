@@ -2,7 +2,7 @@ package org.myweb.flowmat.domain.workflow.application;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowTemplateApplyRequest;
 import org.myweb.flowmat.global.rbac.PermissionService;
@@ -33,7 +33,7 @@ public class WorkflowTemplateServiceImpl implements WorkflowTemplateService {
     private final WorkflowRepository workflowRepository;
     private final ProjectWorkflowCommand projectWorkflows;
     private final IdGenerator idGenerator;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final PermissionService permissionService;
 
     @Override

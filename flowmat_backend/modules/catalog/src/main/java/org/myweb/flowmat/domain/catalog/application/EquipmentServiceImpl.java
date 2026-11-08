@@ -15,7 +15,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Equipment;
 import org.myweb.flowmat.domain.catalog.domain.entity.EquipmentStatusHistory;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentStatusHistoryRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -29,7 +29,7 @@ public class EquipmentServiceImpl implements EquipmentService {
     private static final String NOT_DELETED = "N";
     private static final Set<String> STATUSES = Set.of("active", "inactive", "maintenance");
     private final EquipmentRepository equipmentRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final EquipmentStatusHistoryRepository statusHistoryRepository;
 

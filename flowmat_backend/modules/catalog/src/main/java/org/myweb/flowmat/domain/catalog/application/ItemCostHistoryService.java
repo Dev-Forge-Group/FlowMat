@@ -9,7 +9,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.domain.entity.ItemCostHistory;
 import org.myweb.flowmat.domain.catalog.repository.ItemCostHistoryRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -29,7 +29,7 @@ public class ItemCostHistoryService {
 
     private final ItemCostHistoryRepository historyRepository;
     private final ItemRepository itemRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     /** Keeps a change of the item's unit cost; nothing when it stayed the same (0 and none are both unknown). */

@@ -21,7 +21,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRunLabor;
 import org.myweb.flowmat.domain.production.repository.ProductionRunCorrectionLineRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunLaborRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerAttendanceQuery;
@@ -47,7 +47,7 @@ public class AttendanceComparisonService {
     private final ProductionRunLaborRepository labor;
     private final ProductionRunRepository runs;
     private final ProductionRunCorrectionLineRepository correctionLines;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
 

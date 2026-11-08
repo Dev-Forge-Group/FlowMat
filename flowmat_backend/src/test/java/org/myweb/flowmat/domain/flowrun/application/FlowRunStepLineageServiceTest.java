@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -126,7 +127,7 @@ class FlowRunStepLineageServiceTest {
     void deniedReadAccessStopsBeforeLoadingStepsOrArrivals() {
         readableRun();
         BusinessException denial = new BusinessException(ErrorCode.FORBIDDEN);
-        when(accessService.requireProjectReadAccess("project-1")).thenThrow(denial);
+        doThrow(denial).when(accessService).requireProjectReadAccess("project-1");
 
         BusinessException rejected = assertThrows(BusinessException.class,
             () -> service.lineage("run-1", "selected"));

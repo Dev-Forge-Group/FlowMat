@@ -31,7 +31,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -63,7 +63,7 @@ public class StockAllocationService {
     private final BomQuery bomQuery;
     private final OpenRunInputs openRunInputs;
     private final StockMovementCommand stockMovements;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final WorkOrderOptionalItems optionalItems;
 

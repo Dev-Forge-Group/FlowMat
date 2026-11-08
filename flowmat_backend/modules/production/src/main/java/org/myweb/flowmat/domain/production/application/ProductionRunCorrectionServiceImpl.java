@@ -26,7 +26,7 @@ import org.myweb.flowmat.domain.production.repository.ProductionRunCorrectionRep
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -52,7 +52,7 @@ public class ProductionRunCorrectionServiceImpl implements ProductionRunCorrecti
     private final ProductionRunCorrectionRepository correctionRepository;
     private final ProductionRunCorrectionLineRepository correctionLineRepository;
     private final ProductionRunServiceImpl productionRunService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final StockQuery stockQuery;
     private final LotQuery lotQuery;
     private final IdGenerator idGenerator;

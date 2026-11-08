@@ -15,7 +15,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest;
@@ -29,7 +29,7 @@ import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.util.CsvDecimalParser;
@@ -58,7 +58,7 @@ public class StockImportService implements StockReceiptCommand {
     private final LotService lotService;
     private final InventoryService inventoryService;
     private final InventoryCommandService inventoryCommandService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final StorageLocationService storageLocationService;
 
     private record StockKey(String itemId, String location, String lotNo) { }

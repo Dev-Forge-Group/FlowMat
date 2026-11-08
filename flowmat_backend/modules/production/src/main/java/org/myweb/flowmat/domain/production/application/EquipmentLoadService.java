@@ -18,7 +18,7 @@ import java.util.Set;
 import java.util.function.ToIntBiFunction;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.EquipmentScheduleService;
+import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWorkingTimeQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogEquipmentView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentCostQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
@@ -29,7 +29,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -54,7 +54,7 @@ public class EquipmentLoadService {
     private final ProductionRunRepository productionRunRepository;
     private final CatalogQuery catalogQuery;
     private final EquipmentCostQuery equipmentCosts;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     public EquipmentLoadResponse load(String projectId, String from, String to) {
         if (projectId == null || projectId.isBlank()) {
@@ -196,7 +196,7 @@ public class EquipmentLoadService {
         }
         OffsetDateTime partStart = start.isBefore(from) ? from : start;
         OffsetDateTime partEnd = end.isAfter(to) ? to : end;
-        if (Duration.between(start, end).compareTo(EquipmentScheduleService.LONGEST_WINDOW) <= 0) {
+        if (Duration.between(start, end).compareTo(EquipmentWorkingTimeQuery.LONGEST_WINDOW) <= 0) {
             BigDecimal whole = window(equipmentId, start, end).availableHours();
             if (whole.signum() > 0) {
                 BigDecimal part = window(equipmentId, partStart, partEnd).availableHours();

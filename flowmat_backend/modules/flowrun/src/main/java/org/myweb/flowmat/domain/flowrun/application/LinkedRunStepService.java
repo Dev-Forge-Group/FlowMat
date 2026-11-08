@@ -21,7 +21,7 @@ import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStepAttempt;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunEventRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -43,7 +43,7 @@ public class LinkedRunStepService implements LinkedRunSteps {
     private final FlowRunEventRepository eventRepository;
     private final FlowRunStepService stepService;
     private final WorkflowProductionQuery workflowQuery;
-    private final ProjectAccessService accessService;
+    private final ProjectAccess accessService;
     private final ObjectMapper objectMapper;
 
     @Override

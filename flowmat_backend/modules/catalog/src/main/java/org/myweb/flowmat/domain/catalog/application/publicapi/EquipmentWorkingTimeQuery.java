@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.catalog.application.publicapi;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -11,11 +12,14 @@ import java.util.Optional;
  */
 public interface EquipmentWorkingTimeQuery {
 
+    /** The longest window availability is worked out for, and the longest downtime. */
+    Duration LONGEST_WINDOW = Duration.ofDays(366);
+
     /**
      * When a delayed step may start on the equipment in [from, to), earliest first and none overlapping: on dates with a
      * calendar its available time (shifts less holidays and downtime, each date with its own calendar version), and the whole
      * of each date without one, which runs around the clock, downtime or not (docs/architecture/adr/ADR-015-shift-aware-delay.md
-     * decisions 2 and 4). Empty when the equipment is gone. The caller keeps the window at most 366 days long.
+     * decisions 2 and 4). Empty when the equipment is gone. The caller keeps the window at most {@link #LONGEST_WINDOW} long.
      */
     Optional<List<EquipmentSlot>> workingStretches(String equipmentId, OffsetDateTime from, OffsetDateTime to);
 }

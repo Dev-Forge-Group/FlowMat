@@ -10,7 +10,7 @@ import org.myweb.flowmat.domain.production.domain.entity.StockAllocation;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -25,7 +25,7 @@ public class WorkOrderAllocationsImpl implements WorkOrderAllocations {
     private final StockAllocationRepository allocations;
     private final WorkOrderRepository orders;
     private final StockRecordQuery stocks;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
     @Override
     public List<OpenAllocation> lockOpen(String projectId, String workOrderId) {

@@ -22,7 +22,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.purchasing.application.publicapi.PurchaseSupplyQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -50,7 +50,7 @@ public class MaterialRequirementService {
     private final BomQuery bomQuery;
     private final CatalogQuery catalogQuery;
     private final UsableStock usableStock;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final ProjectCalendarQuery projectCalendar;
     private final OpenRunInputs openRunInputs;
     private final BomStructureQuery bomStructure;

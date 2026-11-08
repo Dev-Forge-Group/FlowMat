@@ -29,7 +29,7 @@ import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository.ItemMovementTotals;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -58,7 +58,7 @@ public class StockMovementAnalysisService {
     private final LotMasterRepository lotMasterRepository;
     private final CatalogQuery catalogQuery;
     private final StorageLocationService storageLocationService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     public StockMovementAnalysisResponse analyse(String projectId, Integer days, String location) {
         projectAccessService.requireProjectReadAccess(projectId);

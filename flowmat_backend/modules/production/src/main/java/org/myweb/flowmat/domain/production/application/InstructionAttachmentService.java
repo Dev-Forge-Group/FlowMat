@@ -10,7 +10,7 @@ import org.myweb.flowmat.domain.production.domain.entity.InstructionAttachment;
 import org.myweb.flowmat.domain.production.domain.entity.WorkInstruction;
 import org.myweb.flowmat.domain.production.repository.InstructionAttachmentRepository;
 import org.myweb.flowmat.domain.production.repository.WorkInstructionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.config.StorageProperties;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -26,7 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class InstructionAttachmentService {
     private final InstructionAttachmentRepository attachments;
     private final WorkInstructionRepository instructions;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final StorageService storage;
     private final StorageProperties properties;
     public record Download(InstructionAttachmentResponse metadata,byte[] bytes) {}

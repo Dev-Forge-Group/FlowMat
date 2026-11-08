@@ -21,7 +21,7 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.quality.api.dto.request.CorrectiveActionRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.NonconformityCreateRequest;
@@ -69,7 +69,7 @@ public class NonconformityService {
     private final LotQuery lotQuery;
     private final ProductionRunQuery productionRunQuery;
     private final ProjectMemberQuery projectMemberQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final NotificationCommand notifications;
 

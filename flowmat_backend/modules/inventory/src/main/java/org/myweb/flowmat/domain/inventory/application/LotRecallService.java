@@ -23,7 +23,7 @@ import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository.LotIssued;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +45,7 @@ public class LotRecallService {
     private final InventoryTransactionRepository transactionRepository;
     private final CatalogQuery catalogQuery;
     private final InventoryCommandService inventoryCommandService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     /** The suspect LOT and what it went into; read access is checked by the trace. */
     @Transactional(readOnly = true)

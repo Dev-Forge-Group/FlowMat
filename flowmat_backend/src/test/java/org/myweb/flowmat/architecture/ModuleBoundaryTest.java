@@ -28,8 +28,8 @@ import java.util.regex.Pattern;
  * 2026-10-25, so it has no frozen list either and any use fails. Since 2026-11-07 the contexts may not depend on each
  * other in a cycle either, nor use another context's web layer ({@code api}) or its other domain types such as enums
  * (docs/architecture/adr/ADR-036-cross-context-contract-types.md). Since 2026-11-08 another context's {@code application}
- * is reached through its {@code publicapi}, besides a fixed list of shared services. {@code global} and {@code batch} are
- * not bounded contexts and are not checked.
+ * is reached through its {@code publicapi} only. {@code global} and {@code batch} are not bounded contexts and are not
+ * checked.
  */
 @AnalyzeClasses(packages = "org.myweb.flowmat", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -39,22 +39,14 @@ class ModuleBoundaryTest {
     private static final Pattern ENTITY = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.domain\\.entity(\\..*)?$");
     private static final Pattern WEB = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.api(\\..*)?$");
     private static final Pattern DOMAIN = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.domain(\\..*)?$");
+    private static final Pattern APPLICATION = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.application(\\..*)?$");
+    /** Not checked by the application rule: every context's publicapi. */
+    private static final Pattern PUBLIC_APPLICATION = Pattern.compile(
+        "^org\\.myweb\\.flowmat\\.domain\\.\\w+\\.application\\.publicapi\\..*$");
     /**
      * Not checked by the domain type rule: entities, which have their own rule, and workflow's definition language (port
      * schemas and condition expressions), which flowrun executes as published (ADR-036).
      */
-    private static final Pattern APPLICATION = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.application(\\..*)?$");
-    /**
-     * Not checked by the application rule: every {@code publicapi}, and the services several contexts share that are not
-     * behind one yet (ADR-036 follow-up). Add to this list only by deciding so in that ADR.
-     */
-    private static final Pattern PUBLIC_APPLICATION = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.("
-        + "\\w+\\.application\\.publicapi\\..*"
-        + "|project\\.application\\.ProjectAccessService"
-        + "|catalog\\.application\\.(UnitConverter|ItemStatusRule|EquipmentScheduleService)"
-        + "|rule\\.application\\.(FlowRuleEngineService|RuleEvaluationContext|RuleTarget)"
-        + "|inventory\\.application\\.LotService"
-        + ")(\\$.*)?$");
     private static final Pattern NOT_DOMAIN_TYPES = Pattern.compile(
         "^org\\.myweb\\.flowmat\\.domain\\.(\\w+\\.domain\\.entity|workflow\\.domain\\.contract|workflow\\.domain\\.expression)(\\..*)?$");
 

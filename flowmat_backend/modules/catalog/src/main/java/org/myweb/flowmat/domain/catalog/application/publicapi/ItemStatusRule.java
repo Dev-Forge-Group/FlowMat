@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.catalog.application;
+package org.myweb.flowmat.domain.catalog.application.publicapi;
 
 import java.util.List;
 import org.myweb.flowmat.domain.catalog.domain.entity.Item;

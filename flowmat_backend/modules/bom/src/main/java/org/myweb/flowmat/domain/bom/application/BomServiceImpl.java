@@ -26,11 +26,11 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
 import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -53,8 +53,8 @@ public class BomServiceImpl implements BomService {
     private final BomLineRepository bomLineRepository;
     private final CatalogQuery catalogQuery;
     private final BomRevisionLock revisionLock;
-    private final UnitConverter unitConverter;
-    private final ProjectAccessService projectAccessService;
+    private final UnitConversion unitConverter;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final ProjectCalendarQuery projectCalendar;
 
@@ -469,7 +469,7 @@ public class BomServiceImpl implements BomService {
             // A material plans its scrap on top (ADR-031); what a batch gives off is never scaled up.
             BigDecimal planned = material ? line.getQuantity().multiply(BomTree.scrapFactor(line)) : line.getQuantity();
             BigDecimal required = factor.multiply(planned).setScale(8, RoundingMode.HALF_UP).stripTrailingZeros();
-            UnitConverter.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), child.unitId());
+            UnitConversion.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), child.unitId());
             if (!material) {
                 // By-products and waste come out of the batch; nothing is consumed or costed for them.
                 outputs.add(new BomRequirement.Output(line.getBomLineId(), child.itemId(), line.getLineType(),
@@ -546,7 +546,7 @@ public class BomServiceImpl implements BomService {
             CatalogItemView item = findProjectItem(line.getChildItemId(), projectId);
             BigDecimal required = factor.multiply(line.getQuantity().multiply(BomTree.scrapFactor(line)))
                 .setScale(8, RoundingMode.HALF_UP).stripTrailingZeros();
-            UnitConverter.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), item.unitId());
+            UnitConversion.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), item.unitId());
             BigDecimal itemQuantity = conversion.quantity().setScale(STOCK_SCALE, RoundingMode.HALF_UP);
             BigDecimal unitCost = item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
             BigDecimal lineCost = unitCost == null ? null : itemQuantity.multiply(unitCost).setScale(STOCK_SCALE, RoundingMode.HALF_UP);

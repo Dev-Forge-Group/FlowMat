@@ -1,7 +1,7 @@
 package org.myweb.flowmat.domain.workforce.application;
 
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerDayHistoryResponse;
 import org.myweb.flowmat.domain.workforce.domain.entity.WorkerDayHistory;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class WorkerDayHistorySearchService {
     private final WorkerDayHistorySearchRepository repository;
     private final WorkerDayHistoryService lines;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
 
     public HistoryPageResponse<WorkerDayHistoryResponse> search(String projectId, String userId, String kind, String action,

@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.domain.entity.Project;
 import org.myweb.flowmat.domain.project.domain.entity.ProjectMember;
 import org.myweb.flowmat.domain.project.repository.ProjectMemberRepository;
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class ProjectAccessService {
+public class ProjectAccessService implements ProjectAccess {
 
     private static final String NOT_DELETED = "N";
     private static final String ACTIVE_MEMBER = "active";
@@ -33,6 +34,7 @@ public class ProjectAccessService {
     private final ProjectMemberRepository projectMemberRepository;
     private final PermissionService permissionService;
 
+    @Override
     public String requireCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getPrincipal() == null) {
@@ -83,35 +85,54 @@ public class ProjectAccessService {
             .toList();
     }
 
-    public Project requireProjectReadAccess(String projectId) {
-        return requireProjectReadAccess(projectId, requireCurrentUserId());
+    @Override
+    public void requireProjectReadAccess(String projectId) {
+        requireReadableProject(projectId);
     }
 
-    public Project requireProjectReadAccess(String projectId, String userId) {
+    /** The project, after the same check as {@link #requireProjectReadAccess(String)}. */
+    public Project requireReadableProject(String projectId) {
+        return readableProject(projectId, requireCurrentUserId());
+    }
+
+    @Override
+    public void requireProjectReadAccess(String projectId, String userId) {
+        readableProject(projectId, userId);
+    }
+
+    private Project readableProject(String projectId, String userId) {
         Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ensureProjectReadAccess(project, userId);
         return project;
     }
 
-    public Project requireProjectWriteAccess(String projectId) {
-        return requireProjectWriteAccess(projectId, requireCurrentUserId());
+    @Override
+    public void requireProjectWriteAccess(String projectId) {
+        requireProjectWriteAccess(projectId, requireCurrentUserId());
     }
 
-    public Project requireProjectWriteAccess(String projectId, String userId) {
+    @Override
+    public void requireProjectWriteAccess(String projectId, String userId) {
         Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ensureProjectWriteAccess(project, userId);
-        return project;
     }
 
-    public Project requireProjectOwnerAccess(String projectId) {
+    @Override
+    public void requireProjectOwnerAccess(String projectId) {
+        requireOwnedProject(projectId);
+    }
+
+    /** The project, after the same check as {@link #requireProjectOwnerAccess}. */
+    public Project requireOwnedProject(String projectId) {
         Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ensureProjectOwnerAccess(project, requireCurrentUserId());
         return project;
     }
 
+    @Override
     public String resolveCurrentUserRole(String projectId) {
         Project project = projectRepository.findByProjectIdAndDeletedYn(projectId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));

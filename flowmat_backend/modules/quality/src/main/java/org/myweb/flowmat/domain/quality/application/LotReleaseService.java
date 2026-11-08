@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotReleaseCommand;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.api.dto.response.LotReleaseResponse;
 import org.myweb.flowmat.domain.quality.domain.entity.InspectionStandard;
 import org.myweb.flowmat.domain.quality.domain.entity.QualityInspection;
@@ -34,7 +34,7 @@ public class LotReleaseService {
     private final LotReleaseCommand lotReleaseCommand;
     private final InspectionStandardRepository standardRepository;
     private final QualityInspectionRepository inspectionRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     @Transactional
     public LotReleaseResponse release(String lotId) {

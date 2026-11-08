@@ -15,7 +15,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.domain.entity.ItemSetupAttributes;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemSetupAttributesRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ItemSetupAttributesService {
     private final ItemRepository items;
     private final ItemSetupAttributesRepository attributes;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final EntityManager entities;
 
     public ItemSetupAttributesResponse get(String itemId) {

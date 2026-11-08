@@ -8,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomOutputQuery;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogUnitCostQuery;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogUnitCostView.CostBasis;
@@ -16,7 +16,7 @@ import org.myweb.flowmat.domain.production.api.dto.response.RunByProductValueRes
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -33,8 +33,8 @@ public class RunByProductValueService {
     private final BomOutputQuery bomOutputs;
     private final CatalogQuery catalog;
     private final CatalogUnitCostQuery unitCosts;
-    private final UnitConverter units;
-    private final ProjectAccessService access;
+    private final UnitConversion units;
+    private final ProjectAccess access;
 
     public RunByProductValueResponse value(String runId) {
         var run = runs.findByProductionRunIdAndDeletedYn(runId, "N")

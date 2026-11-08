@@ -2,7 +2,7 @@ package org.myweb.flowmat.domain.workflow.application;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
 import org.myweb.flowmat.domain.workflow.annotation.application.CanvasAnnotationService;
 import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessConnectionResponse;
@@ -36,7 +36,7 @@ public class WorkflowCanvasServiceImpl implements WorkflowCanvasService {
     private final ProcessIoRepository processIoRepository;
     private final ProcessConnectionRepository processConnectionRepository;
     private final GraphSyncService graphSyncService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccessService workflowAccess;
     private final CanvasAnnotationService canvasAnnotationService;
 

@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.connector.api.dto.response.JsonMappingPreviewResponse;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class JsonMappingPreviewService {
         .configure(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES, false)
         .reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final JsonMappingEngine engine;
 
     public JsonMappingPreviewResponse preview(String projectId, InputStream input) {

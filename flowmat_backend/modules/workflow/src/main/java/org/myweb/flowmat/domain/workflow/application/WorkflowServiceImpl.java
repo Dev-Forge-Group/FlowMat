@@ -2,7 +2,7 @@ package org.myweb.flowmat.domain.workflow.application;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectWorkflowCommand;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowCreateRequest;
 import org.myweb.flowmat.domain.workflow.api.dto.request.WorkflowUpdateRequest;
@@ -29,7 +29,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final ProjectWorkflowCommand projectWorkflows;
     private final IdGenerator idGenerator;
     private final GraphSyncService graphSyncService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccessService workflowAccess;
 
     @Override

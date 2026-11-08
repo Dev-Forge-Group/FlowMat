@@ -18,7 +18,7 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -40,7 +40,7 @@ public class BomExplosionService {
     private final BomHeaderRepository bomHeaderRepository;
     private final BomService bomService;
     private final CatalogQuery catalogQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final ProjectCalendarQuery projectCalendar;
 
     public BomExplosionResponse explode(String bomId, String quantityText) {

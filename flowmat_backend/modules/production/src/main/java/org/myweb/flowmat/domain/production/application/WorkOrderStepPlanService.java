@@ -16,7 +16,7 @@ import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanPersonRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessRunView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
@@ -44,7 +44,7 @@ public class WorkOrderStepPlanService {
     private final ProjectMemberQuery members;
     private final WorkflowRunQuery workflowRuns;
     private final WorkOrderLaborComparisonService comparison;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     @Transactional

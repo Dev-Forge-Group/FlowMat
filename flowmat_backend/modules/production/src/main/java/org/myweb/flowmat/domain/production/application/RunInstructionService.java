@@ -19,7 +19,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkInstruction;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.RunInstructionCheckRepository;
 import org.myweb.flowmat.domain.production.repository.WorkInstructionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardQuery;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardView;
 import org.myweb.flowmat.domain.quality.application.publicapi.RunInspectionCommand;
@@ -48,7 +48,7 @@ public class RunInstructionService {
     private final WorkInstructionService workInstructionService;
     private final InspectionStandardQuery standardQuery;
     private final RunInspectionCommand inspections;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     public RunInstructionResponse view(String runId) {

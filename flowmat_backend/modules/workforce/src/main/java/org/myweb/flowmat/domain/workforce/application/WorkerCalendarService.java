@@ -26,7 +26,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ProjectHolidayQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.request.WorkerDayCopyRequest;
@@ -91,7 +91,7 @@ public class WorkerCalendarService implements WorkerCalendarQuery {
     private final WorkerScheduleRepository scheduleRepository;
     private final WorkerScheduleHistoryService history;
     private final WorkerDayHistoryService dayChangeHistory;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
     private final ProjectHolidayQuery holidays;

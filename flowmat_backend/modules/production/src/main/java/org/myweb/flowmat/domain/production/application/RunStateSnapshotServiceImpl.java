@@ -14,7 +14,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.RunStateSnapshot;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.RunStateSnapshotRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -33,7 +33,7 @@ public class RunStateSnapshotServiceImpl implements RunStateSnapshotService {
 
     private final RunStateSnapshotRepository runStateSnapshotRepository;
     private final ProductionRunRepository productionRunRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     @Override

@@ -13,7 +13,7 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -27,7 +27,7 @@ public class BomStructureQueryImpl implements BomStructureQuery {
     private final BomHeaderRepository headers;
     private final BomLineRepository lines;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
+    private final UnitConversion unitConverter;
 
     @Override
     public Map<String, String> approvedBomIdByItem(String projectId, LocalDate on) {

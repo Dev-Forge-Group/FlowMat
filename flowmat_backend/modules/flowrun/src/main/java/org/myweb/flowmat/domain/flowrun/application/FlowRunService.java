@@ -19,7 +19,7 @@ import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRunStep;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccessView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
@@ -41,7 +41,7 @@ public class FlowRunService {
     private final FlowRunStepRepository stepRepository;
     private final FlowRunEventRecorder eventRecorder;
     private final WorkflowProductionQuery workflowQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccess workflowAccess;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;

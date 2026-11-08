@@ -30,7 +30,7 @@ import org.myweb.flowmat.domain.production.repository.WorkOrderCrewRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanPersonRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderStepPlanRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerHours;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -57,7 +57,7 @@ public class WorkOrderLaborComparisonService {
     private final WorkOrderStepPlanPersonRepository stepPlanPeople;
     private final WorkerCalendarQuery workerCalendars;
     private final LinkedRunSteps linkedSteps;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     public WorkOrderLaborComparisonResponse compare(String workOrderId) {
         WorkOrder order = workOrders.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)

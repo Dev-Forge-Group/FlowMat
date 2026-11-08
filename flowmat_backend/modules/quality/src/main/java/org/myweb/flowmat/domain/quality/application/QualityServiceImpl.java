@@ -19,7 +19,7 @@ import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCom
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.DefectResolveRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.QualityInspectionCreateRequest;
@@ -51,7 +51,7 @@ public class QualityServiceImpl implements QualityService {
 
     private final QualityInspectionRepository inspectionRepository;
     private final DefectLogRepository defectLogRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final ProductionRunQuery productionRunQuery;
     private final LotQuery lotQuery;
     private final CatalogQuery catalogQuery;

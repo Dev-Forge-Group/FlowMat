@@ -39,7 +39,7 @@ import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerTime;
 import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -67,7 +67,7 @@ public class WorkOrderPlanService {
     private final WorkOrderRepository workOrderRepository;
     private final ProductionRunRepository productionRunRepository;
     private final CatalogQuery catalogQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
     private final ProjectCalendarQuery projectCalendar;

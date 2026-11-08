@@ -23,7 +23,7 @@ import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository.LastMovement;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -46,7 +46,7 @@ public class StockSnapshotService {
     private final InventoryRepository inventoryRepository;
     private final LotMasterRepository lotMasterRepository;
     private final CatalogQuery catalogQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     public StockSnapshotResponse at(String projectId, OffsetDateTime at) {
         projectAccessService.requireProjectReadAccess(projectId);

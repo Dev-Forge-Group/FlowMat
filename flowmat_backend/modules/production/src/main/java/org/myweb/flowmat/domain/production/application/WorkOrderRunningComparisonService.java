@@ -13,7 +13,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class WorkOrderRunningComparisonService {
     private final CatalogQuery catalogQuery;
     private final EquipmentCostQuery equipmentCosts;
     private final RunEquipmentTimeService runTimes;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     public WorkOrderRunningComparisonResponse compare(String workOrderId) {
         WorkOrder order = workOrders.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)

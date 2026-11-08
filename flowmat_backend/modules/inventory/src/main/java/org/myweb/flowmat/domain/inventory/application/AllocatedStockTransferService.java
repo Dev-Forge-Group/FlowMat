@@ -14,7 +14,7 @@ import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class AllocatedStockTransferService {
     private final LotMasterRepository lots;
     private final InventoryTransferService transfers;
     private final StorageLocationService locations;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     @Transactional
     public InventoryTransferResponse transfer(AllocatedStockTransferRequest request) {
         String project = text(request.projectId()); String order = text(request.workOrderId());

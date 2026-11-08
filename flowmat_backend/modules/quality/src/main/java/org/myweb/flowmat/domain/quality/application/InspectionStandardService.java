@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.api.dto.request.InspectionStandardRequest;
 import org.myweb.flowmat.domain.quality.api.dto.request.QualityInspectionCreateRequest;
 import org.myweb.flowmat.domain.quality.api.dto.response.InspectionStandardResponse;
@@ -46,7 +46,7 @@ public class InspectionStandardService {
     private final QualityInspectionRepository inspectionRepository;
     private final CatalogQuery catalogQuery;
     private final ProductionRunQuery productionRunQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     /** The project's standards, or one item's, by item code and then check. */

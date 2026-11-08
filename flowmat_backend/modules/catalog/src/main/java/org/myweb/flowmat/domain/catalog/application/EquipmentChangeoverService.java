@@ -21,7 +21,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentChangeoverRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -45,7 +45,7 @@ public class EquipmentChangeoverService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentChangeoverRepository changeoverRepository;
     private final ItemRepository itemRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final EntityManager entities;
     private final EquipmentSetupChangeoverService setupChangeovers;

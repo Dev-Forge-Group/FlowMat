@@ -8,7 +8,7 @@ import org.myweb.flowmat.domain.catalog.repository.EquipmentChangeoverRepository
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentSetupChangeoverRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,7 @@ public class EquipmentSetupPreviewService {
     private final EquipmentChangeoverService changeovers;
     private final EquipmentChangeoverRepository itemRules;
     private final EquipmentSetupChangeoverRepository attributeRules;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     /** Match and explanation must read the same committed snapshot, even if a rule is edited meanwhile. */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)

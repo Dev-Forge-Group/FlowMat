@@ -21,7 +21,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ProjectHolidayQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerAttendancePayResponse;
@@ -54,7 +54,7 @@ public class WorkerAttendancePayService implements WorkerPayQuery {
     private final WorkerAttendanceRepository attendance;
     private final WorkerLaborRateQuery rates;
     private final LaborPremiumService premiums;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final ProjectCalendarQuery calendars;
     private final ProjectHolidayQuery holidays;

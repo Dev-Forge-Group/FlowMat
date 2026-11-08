@@ -18,10 +18,10 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -46,8 +46,8 @@ public class BomWhereUsedTreeService {
     private final BomHeaderRepository bomHeaderRepository;
     private final BomLineRepository bomLineRepository;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
-    private final ProjectAccessService projectAccessService;
+    private final UnitConversion unitConverter;
+    private final ProjectAccess projectAccessService;
     private final ProjectCalendarQuery projectCalendar;
 
     /** One approved BOM line that consumes a material, with how much of it one unit of the product needs. */

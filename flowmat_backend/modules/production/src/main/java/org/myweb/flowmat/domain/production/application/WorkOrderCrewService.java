@@ -16,7 +16,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
 import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.WorkOrderCrewRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerHours;
@@ -42,7 +42,7 @@ public class WorkOrderCrewService {
 
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderCrewRepository crewRepository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final WorkerCalendarQuery workerCalendars;
     private final IdGenerator ids;

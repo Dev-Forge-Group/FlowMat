@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.api.dto.response.NonconformityDefectLinkResponse;
 import org.myweb.flowmat.domain.quality.domain.entity.Nonconformity;
 import org.myweb.flowmat.domain.quality.repository.NonconformityDefectRepository;
@@ -28,7 +28,7 @@ public class NonconformityDefectLinkService {
 
     private final NonconformityRepository nonconformityRepository;
     private final NonconformityDefectRepository nonconformityDefectRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     public List<NonconformityDefectLinkResponse> links(String projectId) {
         if (projectId == null || projectId.isBlank()) {

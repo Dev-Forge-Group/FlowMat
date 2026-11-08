@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.RunMaterialUsageResponse;
@@ -20,7 +20,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -43,8 +43,8 @@ public class RunMaterialUsageService {
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
-    private final ProjectAccessService projectAccessService;
+    private final UnitConversion unitConverter;
+    private final ProjectAccess projectAccessService;
     private final BomStructureQuery bomStructure;
 
     public RunMaterialUsageResponse usage(String productionRunId) {

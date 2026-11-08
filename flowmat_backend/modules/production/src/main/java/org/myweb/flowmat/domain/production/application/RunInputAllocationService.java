@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotView;
@@ -21,7 +21,7 @@ import org.myweb.flowmat.domain.production.api.dto.response.ProductionRunItemRes
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -43,8 +43,8 @@ public class RunInputAllocationService {
     private final ProductionPlanningReferences references;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
     private final ProductionRunRepository productionRunRepository;
-    private final ProjectAccessService projectAccessService;
-    private final UnitConverter unitConverter;
+    private final ProjectAccess projectAccessService;
+    private final UnitConversion unitConverter;
     private final StockAllocationRepository stockAllocationRepository;
     private final StockAllocationService stockAllocationService;
 
@@ -65,7 +65,7 @@ public class RunInputAllocationService {
         }
         // Allocate in the item's own unit; each piece is then recorded in that unit.
         String unit = ProductionRunServiceImpl.storedUnit(request.unit());
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(request.quantity(), unit, item.unitId());
+        UnitConversion.Conversion conversion = unitConverter.toItemUnit(request.quantity(), unit, item.unitId());
         if (conversion.quantity().compareTo(new BigDecimal("0.00005")) < 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,
                 "quantity must round to at least 0.0001 in the item's stock unit.");

@@ -20,7 +20,7 @@ import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRunItem;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -39,7 +39,7 @@ public class ProductionRunStepService {
 
     private final ProductionRunRepository runRepository;
     private final ProductionRunItemRepository itemRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final RunInstructionService instructions;
     private final LinkedRunSteps linkedSteps;
     private final CatalogQuery catalogQuery;

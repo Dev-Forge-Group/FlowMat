@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.api.dto.response.QualitySummaryResponse;
 import org.myweb.flowmat.domain.quality.api.dto.response.QualitySummaryResponse.CheckCount;
 import org.myweb.flowmat.domain.quality.api.dto.response.QualitySummaryResponse.DefectTypeCount;
@@ -36,7 +36,7 @@ public class QualitySummaryService {
 
     private final QualityInspectionRepository inspectionRepository;
     private final DefectLogRepository defectLogRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final CatalogQuery catalogQuery;
 
     public QualitySummaryResponse summary(String projectId, OffsetDateTime from, OffsetDateTime to) {

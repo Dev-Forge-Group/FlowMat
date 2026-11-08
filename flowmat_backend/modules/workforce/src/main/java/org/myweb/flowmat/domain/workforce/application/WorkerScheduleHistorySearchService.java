@@ -5,7 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.response.WorkerScheduleHistoryResponse;
 import org.myweb.flowmat.domain.workforce.domain.entity.WorkerScheduleHistory;
@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class WorkerScheduleHistorySearchService {
     private static final TypeReference<List<WorkerScheduleHistoryResponse.Shift>> SHIFTS = new TypeReference<>() {};
     private final WorkerScheduleHistorySearchRepository repository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery members;
     private final ObjectMapper mapper;
 

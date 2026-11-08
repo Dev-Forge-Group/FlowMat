@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.application.WorkflowAccessService;
 import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
@@ -43,7 +43,7 @@ public class WorkflowEditorDocumentService {
     private final WorkflowEditorDocumentRepository documentRepository;
     private final WorkflowEditorElementRepository elementRepository;
     private final EntityManager entityManager;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccessService workflowAccess;
     private final ObjectMapper objectMapper;
     private final GraphSyncService graphSyncService;

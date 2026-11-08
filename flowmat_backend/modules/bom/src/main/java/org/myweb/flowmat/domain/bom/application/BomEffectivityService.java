@@ -12,7 +12,7 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomEffectivityChange;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
 import org.myweb.flowmat.domain.bom.repository.BomEffectivityChangeRepository;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BomEffectivityService {
     private final BomHeaderRepository headers;
     private final BomEffectivityChangeRepository changes;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
     private final BomRevisionLock revisionLock;
 

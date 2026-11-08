@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -52,8 +53,8 @@ import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessRunView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunView;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
-import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
-import org.myweb.flowmat.domain.rule.application.RuleEvaluationContext;
+import org.myweb.flowmat.domain.rule.application.publicapi.FlowRuleEngineService;
+import org.myweb.flowmat.domain.rule.application.publicapi.RuleEvaluationContext;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -429,8 +430,7 @@ class ProductionRunServiceImplTest {
     @Test
     void finishRequiresProjectWriteAccess() {
         givenRun("running");
-        when(projectAccessService.requireProjectWriteAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required.")).when(projectAccessService).requireProjectWriteAccess("project-1");
 
         assertThrows(
             BusinessException.class,
@@ -494,8 +494,7 @@ class ProductionRunServiceImplTest {
     @Test
     void getRunRequiresProjectReadAccess() {
         givenRun("running");
-        when(projectAccessService.requireProjectReadAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project membership is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project membership is required.")).when(projectAccessService).requireProjectReadAccess("project-1");
 
         assertThrows(BusinessException.class, () -> productionRunService.getRun("run-1"));
         assertThrows(BusinessException.class, () -> productionRunService.listRunItems("run-1"));

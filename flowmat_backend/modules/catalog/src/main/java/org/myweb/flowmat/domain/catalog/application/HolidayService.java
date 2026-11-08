@@ -11,7 +11,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.response.HolidayResponse;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ProjectHolidayQuery;
 import org.myweb.flowmat.domain.catalog.domain.entity.ProjectHoliday;
 import org.myweb.flowmat.domain.catalog.repository.ProjectHolidayRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -31,7 +31,7 @@ public class HolidayService implements ProjectHolidayQuery {
     private static final int NAME_LENGTH = 100;
 
     private final ProjectHolidayRepository holidayRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     @Override

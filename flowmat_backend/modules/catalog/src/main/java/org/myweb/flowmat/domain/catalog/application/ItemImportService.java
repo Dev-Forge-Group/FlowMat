@@ -24,13 +24,14 @@ import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.util.CsvDecimalParser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStockCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 
 /**
  * Creates and updates items from a spreadsheet, matched by item code (docs/domain/item-import.md). Every row is checked
@@ -52,7 +53,7 @@ public class ItemImportService {
     private final UnitMasterRepository unitMasterRepository;
     private final ItemStockCheck itemStockCheck;
     private final ItemService itemService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final EntityManager entities;
 
     /** A checked row: a create, an update of {@code itemId}, or neither when nothing changes. */

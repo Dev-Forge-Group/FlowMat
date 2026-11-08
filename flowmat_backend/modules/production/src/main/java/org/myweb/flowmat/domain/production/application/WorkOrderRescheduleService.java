@@ -13,7 +13,7 @@ import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRescheduleRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -26,7 +26,7 @@ public class WorkOrderRescheduleService {
     private final WorkOrderRepository orders;
     private final WorkOrderRescheduleRepository history;
     private final ProductionRunRepository runs;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
     private final WorkOrderBomSelection bomSelection;
     private final WorkOrderOptionalItems optionalItems;

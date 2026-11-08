@@ -30,7 +30,7 @@ import org.myweb.flowmat.domain.production.repository.ProductionRunCorrectionLin
 import org.myweb.flowmat.domain.production.repository.ProductionRunLaborRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerLaborRateQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerLaborRates;
@@ -63,7 +63,7 @@ public class RunLaborCostService {
     private final WorkerLaborRateQuery rates;
     private final WorkerPayQuery pay;
     private final ProjectCalendarQuery calendars;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     public RunLaborCostResponse run(String runId) {
         ProductionRun run = runs.findByProductionRunIdAndDeletedYn(runId, NOT_DELETED)

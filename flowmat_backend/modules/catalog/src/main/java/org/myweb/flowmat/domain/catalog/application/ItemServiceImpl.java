@@ -16,7 +16,7 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.catalog.domain.entity.Item;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ItemUsageCheck;
 import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStockCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +36,7 @@ public class ItemServiceImpl implements ItemService {
 
     private final ItemRepository itemRepository;
     private final IdGenerator idGenerator;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final UnitMasterRepository unitMasterRepository;
     private final ItemStockCheck itemStockCheck;
     private final ItemCostHistoryService itemCostHistoryService;

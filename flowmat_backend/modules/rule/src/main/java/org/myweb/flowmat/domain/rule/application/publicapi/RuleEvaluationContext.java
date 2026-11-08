@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.rule.application;
+package org.myweb.flowmat.domain.rule.application.publicapi;
 
 import java.util.List;
 import java.util.Map;
