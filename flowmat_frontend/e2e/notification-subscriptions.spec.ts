@@ -54,17 +54,21 @@ test('a member chooses what they hear about in a project', async ({ page }) => {
   await panel.getByLabel('Days before the planned end').fill('5')
   await panel.getByRole('checkbox', { name: 'Work orders due' }).check()
   await expect(panel.getByRole('checkbox', { name: 'Work orders due' })).toBeChecked()
+  // A box shows the new choice at once; the days are saved only for a choice the server has, and the boxes stay disabled
+  // until a save and the refetch after it are done.
+  await expect(panel.getByRole('checkbox', { name: 'Work orders due' })).toBeEnabled()
   // Changing the days of a chosen topic sends them when the field is left.
   await panel.getByLabel('Days before the planned end').fill('7')
   await panel.getByLabel('Days before the planned end').blur()
   await expect.poll(() => sent.length).toBe(3)
+  await expect(panel.getByRole('checkbox', { name: 'Work orders due' })).toBeEnabled()
   await panel.getByLabel('Days before the planned end').fill('40')
   await panel.getByLabel('Days before the planned end').blur()
   await expect(panel.getByRole('alert')).toHaveText('daysAhead must be whole days from 0 to 30.')
   await stock.uncheck()
   await expect(stock).not.toBeChecked()
 
-  expect(sent).toEqual([
+  await expect.poll(() => sent).toEqual([
     { projectId, topic: 'stock_alert', subscribed: true },
     { projectId, topic: 'work_order_due', subscribed: true, daysAhead: 5 },
     { projectId, topic: 'work_order_due', subscribed: true, daysAhead: 7 },

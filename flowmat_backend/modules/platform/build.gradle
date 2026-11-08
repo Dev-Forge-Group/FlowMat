@@ -1,0 +1,2 @@
+// The shared global code (configuration, security, exceptions, ids, responses) and the user context it
+// authenticates against. Every other module depends on it; it depends on none of them.

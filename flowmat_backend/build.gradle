@@ -6,66 +6,98 @@ plugins {
 	id 'org.owasp.dependencycheck' version '13.0.0'
 }
 
-group = 'org.myweb'
-version = '0.0.1-SNAPSHOT'
+// The bounded-context modules (settings.gradle). Each declares its dependencies on the others in its own
+// build.gradle, following the one-way order in docs/architecture/domain-map.md §4. The root project is the
+// Spring Boot application that assembles them.
+def contextModules = subprojects.findAll { it.path.startsWith(':modules:') }
 
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
+allprojects {
+	group = 'org.myweb'
+	version = '0.0.1-SNAPSHOT'
+
+	// Keep the client and core pair aligned; HTTP connectors use a pinned DNS resolver.
+	ext['httpclient5.version'] = '5.6.3'
+	ext['httpcore5.version'] = '5.4.3'
+
+	repositories {
+		mavenCentral()
 	}
 }
 
-tasks.withType(JavaCompile).configureEach {
-	options.compilerArgs += ['-parameters']
+configure(contextModules) {
+	apply plugin: 'java-library'
+	apply plugin: 'io.spring.dependency-management'
+
+	// Unique jar names inside the Boot jar's BOOT-INF/lib.
+	base {
+		archivesName = "flowmat-${project.name}"
+	}
+
+	dependencyManagement {
+		imports {
+			mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+		}
+	}
 }
 
-// Keep the client and core pair aligned; HTTP connectors use a pinned DNS resolver.
-ext['httpclient5.version'] = '5.6.3'
-ext['httpcore5.version'] = '5.4.3'
+configure([rootProject] + contextModules) {
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(21)
+		}
+	}
 
-repositories {
-	mavenCentral()
+	tasks.withType(JavaCompile).configureEach {
+		options.compilerArgs += ['-parameters']
+	}
+
+	// The modules run in one Spring application, so they compile against the application's library set.
+	dependencies {
+		implementation 'org.apache.httpcomponents.client5:httpclient5'
+		implementation 'org.flywaydb:flyway-core'
+		implementation 'org.flywaydb:flyway-database-postgresql'
+		implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+		implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+		implementation 'org.springframework.boot:spring-boot-starter-mail'
+		implementation 'org.springframework.boot:spring-boot-starter-actuator'
+		implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+		implementation 'org.springframework.boot:spring-boot-starter-security'
+		implementation 'org.springframework.boot:spring-boot-starter-validation'
+		implementation 'org.springframework.boot:spring-boot-starter-web'
+		implementation 'org.springframework.boot:spring-boot-starter-websocket'
+		implementation 'io.micrometer:micrometer-registry-prometheus'
+
+		implementation platform('software.amazon.awssdk:bom:2.55.14')
+		implementation('software.amazon.awssdk:s3') {
+			exclude group: 'software.amazon.awssdk', module: 'apache5-client'
+			exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+		}
+		implementation 'software.amazon.awssdk:url-connection-client'
+
+		// API Documentation
+		implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
+
+		// JWT
+		implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+		runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+		runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+		runtimeOnly 'org.postgresql:postgresql'
+
+		compileOnly 'org.projectlombok:lombok'
+
+		annotationProcessor 'org.projectlombok:lombok'
+		annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+	}
 }
 
 dependencies {
-	implementation 'org.apache.httpcomponents.client5:httpclient5'
-	implementation 'org.flywaydb:flyway-core'
-	implementation 'org.flywaydb:flyway-database-postgresql'
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	implementation 'org.springframework.boot:spring-boot-starter-mail'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-websocket'
-	implementation 'io.micrometer:micrometer-registry-prometheus'
-
-	implementation platform('software.amazon.awssdk:bom:2.55.14')
-	implementation('software.amazon.awssdk:s3') {
-		exclude group: 'software.amazon.awssdk', module: 'apache5-client'
-		exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+	contextModules.each { module ->
+		implementation project(module.path)
 	}
-	implementation 'software.amazon.awssdk:url-connection-client'
 
-	// API Documentation
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
-
-	// JWT
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-
-	runtimeOnly 'org.postgresql:postgresql'
-	
-	compileOnly 'org.projectlombok:lombok'
-	
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	
-	annotationProcessor 'org.projectlombok:lombok'
-	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
@@ -75,7 +107,6 @@ dependencies {
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
-	
 }
 
 tasks.named('test') {
@@ -126,6 +157,16 @@ tasks.named('jacocoTestReport') {
 	reports {
 		xml.required = true
 		html.required = true
+	}
+}
+
+// The tests live in this project and exercise every module, so coverage is reported and checked over all of them.
+def moduleClasses = files(contextModules.collect { it.layout.buildDirectory.dir('classes/java/main') })
+def moduleSources = files(contextModules.collect { it.file('src/main/java') })
+[tasks.named('jacocoTestReport'), tasks.named('jacocoTestCoverageVerification')].each { coverageTask ->
+	coverageTask.configure {
+		classDirectories.from(moduleClasses)
+		sourceDirectories.from(moduleSources)
 	}
 }
 

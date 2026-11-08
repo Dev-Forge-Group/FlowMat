@@ -108,9 +108,9 @@ This file centralizes:
 
 `FlowMat` backend now validates workflow node types against the workflow domain enum.
 
-- `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/domain/enums/NodeType.java`
-- `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessServiceImpl.java`
-- `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessTemplateServiceImpl.java`
+- `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/domain/enums/NodeType.java`
+- `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessServiceImpl.java`
+- `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessTemplateServiceImpl.java`
 
 This means frontend palette definitions and backend accepted values are no longer drifting silently.
 

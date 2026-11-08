@@ -113,9 +113,9 @@ topic: stability-and-align
   - `docs/archive/2026-08-editor/relay/BATON.md`
   - `docs/archive/2026-08-editor/relay/history/2026-08/2026-08-14-1514-seoly-stability-and-align.md` (본 문서)
   - `docs/editor/current-state.md`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/domain/entity/RunStateSnapshot.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/rule/domain/entity/FlowRule.java`
-  - `flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/annotation/domain/CanvasAnnotation.java`
+  - `flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/domain/entity/RunStateSnapshot.java`
+  - `flowmat_backend/modules/rule/src/main/java/org/myweb/flowmat/domain/rule/domain/entity/FlowRule.java`
+  - `flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/annotation/domain/CanvasAnnotation.java`
   - `flowmat_backend/src/main/resources/db/migration/V13__production_run_deleted_yn.sql`
   - `flowmat_frontend/src/pages/workspace/ui/CanvasNode.tsx`
   - `flowmat_frontend/src/pages/workspace/ui/CanvasViewport.tsx`

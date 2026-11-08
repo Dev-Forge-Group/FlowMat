@@ -24,7 +24,7 @@
 
 - 지금 Project 하나가 협업 공간, 권한 경계, Tenant 비슷한 역할, 업무 데이터 소속을 모두 맡는다.
 - 업무 데이터는 거의 모두 `project_id`로 격리된다(재고, 품목, BOM, 워크플로, 실행).
-- 접근은 [`ProjectAccessService`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/project/application/ProjectAccessService.java)가 판정한다.
+- 접근은 [`ProjectAccessService`](../../../flowmat_backend/modules/project/src/main/java/org/myweb/flowmat/domain/project/application/ProjectAccessService.java)가 판정한다.
   - `project.owner_id`가 사용자와 같으면 owner다.
   - 아니면 활성 `project_member`의 `project_role`(viewer·editor·owner)을 쓴다.
   - 쓰기는 editor 이상, 소유자 작업은 owner만 할 수 있다.

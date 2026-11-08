@@ -58,16 +58,18 @@ const connectionEdge = (page: Page, id: string) => page.locator(`.react-flow__ed
 
 test('the draft is compared with a published revision over the canvas and the comparison survives a reload', async ({ page }) => {
   await openChangedLine(page)
-  const chip = page.getByRole('region', { name: 'Canvas reading' })
-  await chip.getByRole('button', { name: 'Changes', exact: true }).click()
+  // CHANGES in the view controls opens the picker; the comparison's receipt stays over the canvas.
+  const changes = page.getByRole('toolbar', { name: 'Diagram view controls' }).getByRole('button', { name: 'Compare with a revision' })
+  const receipts = page.getByRole('region', { name: 'Reading receipts' })
+  await changes.click()
   const picker = page.getByRole('dialog', { name: 'Compare with a revision' })
   // Newest first.
   await expect(picker.getByRole('group', { name: 'Revisions' }).getByRole('button')).toHaveText([/^v2\s+published$/, /^v1\s+retired$/])
   await picker.getByRole('button', { name: /^v2/ }).click()
 
   const summary = 'Since v2: processes 1 added, 1 changed, 1 removed; connections 1 added, 1 removed.'
-  await expect(chip).toContainText(summary)
-  await expect(chip.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(receipts).toContainText(summary)
+  await expect(changes).toHaveAttribute('aria-pressed', 'true')
   expect(new URL(page.url()).hash).toBe('#changes=rev-2')
   await expect(processNode(page, 'proc-pack')).toHaveClass(/change-added/)
   await expect(processNode(page, 'proc-bake')).toHaveClass(/change-changed/)
@@ -85,22 +87,23 @@ test('the draft is compared with a published revision over the canvas and the co
 
   // The comparison is in the address, beside any reading: a reload opens it again.
   await processNode(page, 'proc-bake').click({ position: { x: 24, y: 18 } })
-  await chip.getByRole('button', { name: 'Downstream 1' }).click()
+  // Bake is named Oven in the draft.
+  await page.getByRole('region', { name: 'Oven', exact: true }).getByRole('button', { name: 'Trace 1 downstream process' }).click()
   expect(new URL(page.url()).hash).toBe('#focus=proc-bake&reach=downstream&changes=rev-2')
   await page.reload()
-  await expect(chip).toContainText(summary, { timeout: 15_000 })
+  await expect(receipts).toContainText(summary, { timeout: 15_000 })
   await expect(processNode(page, 'proc-pack')).toHaveClass(/change-added/)
   await expect(processNode(page, 'proc-pack')).toHaveClass(/reading-downstream/)
 
-  await chip.getByRole('button', { name: 'Hide changes' }).click()
+  await receipts.getByRole('button', { name: 'Hide changes' }).click()
   expect(new URL(page.url()).hash).toBe('#focus=proc-bake&reach=downstream')
   await expect(processNode(page, 'proc-pack')).not.toHaveClass(/change-mark/)
-  await expect(chip.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await expect(changes).toHaveAttribute('aria-pressed', 'false')
 })
 
 test('a link to a revision the workflow does not have says so', async ({ page }) => {
   await openChangedLine(page, '#changes=rev-9')
-  await expect(page.getByRole('region', { name: 'Canvas reading' }))
+  await expect(page.getByRole('region', { name: 'Reading receipts' }))
     .toContainText("The linked revision is not one of this workflow's revisions.")
   await expect(page.locator('.react-flow__node.change-mark')).toHaveCount(0)
 })

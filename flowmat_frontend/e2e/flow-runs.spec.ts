@@ -1,5 +1,6 @@
 import { expect, test, type Route } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { mockedLogin } from './support/mockApi'
 
 type Step = { stepId: string; nodeId: string; sequenceNo: number; status: string;
   scheduledAt: string | null; errorCode: string | null; errorMessage: string | null }
@@ -135,16 +136,14 @@ test('manual Flow Run records a failed attempt, retry, completion, and events', 
       body: JSON.stringify({ success: false, data: null, message: `Unmocked ${method} ${pathname}` }) })
   })
 
-  await page.goto('/')
-  await page.locator('input').nth(0).fill('demo-owner')
-  await page.locator('input[type="password"]').fill('demo1234')
-  await page.getByRole('button', { name: 'Log in' }).click()
+  // The next page load keeps the session only once the login has finished.
+  await mockedLogin(page)
   await page.goto('/projects/prj-e2e/runs?view=flow-runs')
 
   await expect(page.getByRole('tab', { name: 'Flow executions' })).toBeVisible()
   await page.getByRole('textbox', { name: 'Run input (JSON)', exact: true }).fill('{"batch":"A-1"}')
   await page.getByRole('button', { name: 'Start Flow Run' }).click()
-  expect(submittedRunInput).toEqual({ batch: 'A-1' })
+  await expect.poll(() => submittedRunInput).toEqual({ batch: 'A-1' })
   await expect(page.getByText('Status: running')).toBeVisible()
   await expect(page.getByText('Run input', { exact: true }).locator('..')).toContainText('"batch": "A-1"')
   await page.getByLabel('Scheduled start (optional)').fill(new Date(Date.now() + 2 * 86_400_000)
@@ -161,7 +160,7 @@ test('manual Flow Run records a failed attempt, retry, completion, and events', 
   await page.getByRole('button', { name: 'Start', exact: true }).click()
   await page.getByRole('textbox', { name: 'Failure reason for step #1' }).fill('Stopped for inspection')
   await page.getByRole('button', { name: 'Fail', exact: true }).click()
-  expect(submittedStepFailure).toEqual({ errorCode: 'MANUAL_FAILURE', errorMessage: 'Stopped for inspection' })
+  await expect.poll(() => submittedStepFailure).toEqual({ errorCode: 'MANUAL_FAILURE', errorMessage: 'Stopped for inspection' })
   await expect(page.getByText('MANUAL_FAILURE', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Show attempts' }).click()
   await expect(page.getByText('Stopped for inspection').first()).toBeVisible()
@@ -181,7 +180,7 @@ test('manual Flow Run records a failed attempt, retry, completion, and events', 
   expect(submittedRunOutput).toBeNull()
   await page.getByRole('textbox', { name: 'Final run output (JSON)' }).fill('{"result":"passed"}')
   await page.getByRole('button', { name: 'Finish Flow Run' }).click()
-  expect(submittedRunOutput).toEqual({ result: 'passed' })
+  await expect.poll(() => submittedRunOutput).toEqual({ result: 'passed' })
   await expect(page.getByText('Status: finished')).toBeVisible()
   await expect(page.getByText('Final run output').locator('..')).toContainText('"result": "passed"')
   await expect(page.locator('summary').filter({ hasText: 'run_finished' })).toBeVisible()

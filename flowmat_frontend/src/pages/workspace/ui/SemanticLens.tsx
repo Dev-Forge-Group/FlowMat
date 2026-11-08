@@ -21,7 +21,11 @@ export function SemanticLens({ kinds, chosen, status, onToggle, onClear, onClose
 
   useEffect(() => {
     openerRef.current = document.activeElement as HTMLElement | null
-    panelRef.current?.querySelector<HTMLButtonElement>('.semantic-lens-kind:not(:disabled), .semantic-lens-close')?.focus()
+    // The first kind that can be pressed, else the close button. One selector list would match in document order, and
+    // the close button comes first.
+    const panel = panelRef.current
+    ;(panel?.querySelector<HTMLButtonElement>('.semantic-lens-kind:not(:disabled)')
+      ?? panel?.querySelector<HTMLButtonElement>('.semantic-lens-close'))?.focus()
   }, [])
 
   function close() {

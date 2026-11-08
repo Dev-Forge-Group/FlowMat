@@ -45,6 +45,11 @@ cd flowmat_backend
 ./gradlew build
 ```
 
+Each bounded context is its own Gradle module under `flowmat_backend/modules/<context>`; shared global code and the
+user context live in `modules/platform`. The root project is the Spring Boot application with the configuration,
+migrations and all tests ([ADR-035](docs/architecture/adr/ADR-035-gradle-modules.md)). A module compiles only
+against the modules listed in its own `build.gradle`, so a new cross-context dependency starts there.
+
 Run frontend commands from `flowmat_frontend`:
 
 ```bash

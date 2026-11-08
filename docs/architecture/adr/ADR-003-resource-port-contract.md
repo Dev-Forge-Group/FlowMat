@@ -45,7 +45,7 @@
 2. **`ProcessIo`는 Process가 받거나 내보내는 Port Contract다.**
 3. **`resourceType`은 포트로 흐르는 대상(Port Resource)의 의미다.**
    - 정확한 값 목록은 이 결정이 아니라 아래 [Resource Type Registry](#resource-type-registry-experimental--evolvable)(Experimental)에서 관리한다.
-   - DB enum이나 CHECK 제약으로 고정하지 않고, 애플리케이션의 목록([`ResourceTypes`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/domain/contract/ResourceTypes.java))으로 관리한다.
+   - DB enum이나 CHECK 제약으로 고정하지 않고, 애플리케이션의 목록([`ResourceTypes`](../../../flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/domain/contract/ResourceTypes.java))으로 관리한다.
    - 목록 밖 값도 저장은 허용한다. 대신 워크플로 검증 API가 **경고**를 낸다. 거절하지 않으므로 저장된 그래프와 발행 revision이 깨지지 않는다.
    - "연결된 두 포트의 `resourceType`이 같아야 한다"는 기존 규칙은 유지한다.
    - 포트로 흐르지 않고 공정을 실행하는 데 필요한 것(노동, 설비, 연산, 용량, 기술, 시간)은 Port Resource가 아니라 **Execution Resource / Requirement**다. 포트 목록에 넣지 않는다. 그 모델은 아직 정하지 않았다.

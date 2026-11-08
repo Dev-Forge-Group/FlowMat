@@ -1,0 +1,5 @@
+// Bounded context modules this one depends on directly (docs/architecture/domain-map.md §4).
+dependencies {
+	implementation project(':modules:platform')
+	implementation project(':modules:project')
+}

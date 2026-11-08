@@ -118,7 +118,7 @@
 
 ## 예약을 유지하는 위치 이동 (2026-10-05, §2 2bl)
 
-`POST /allocated-stock-transfers` 요청: projectId, workOrderId, allocationId, fromInventoryId, toLocation, quantity(양수, 소수 4자리), UUID requestId. editor/owner만 실행한다. Inventory가 movement를 지휘하고 production의 공개 `AllocationTransferCommand`를 부른다. 다른 context 저장소 직접 참조를 추가하지 않는다.
+`POST /allocated-stock-transfers` 요청: projectId, workOrderId, allocationId, fromInventoryId, toLocation, quantity(양수, 소수 4자리), UUID requestId. editor/owner만 실행한다. Inventory가 movement를 지휘하고, inventory가 정의하고 production이 구현한 `WorkOrderAllocations`를 부른다. 다른 context 저장소 직접 참조를 추가하지 않는다.
 
 - 자기 작업지시의 열린 할당·승인/진행 상태·같은 출발 재고·남은 양을 확인한다. 만료/비가용 LOT·격리 재고는 거절한다.
 - 출발 보유/예약 −q, 도착 보유/예약 +q. 자유 수량은 두 위치에서 변하지 않는다. 양쪽 원장과 할당 수정은 같은 트랜잭션이다.

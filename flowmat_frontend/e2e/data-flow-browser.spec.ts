@@ -63,7 +63,10 @@ test('Data Flow: UI creates, publishes and completes File → Transform → Data
         }),
       ))).toEqual(expected)
       await expect(page.locator('.react-flow__node')).toHaveCount(3)
+      // Fit View lives on the ribbon's View tab; the editor's own buttons are back on Home.
+      await page.getByRole('tab', { name: 'View', exact: true }).click()
       await page.getByRole('button', { name: 'Fit View', exact: true }).click()
+      await page.getByRole('tab', { name: 'Home', exact: true }).click()
     }
     await test.step('DF3: create CSV import and three canvas nodes', async () => {
       const form = page.locator('form').filter({ has: page.getByPlaceholder('워크플로우 이름', { exact: true }) })
@@ -77,7 +80,9 @@ test('Data Flow: UI creates, publishes and completes File → Transform → Data
       // the following port resource types and contracts express what flows through each step.
       for (const name of ['Read CSV', 'Validate rows', 'Store rows']) {
         await page.locator('.workspace-panel--left').getByRole('button').filter({ has: page.getByText('Process', { exact: true }) }).click()
-        // Fit-to-content changes the camera as nodes are added. Pick an actually empty screen point.
+        // Fit-to-content changes the camera as nodes are added. Pick an actually empty screen point: away from
+        // the nodes, and where the pane itself is on top, not a panel floating over the canvas (the selected
+        // process's details, the reading receipts).
         const pane = page.locator('.react-flow__pane')
         const position = await pane.evaluate((element) => {
           const box = element.getBoundingClientRect()
@@ -85,8 +90,9 @@ test('Data Flow: UI creates, publishes and completes File → Transform → Data
           for (const y of [0.25, 0.5, 0.7]) for (const x of [0.18, 0.5, 0.8]) {
             const point = { x: box.width * x, y: box.height * y }
             const screenX = box.left + point.x, screenY = box.top + point.y
-            if (!occupied.some((node) => screenX >= node.left - 40 && screenX <= node.right + 40
-              && screenY >= node.top - 40 && screenY <= node.bottom + 40)) return point
+            const clear = !occupied.some((node) => screenX >= node.left - 40 && screenX <= node.right + 40
+              && screenY >= node.top - 40 && screenY <= node.bottom + 40)
+            if (clear && document.elementFromPoint(screenX, screenY) === element) return point
           }
           throw new Error('No empty canvas position for the next data-flow node')
         })

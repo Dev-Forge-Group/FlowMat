@@ -17,8 +17,8 @@
 ## 결정
 
 1. 얼굴 로그인은 기본으로 꺼진다: `app.auth.face-login.enabled: ${APP_AUTH_FACE_LOGIN_ENABLED:false}`. 운영·개발·테스트 모두 같다.
-2. 꺼져 있으면 `/auth/face/**`의 모든 경로·메서드가 404 "Face login is not enabled."(`FACE_LOGIN_DISABLED`)로 답한다([`FaceLoginDisabledController`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/user/api/FaceLoginDisabledController.java)). 등록·매칭·로그인·개수 조회가 모두 막혀, 새 얼굴 자료를 받지도 비교하지도 않는다. 로그인이 필요한 `count`·`register`는 로그인하지 않은 요청에 지금처럼 401이 먼저 난다.
-3. 켜는 길은 명시적 설정(`APP_AUTH_FACE_LOGIN_ENABLED=true`)뿐이고, 켜면 지금 동작([`FaceAuthController`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/user/api/FaceAuthController.java)) 그대로다. 코드는 지우지 않는다.
+2. 꺼져 있으면 `/auth/face/**`의 모든 경로·메서드가 404 "Face login is not enabled."(`FACE_LOGIN_DISABLED`)로 답한다([`FaceLoginDisabledController`](../../../flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/domain/user/api/FaceLoginDisabledController.java)). 등록·매칭·로그인·개수 조회가 모두 막혀, 새 얼굴 자료를 받지도 비교하지도 않는다. 로그인이 필요한 `count`·`register`는 로그인하지 않은 요청에 지금처럼 401이 먼저 난다.
+3. 켜는 길은 명시적 설정(`APP_AUTH_FACE_LOGIN_ENABLED=true`)뿐이고, 켜면 지금 동작([`FaceAuthController`](../../../flowmat_backend/modules/platform/src/main/java/org/myweb/flowmat/domain/user/api/FaceAuthController.java)) 그대로다. 코드는 지우지 않는다.
 4. 이미 저장된 `face_descriptor` 행은 지우지 않는다.
 5. 운영에서 다시 켜기 전에 검토한다: 실제 제품 요구, 생체 자료 처리(저장 여부, 원본 이미지와 템플릿), 전송 보안, 사용자 동의, 대체 인증, 위조·liveness 대응, 감사·개인정보 요구. 이 검토 전에는 운영에서 켜지 않는다.
 

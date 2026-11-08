@@ -20,8 +20,8 @@
   - 줄 추가 API가 이 값을 저장하지만, 승인이 "scrap rates are not supported yet"로 거절했다. 그래서 승인 revision은 모두 0이다.
   - 개발 DB 5434의 줄 48개(approved 32, draft 10, retired 6)도 모두 0이다.
 - **소요량을 계산하는 곳은 둘뿐이다.**
-  - [`BomServiceImpl.requirements`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/bom/application/BomServiceImpl.java): 간이 MRP·준비 점검·재고 할당·창고 피킹·실행 계획 투입·만들 수 있는 양·다단계 전개·폐기 처리가 모두 이것을 부른다.
-  - [`BomTree.perProductUnit`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/bom/application/BomTree.java): 원가 누적과 역전개가 쓴다.
+  - [`BomServiceImpl.requirements`](../../../flowmat_backend/modules/bom/src/main/java/org/myweb/flowmat/domain/bom/application/BomServiceImpl.java): 간이 MRP·준비 점검·재고 할당·창고 피킹·실행 계획 투입·만들 수 있는 양·다단계 전개·폐기 처리가 모두 이것을 부른다.
+  - [`BomTree.perProductUnit`](../../../flowmat_backend/modules/bom/src/main/java/org/myweb/flowmat/domain/bom/application/BomTree.java): 원가 누적과 역전개가 쓴다.
 - **연결 손실률(ADR-009)과 겹치지 않는다.** 연결 손실률은 Flow Run 그래프 수량에만 적용되고 재고·생산 기록을 움직이지 않는다(L7). 그래서 BOM 스크랩률과 두 번 세는 일이 없다.
 - **두 사용자 모두에게 필요하다.**
   - 생산관리자에게 "넣는 양 = 제품에 남는 양 + 잃는 양"(공정 손실·자투리·시험분)은 흔한 계획 방식이다.
@@ -55,7 +55,7 @@
    - 예: 반제품 2 kg × 1.1 → 2.2 kg. 그 안의 자재 1 kg/kg × 1.05 → 2.31 kg.
 4. **적용 범위.**
    - `requirements`를 부르는 모든 곳에 적용된다: 간이 MRP, 준비 점검, 재고 할당, 창고 피킹, 실행 계획 투입(`production_run_item.planned_qty`), 만들 수 있는 양, 다단계 전개.
-   - 정정(2026-11-02, 같은 날 2hw 범위 조사에서 찾음): "만들 수 있는 양"은 팬텀 줄이 있는 BOM만 `requirements`를 불렀다. 팬텀이 없는 BOM은 줄 수량을 그대로 써서 스크랩이 빠져 있었다. [`BuildableQuantityService`](../../../flowmat_backend/src/main/java/org/myweb/flowmat/domain/production/application/BuildableQuantityService.java)가 이제 줄 스크랩률을 곱한다. `BomScrapRateIntegrationTest` 첫 테스트가 밀가루 4.2 kg으로 20개(스크랩이 빠지면 21개)를 확인한다.
+   - 정정(2026-11-02, 같은 날 2hw 범위 조사에서 찾음): "만들 수 있는 양"은 팬텀 줄이 있는 BOM만 `requirements`를 불렀다. 팬텀이 없는 BOM은 줄 수량을 그대로 써서 스크랩이 빠져 있었다. [`BuildableQuantityService`](../../../flowmat_backend/modules/production/src/main/java/org/myweb/flowmat/domain/production/application/BuildableQuantityService.java)가 이제 줄 스크랩률을 곱한다. `BomScrapRateIntegrationTest` 첫 테스트가 밀가루 4.2 kg으로 20개(스크랩이 빠지면 21개)를 확인한다.
    - 원가 누적·역전개(`perProductUnit`)에도 적용된다.
    - 재료비는 스크랩을 포함한 양으로 계산한다.
 5. **기존 revision은 그대로다.**

@@ -447,7 +447,7 @@ focus할 수 있다.
 
 핵심 파일:
 
-`flowmat_backend/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessConnectionServiceImpl.java`
+`flowmat_backend/modules/workflow/src/main/java/org/myweb/flowmat/domain/workflow/application/ProcessConnectionServiceImpl.java`
 
 이 파일은 FlowMat이 단순 diagram editor가 아님을 가장 명확하게 보여준다.
 
