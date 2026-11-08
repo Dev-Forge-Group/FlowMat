@@ -166,7 +166,7 @@ class FlowRunHttpExecutionServiceTest {
     }
 
     @Test void lostOwnerAccessAtPreflightCommitsNotSentEvidenceInsteadOfLeavingClaimPending() {
-        doReturn(null).doThrow(new BusinessException(ErrorCode.FORBIDDEN)).when(access).requireProjectOwnerAccess("project");
+        doNothing().doThrow(new BusinessException(ErrorCode.FORBIDDEN)).when(access).requireProjectOwnerAccess("project");
         assertThrows(BusinessException.class, () -> service.execute("run", "step", UUID.randomUUID()));
         assertEquals("TRANSPORT_FAILED", saved.get().getTransportStatus());
         assertEquals("HTTP_NOT_SENT", saved.get().getErrorCode());
