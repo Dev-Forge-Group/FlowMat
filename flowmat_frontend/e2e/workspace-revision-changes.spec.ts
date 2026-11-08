@@ -81,6 +81,10 @@ test('the draft is compared with a published revision over the canvas and the co
   // What is gone is named; what is there is a way to it.
   await expect(picker.getByRole('list', { name: 'Changed processes' }).getByRole('button')).toHaveText([/^Δ Oven\s*name$/, /^\+ Pack\s*added$/])
   await expect(picker.getByRole('list', { name: 'Removed' }).getByRole('listitem')).toHaveText(['− Wash', '− Bake → Wash'])
+  // The picker ends above the view controls, however wide they are, so none of it is under them.
+  const pickerBox = await picker.boundingBox()
+  const dockBox = await page.getByRole('toolbar', { name: 'Diagram view controls' }).boundingBox()
+  expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(dockBox!.y)
   await picker.getByRole('button', { name: /Oven/ }).click()
   await picker.getByRole('button', { name: 'Close' }).click()
   await expect(picker).toHaveCount(0)
