@@ -92,6 +92,26 @@ class PresenceControllerTest {
     }
 
     @Test
+    void nodeEditingWithoutProcessIsRelayedAsEditingNothing() {
+        // Deselecting a process sends NODE_EDITING with no process: collaborators drop the editing mark and the session
+        // record forgets it. Dropping the message left the mark on the last process for everyone else.
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create();
+        headers.setSessionId("session-3");
+        PresenceMessage stopped = new PresenceMessage(PresenceMessage.Type.NODE_EDITING, null, "client-3", null, null, null,
+            null, null, 0L);
+
+        presenceController.relay("workflow-3", stopped, principal(), headers);
+
+        verify(sessionRegistry).touch("session-3", "user-1", "workflow-3", stopped);
+        ArgumentCaptor<PresenceMessage> captor = ArgumentCaptor.forClass(PresenceMessage.class);
+        verify(messagingTemplate).convertAndSend(org.mockito.ArgumentMatchers.eq("/topic/workflow/workflow-3/presence"),
+            captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(PresenceMessage.Type.NODE_EDITING);
+        assertThat(captor.getValue().editingProcessId()).isNull();
+        assertThat(captor.getValue().userId()).isEqualTo("user-1");
+    }
+
+    @Test
     void rejectsNonMemberBeforeRelaying() {
         doThrow(new BusinessException(ErrorCode.FORBIDDEN))
             .when(workflowAccess).requireWorkflowReadAccess("workflow-1", "user-1");
@@ -110,6 +130,8 @@ class PresenceControllerTest {
             new PresenceMessage(PresenceMessage.Type.JOIN, null, "x".repeat(129), null, null, null, null, null, 0),
             new PresenceMessage(PresenceMessage.Type.CURSOR_MOVED, null, "client", null, Double.NaN, 1d, null, null, 0),
             new PresenceMessage(PresenceMessage.Type.CURSOR_MOVED, null, "client", null, 1_000_001d, 1d, null, null, 0),
+            new PresenceMessage(PresenceMessage.Type.NODE_EDITING, null, "client", null, null, null, " ", null, 0),
+            new PresenceMessage(PresenceMessage.Type.NODE_EDITING, null, "client", null, null, null, "p".repeat(129), null, 0),
             new PresenceMessage(PresenceMessage.Type.ANNOTATION_DRAWING, null, "client", null, null, null, null,
                 new AnnotationPresencePayload("freehand", List.of(List.of(Double.NaN, 1d)), true), 0)
         );
