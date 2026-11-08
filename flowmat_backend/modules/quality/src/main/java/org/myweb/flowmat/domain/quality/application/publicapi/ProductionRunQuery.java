@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.quality.application;
+package org.myweb.flowmat.domain.quality.application.publicapi;
 
 import java.util.Collection;
 import java.util.List;

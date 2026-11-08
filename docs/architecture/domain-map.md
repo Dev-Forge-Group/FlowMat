@@ -57,6 +57,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 - 다른 context의 repository를 직접 쓰지 않는다. 새 위반은 [`ModuleBoundaryTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleBoundaryTest.java)가 막는다.
 - 다른 context의 `domain.entity`도 쓰지 않는다. 2026-10-19에 동결한 39줄은 2026-10-25에 모두 없어져, 새로 쓰면 바로 실패한다([ADR-018](adr/ADR-018-entity-boundary.md)).
 - 다른 context의 웹 계층(`api`) 타입과 entity 밖의 `domain` 타입(enum 등)도 쓰지 않는다. 함께 쓰는 타입은 `publicapi`에 두고, 상태는 view의 코드와 메서드로 넘긴다. 예외는 flowrun이 실행하는 workflow의 정의 언어(`PortSchema`, `ConditionExpression`)다([ADR-036](adr/ADR-036-cross-context-contract-types.md)).
+- 다른 context의 `application`도 `publicapi`로만 쓴다. 예외는 ADR-036 결정 6에 적은 공유 서비스(`ProjectAccessService`, `UnitConverter` 등)다.
 - 위반은 2026-10-03에 84건이었고 동결해 두었다. 그때 많은 방향은 다음과 같았다.
   - inventory → catalog 20
   - production → catalog 16
@@ -71,7 +72,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 
   `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality` < `purchasing`·`workforce` < `production`
 
-- 왼쪽 context가 오른쪽 context의 기능이 필요하면, 왼쪽 context가 인터페이스를 정의하고 오른쪽 context가 구현한다(`ItemUsageCheck`와 같은 방식). 2026-11-07에 순환을 만들던 의존 3개(catalog → inventory, inventory → production, quality → production)를 이렇게 끊었다.
+- 왼쪽 context가 오른쪽 context의 기능이 필요하면, 왼쪽 context가 인터페이스를 정의하고 오른쪽 context가 구현한다(`ItemUsageCheck`와 같은 방식). 이 인터페이스는 정의한 context의 `application.publicapi`에 둔다([ADR-036](adr/ADR-036-cross-context-contract-types.md) 결정 6). 2026-11-07에 순환을 만들던 의존 3개(catalog → inventory, inventory → production, quality → production)를 이렇게 끊었다.
 
   | 정의한 곳 | 인터페이스 | 구현한 곳 | 이전 방식 |
   |---|---|---|---|

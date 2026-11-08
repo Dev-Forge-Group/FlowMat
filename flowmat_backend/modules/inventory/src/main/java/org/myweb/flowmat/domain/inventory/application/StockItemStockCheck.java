@@ -1,7 +1,7 @@
 package org.myweb.flowmat.domain.inventory.application;
 
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemStockCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStockCheck;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;

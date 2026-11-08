@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.catalog.application;
+package org.myweb.flowmat.domain.catalog.application.publicapi;
 
 /**
  * Whether stock records exist for an item, asked before a change that would leave existing records inconsistent, such

@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.inventory.application;
+package org.myweb.flowmat.domain.inventory.application.publicapi;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;

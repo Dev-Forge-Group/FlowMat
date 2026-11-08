@@ -35,6 +35,8 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.myweb.flowmat.domain.quality.application.publicapi.ProductionRunQuery;
+import org.myweb.flowmat.domain.quality.application.publicapi.ProductionRunView;
 
 /**
  * Inspections and defects (docs/domain/quality-inspection.md). Both are records only: an inspection moves stock only
