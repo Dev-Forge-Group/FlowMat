@@ -32,8 +32,11 @@ export function useCanvasReading(
   const state = useMemo(() => parseReadingHash(location.hash, known), [location.hash, known])
   const nameOf = useCallback((processId: string) => names.get(processId) ?? processId, [names])
   const view = useMemo(() => (state ? readingView(graph, state, nameOf) : null), [graph, state, nameOf])
-  // undefined: not picking a route; null: waiting for its start; an id: waiting for its end.
-  const [routeFrom, setRouteFrom] = useState<string | null | undefined>(undefined)
+  // undefined: not picking a route; null: waiting for its start; an id: waiting for its end. Picking belongs to the reading
+  // the address held when it began, so a link opened in this tab or Back, which names another reading, ends it.
+  const readingKey = formatReadingHash(state)
+  const [picking, setPicking] = useState<{ from: string | null; during: string } | undefined>(undefined)
+  const routeFrom = picking !== undefined && picking.during === readingKey ? picking.from : undefined
   const [pickError, setPickError] = useState<string | null>(null)
   const choices = useMemo(() => (routeFrom === undefined ? null : routeChoices(graph, routeFrom)), [graph, routeFrom])
 
@@ -58,7 +61,7 @@ export function useCanvasReading(
   }, [graph, reveal, write])
 
   const cancelRoute = useCallback(() => {
-    setRouteFrom(undefined)
+    setPicking(undefined)
     setPickError(null)
   }, [])
 
@@ -68,9 +71,9 @@ export function useCanvasReading(
   }, [cancelRoute, show])
 
   const startRoute = useCallback((from: string | null = null) => {
-    setRouteFrom(from)
+    setPicking({ from, during: readingKey })
     setPickError(null)
-  }, [])
+  }, [readingKey])
 
   /**
    * A clicked or found process while a route is being picked: its start, its end, or an error that keeps the picking on.
@@ -82,13 +85,13 @@ export function useCanvasReading(
     setPickError(error)
     if (error) return true
     if (routeFrom === null) {
-      setRouteFrom(processId)
+      setPicking({ from: processId, during: readingKey })
     } else {
-      setRouteFrom(undefined)
+      setPicking(undefined)
       show({ kind: 'route', from: routeFrom, to: processId })
     }
     return true
-  }, [choices, nameOf, routeFrom, show])
+  }, [choices, nameOf, readingKey, routeFrom, show])
 
   const clear = useCallback(() => {
     cancelRoute()

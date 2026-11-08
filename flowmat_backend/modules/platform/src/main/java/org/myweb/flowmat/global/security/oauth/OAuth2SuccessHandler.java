@@ -37,6 +37,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     private final SocialAccountRepository socialAccountRepository;
     private final OAuthExchangeStore oauthExchangeStore;
     private final RefreshTokenCookieService refreshTokenCookieService;
+    private final OAuth2FailureHandler oAuth2FailureHandler;
 
     @Value("${app.oauth2.redirect-uri:}")
     private String redirectUri;
@@ -85,7 +86,11 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         User user = userContext.getUser();
         if (!canLogin(user)) {
-            throw new OAuth2AuthenticationException(new OAuth2Error("access_denied"), "blocked_user");
+            // The same refusal as when the provider's user is loaded (CustomOAuth2UserService): back to the front end with
+            // the reason and nothing issued. An exception here would not reach the failure handler.
+            oAuth2FailureHandler.onAuthenticationFailure(request, response,
+                new OAuth2AuthenticationException(new OAuth2Error("access_denied"), "blocked_user"));
+            return;
         }
         String accessToken = jwtProvider.generateAccessToken(user.getUserId(), user.getUserRole());
         String refreshToken = jwtProvider.generateRefreshToken(user.getUserId());

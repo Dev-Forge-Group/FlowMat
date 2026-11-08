@@ -15,9 +15,6 @@ public interface WorkerAttendanceRepository extends JpaRepository<WorkerAttendan
 
     Optional<WorkerAttendance> findByAttendanceIdAndProjectIdAndUserId(String attendanceId, String projectId, String userId);
 
-    List<WorkerAttendance> findAllByProjectIdAndUserIdAndClockInGreaterThanEqualAndClockInLessThanOrderByClockInAscAttendanceIdAsc(
-        String projectId, String userId, OffsetDateTime from, OffsetDateTime to);
-
     /** Range membership follows the saved work date, as do daily attendance and pay totals. */
     List<WorkerAttendance> findAllByProjectIdAndUserIdAndWorkDateGreaterThanEqualAndWorkDateLessThanEqualOrderByClockInAscAttendanceIdAsc(
         String projectId, String userId, LocalDate from, LocalDate to);

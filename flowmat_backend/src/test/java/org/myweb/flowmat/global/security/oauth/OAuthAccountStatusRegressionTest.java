@@ -36,6 +36,7 @@ class OAuthAccountStatusRegressionTest {
     private final AuthRedisStore sessions = mock(AuthRedisStore.class);
     private final OAuthExchangeStore exchanges = mock(OAuthExchangeStore.class);
     private final RefreshTokenCookieService cookies = mock(RefreshTokenCookieService.class);
+    private final OAuth2FailureHandler failure = failureHandler();
 
     @ParameterizedTest
     @CsvSource({"dormant,N", "locked,N", "withdrawn,N", "active,Y"})
@@ -46,11 +47,13 @@ class OAuthAccountStatusRegressionTest {
 
     @ParameterizedTest
     @CsvSource({"dormant,N", "locked,N", "withdrawn,N", "active,Y"})
-    void successCallbackCannotIssueCredentialsForBlockedPrincipal(String status, String deleted) {
+    void successCallbackCannotIssueCredentialsForBlockedPrincipal(String status, String deleted) throws Exception {
         var context = context(user(status, deleted));
-        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies);
-        assertThrows(OAuth2AuthenticationException.class, () -> handler.onAuthenticationSuccess(
-            new MockHttpServletRequest(), new MockHttpServletResponse(), new TestingAuthenticationToken(context, null)));
+        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies, failure);
+        var response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, new TestingAuthenticationToken(context, null));
+        // Refused like a blocked user's provider login: back to the front end with the reason.
+        assertEquals("https://app.test/oauth2/success?error=oauth_login_failed&reason=blocked_user", response.getRedirectedUrl());
         verifyNoInteractions(jwt, sessions, exchanges, cookies);
     }
 
@@ -66,7 +69,7 @@ class OAuthAccountStatusRegressionTest {
 
     @Test
     void activeSuccessCallbackStillIssuesCredentials() throws Exception {
-        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies);
+        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies, failure);
         handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(),
             new TestingAuthenticationToken(context(user("active", "N")), null));
         verify(jwt).generateAccessToken("test-user", "user");
@@ -83,7 +86,7 @@ class OAuthAccountStatusRegressionTest {
         when(claims.get("provider")).thenReturn("GOOGLE");
         when(jwt.validateOauthLinkToken("fixture-link")).thenReturn(claims);
         when(users.findByUserId("test-user")).thenReturn(Optional.of(target));
-        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies);
+        var handler = new OAuth2SuccessHandler(jwt, sessions, users, accounts, exchanges, cookies, failure);
         org.springframework.test.util.ReflectionTestUtils.setField(handler, "frontendUrl", "https://app.test");
         var request = new MockHttpServletRequest();
         request.setParameter("state", "link." + java.util.Base64.getUrlEncoder().withoutPadding()
@@ -130,5 +133,11 @@ class OAuthAccountStatusRegressionTest {
 
     private UserContext context(User user) {
         return UserContext.registered(user, Map.of("sub", "provider-id"), "GOOGLE", "provider-id", "user@test.local", "Test");
+    }
+
+    private static OAuth2FailureHandler failureHandler() {
+        var handler = new OAuth2FailureHandler();
+        org.springframework.test.util.ReflectionTestUtils.setField(handler, "redirectUri", "https://app.test/oauth2/success");
+        return handler;
     }
 }

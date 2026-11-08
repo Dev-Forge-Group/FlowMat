@@ -26,6 +26,10 @@ describe('workflow svg', () => {
     expect(svg.match(/<circle /g)).toHaveLength(2)
   })
 
+  it('names a process saved without a kind a process', () => {
+    expect(workflowSvg('Line', [{ ...mix, kind: null }], [])).toContain('>PROCESS</text>')
+  })
+
   it('writes nothing of the editor: no selection, reading or run classes', () => {
     const svg = workflowSvg('Line', [mix], [])
     expect(svg).not.toMatch(/selected|reading-|run-|change-/)

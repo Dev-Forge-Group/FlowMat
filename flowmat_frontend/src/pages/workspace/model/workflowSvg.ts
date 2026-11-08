@@ -3,7 +3,8 @@
  * kind, each connection the path the canvas drew, in its kind's colour and dash, with an arrow and its label. Only the
  * workflow itself: no selection, reading, run or change marks, and no editor controls. Canvas coordinates throughout.
  */
-export interface SvgProcess { id: string; x: number; y: number; width: number; height: number; name: string; kind: string }
+/** `kind` is the stored node type; rows saved before node types existed have none and are processes. */
+export interface SvgProcess { id: string; x: number; y: number; width: number; height: number; name: string; kind: string | null }
 export interface SvgConnection {
   id: string
   /** The SVG path data the canvas drew for it, in canvas coordinates. */
@@ -47,7 +48,7 @@ export function workflowSvg(title: string, processes: readonly SvgProcess[], con
       `<text x="${round(process.x + 14)}" y="${round(process.y + 26)}" font-size="14" font-weight="600" fill="#0f172a">`
         + `${escape(process.name)}</text>`,
       `<text x="${round(process.x + 14)}" y="${round(process.y + 46)}" font-size="11" fill="#64748b">`
-        + `${escape(process.kind.toUpperCase())}</text>`,
+        + `${escape((process.kind || 'process').toUpperCase())}</text>`,
       `</g>`,
     ].join('')),
     ...connections.flatMap((connection) => (connection.ends ?? []).map((end) =>

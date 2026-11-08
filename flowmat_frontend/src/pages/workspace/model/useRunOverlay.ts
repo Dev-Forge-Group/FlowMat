@@ -15,13 +15,17 @@ export function useRunOverlay(workflowId: string, runId: string | null, known: R
   const runs = useProductionRunsQuery(runId || listing ? workflowId : '')
   const run = runId ? runs.data?.find((candidate) => candidate.productionRunId === runId) ?? null : null
   const steps = useRunStepsQuery(run ? run.productionRunId : '')
-  const refetch = useRef(steps.refetch)
-  refetch.current = steps.refetch
+  // The run is read again with its steps, so a run that has finished stops being shown as running and the reading stops.
+  const refetch = useRef({ steps: steps.refetch, runs: runs.refetch })
+  refetch.current = { steps: steps.refetch, runs: runs.refetch }
   const running = run?.runStatus === 'running'
 
   useEffect(() => {
     if (!running) return
-    const timer = window.setInterval(() => void refetch.current(), REFRESH_MS)
+    const timer = window.setInterval(() => {
+      void refetch.current.steps()
+      void refetch.current.runs()
+    }, REFRESH_MS)
     return () => window.clearInterval(timer)
   }, [running, runId])
 
