@@ -141,9 +141,8 @@ test('a route marks where it can go, keeps picking after a wrong pick and lists 
   await processNode(page, 'proc-cool').click({ position: { x: 24, y: 18 } })
   await viewControls(page).getByRole('button', { name: 'Trace a directed route' }).click()
   await expect(route.getByRole('status')).toHaveText('No arrows lead out of Cool. Clear it and pick another start.')
-  await route.getByRole('button', { name: 'Clear route probe' }).click()
 
-  // A link to a way against the connections says there is none.
+  // A link to a way against the connections says there is none; opened in this tab, it ends the picking.
   await page.goto('/projects/prj-e2e/workflows/wf-read#route=proc-cool~proc-mix')
   await expect(route.getByRole('status')).toHaveText('Mix cannot be reached from Cool along the arrows.', { timeout: 15_000 })
   await expect(page.locator('.reading-dim')).toHaveCount(0)
@@ -353,4 +352,18 @@ test('the lens reads one or two kinds of process, waits on a third and keeps the
   await page.keyboard.press('Escape')
   await expect(receipts(page)).toHaveCount(0)
   expect(hashOf(page)).toBe('')
+})
+
+test('keys typed into a dropdown stay there instead of opening the map or the finder', async ({ page }) => {
+  await openBakery(page)
+  await processNode(page, 'proc-bake').click({ position: { x: 24, y: 18 } })
+  await page.getByRole('combobox', { name: 'Node Type' }).focus()
+  await page.keyboard.press('m')
+  await page.keyboard.press('/')
+  await expect(viewControls(page).getByRole('button', { name: 'Open semantic radar' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('dialog', { name: 'Find a process' })).toHaveCount(0)
+  // Away from the dropdown the same keys work.
+  await page.mouse.click(4, 4)
+  await page.keyboard.press('m')
+  await expect(viewControls(page).getByRole('button', { name: 'Open semantic radar' })).toHaveAttribute('aria-expanded', 'true')
 })

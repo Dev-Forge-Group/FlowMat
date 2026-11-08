@@ -1095,9 +1095,11 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
+      // A focused dropdown takes its keys too: typing picks an option there.
       const isEditing =
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
         target.isContentEditable
 
       if (!isEditing) {
