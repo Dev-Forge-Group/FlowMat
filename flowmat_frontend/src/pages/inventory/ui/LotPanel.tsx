@@ -34,7 +34,8 @@ const cell = { padding: '6px 6px' } as const
 
 export function LotPanel({ projectId, items }: { projectId: string; items: ItemDto[] }) {
   const lotsQuery = useLotsQuery(projectId)
-  const lots = lotsQuery.data ?? []
+  // The same list from render to render until the query changes, so what is worked out from it is not redone each time.
+  const lots = useMemo(() => lotsQuery.data ?? [], [lotsQuery.data])
   const itemLabel = useMemo(() => new Map(items.map((item) => [item.itemId, `${item.itemCode} · ${item.itemName}`])), [items])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = lots.find((lot) => lot.lotId === selectedId) ?? null

@@ -137,7 +137,8 @@ export function WorkOrdersPanel({
     [equipmentList],
   )
   const bomsQuery = useBomsQuery(projectId)
-  const boms = bomsQuery.data ?? []
+  // The same list from render to render until the query changes, so the makeable set is not redone each time.
+  const boms = useMemo(() => bomsQuery.data ?? [], [bomsQuery.data])
   const bomsLoaded = bomsQuery.isSuccess
   const bomById = new Map(boms.map((bom) => [bom.bomId, bom]))
   // Retired revisions can no longer be chosen; draft / pending ones can, but must be approved before the order is.

@@ -111,8 +111,9 @@ export function RunDetailRoute() {
   const workflowRevision = revisionsQuery.data?.find(
     (revision) => revision.workflowRevisionId === run?.workflowRevisionId,
   )
-  const runItems = runItemsQuery.data ?? []
-  const inventories = inventoriesQuery.data ?? []
+  // The same lists from render to render until their queries change, so the totals and labels are not redone each time.
+  const runItems = useMemo(() => runItemsQuery.data ?? [], [runItemsQuery.data])
+  const inventories = useMemo(() => inventoriesQuery.data ?? [], [inventoriesQuery.data])
   const itemLabel = useMemo(
     () => new Map((itemsQuery.data ?? []).map((item) => [item.itemId, `${item.itemCode} · ${item.itemName}`])),
     [itemsQuery.data],
