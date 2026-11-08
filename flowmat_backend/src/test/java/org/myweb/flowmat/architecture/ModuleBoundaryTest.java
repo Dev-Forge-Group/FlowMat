@@ -27,8 +27,9 @@ import java.util.regex.Pattern;
  * {@code domain.entity} classes either. The 39 uses frozen when that rule came in (2026-10-19) were all removed by
  * 2026-10-25, so it has no frozen list either and any use fails. Since 2026-11-07 the contexts may not depend on each
  * other in a cycle either, nor use another context's web layer ({@code api}) or its other domain types such as enums
- * (docs/architecture/adr/ADR-036-cross-context-contract-types.md). {@code global} and {@code batch} are not bounded
- * contexts and are not checked.
+ * (docs/architecture/adr/ADR-036-cross-context-contract-types.md). Since 2026-11-08 another context's {@code application}
+ * is reached through its {@code publicapi}, besides a fixed list of shared services. {@code global} and {@code batch} are
+ * not bounded contexts and are not checked.
  */
 @AnalyzeClasses(packages = "org.myweb.flowmat", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -42,6 +43,18 @@ class ModuleBoundaryTest {
      * Not checked by the domain type rule: entities, which have their own rule, and workflow's definition language (port
      * schemas and condition expressions), which flowrun executes as published (ADR-036).
      */
+    private static final Pattern APPLICATION = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.(\\w+)\\.application(\\..*)?$");
+    /**
+     * Not checked by the application rule: every {@code publicapi}, and the services several contexts share that are not
+     * behind one yet (ADR-036 follow-up). Add to this list only by deciding so in that ADR.
+     */
+    private static final Pattern PUBLIC_APPLICATION = Pattern.compile("^org\\.myweb\\.flowmat\\.domain\\.("
+        + "\\w+\\.application\\.publicapi\\..*"
+        + "|project\\.application\\.ProjectAccessService"
+        + "|catalog\\.application\\.(UnitConverter|ItemStatusRule|EquipmentScheduleService)"
+        + "|rule\\.application\\.(FlowRuleEngineService|RuleEvaluationContext|RuleTarget)"
+        + "|inventory\\.application\\.LotService"
+        + ")(\\$.*)?$");
     private static final Pattern NOT_DOMAIN_TYPES = Pattern.compile(
         "^org\\.myweb\\.flowmat\\.domain\\.(\\w+\\.domain\\.entity|workflow\\.domain\\.contract|workflow\\.domain\\.expression)(\\..*)?$");
 
@@ -64,6 +77,14 @@ class ModuleBoundaryTest {
         .should(useOnlyTheirOwnContexts("domain types", DOMAIN, NOT_DOMAIN_TYPES));
 
     /**
+     * Another context's application layer through its publicapi: its queries and commands, and the ports it declares for
+     * higher contexts to implement (for example {@code catalog.application.publicapi.ItemUsageCheck}).
+     */
+    @ArchTest
+    static final ArchRule applicationLayersAreReachedThroughTheirPublicApi = classes().that().resideInAPackage("org.myweb.flowmat.domain..")
+        .should(useOnlyTheirOwnContexts("application classes outside publicapi", APPLICATION, PUBLIC_APPLICATION));
+
+    /**
      * Bounded contexts depend on each other in one direction only, so each can become its own Gradle module. When a lower
      * context needs something a higher one owns, the lower context declares an interface and the higher one implements it
      * (for example {@code catalog.application.ItemStockCheck}, implemented in inventory).
@@ -77,7 +98,7 @@ class ModuleBoundaryTest {
         return useOnlyTheirOwnContexts(kind, owned, null);
     }
 
-    /** As above, leaving out the classes {@code except} matches. */
+    /** As above, leaving out the classes whose full name {@code except} matches. */
     private static ArchCondition<JavaClass> useOnlyTheirOwnContexts(String kind, Pattern owned, Pattern except) {
         return new ArchCondition<>("use only their own bounded context's " + kind) {
             // One violation per top-level class and foreign class (a nested class counts as its top-level class), named
@@ -99,7 +120,7 @@ class ModuleBoundaryTest {
                     JavaClass target = dependency.getTargetClass().getBaseComponentType();
                     Matcher other = owned.matcher(target.getPackageName());
                     if (other.matches() && !other.group(1).equals(own.group(1))
-                        && (except == null || !except.matcher(target.getPackageName()).matches())) {
+                        && (except == null || !except.matcher(target.getName()).matches())) {
                         uses.add(topLevelName(origin) + " uses " + topLevelName(target));
                     }
                 }

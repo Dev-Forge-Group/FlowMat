@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.inventory.application.WorkOrderAllocations;
+import org.myweb.flowmat.domain.inventory.application.publicapi.WorkOrderAllocations;
 import org.myweb.flowmat.domain.production.domain.entity.StockAllocation;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;

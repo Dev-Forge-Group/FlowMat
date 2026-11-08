@@ -40,6 +40,8 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.myweb.flowmat.domain.quality.application.publicapi.ProductionRunQuery;
+import org.myweb.flowmat.domain.quality.application.publicapi.ProductionRunView;
 
 /**
  * Nonconformities and their corrective actions (docs/domain/nonconformity.md, benchmark FM-MFG-004). A nonconformity

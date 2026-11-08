@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.quality.application;
+package org.myweb.flowmat.domain.quality.application.publicapi;
 
 /** What quality reads about a production run. {@code targetItemId} is the product it makes, null without one. */
 public record ProductionRunView(

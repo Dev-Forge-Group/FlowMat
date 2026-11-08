@@ -2,7 +2,7 @@ package org.myweb.flowmat.domain.inventory.application;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemUsageCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemUsageCheck;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.springframework.stereotype.Component;

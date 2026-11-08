@@ -19,6 +19,7 @@ import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.myweb.flowmat.domain.inventory.application.publicapi.WorkOrderAllocations;
 
 /** Inventory orchestrates the stock movement and production allocation change in one transaction. */
 @Service

@@ -10,7 +10,7 @@ import org.myweb.flowmat.domain.bom.domain.entity.BomLine;
 import org.myweb.flowmat.domain.bom.domain.enums.BomStatus;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.catalog.application.ItemUsageCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemUsageCheck;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.springframework.stereotype.Component;
 

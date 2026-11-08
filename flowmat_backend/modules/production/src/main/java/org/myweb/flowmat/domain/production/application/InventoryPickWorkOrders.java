@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.inventory.application.PickWorkOrders;
+import org.myweb.flowmat.domain.inventory.application.publicapi.PickWorkOrders;
 import org.myweb.flowmat.domain.production.application.publicapi.WorkOrderQuery;
 import org.myweb.flowmat.domain.production.application.publicapi.WorkOrderView;
 import org.springframework.stereotype.Component;

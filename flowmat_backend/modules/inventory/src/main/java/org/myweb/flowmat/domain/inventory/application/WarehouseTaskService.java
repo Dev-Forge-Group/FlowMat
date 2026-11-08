@@ -30,7 +30,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.request.PickListRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.request.WarehouseTaskCreateRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.PickListResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.WarehouseTaskResponse;
-import org.myweb.flowmat.domain.inventory.application.PickWorkOrders.PickWorkOrder;
+import org.myweb.flowmat.domain.inventory.application.publicapi.PickWorkOrders.PickWorkOrder;
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
 import org.myweb.flowmat.domain.inventory.domain.entity.WarehouseTask;
@@ -45,6 +45,8 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.myweb.flowmat.domain.inventory.application.publicapi.PickWorkOrders;
+import org.myweb.flowmat.domain.inventory.application.publicapi.WorkOrderAllocations;
 
 /**
  * Warehouse tasks (docs/domain/warehouse-task.md, benchmark FM-WMS-002): putaways and picks plan moving part of a stock

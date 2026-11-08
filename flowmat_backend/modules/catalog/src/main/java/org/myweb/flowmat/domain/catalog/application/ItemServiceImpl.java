@@ -22,6 +22,8 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemUsageCheck;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStockCheck;
 
 @Service
 @RequiredArgsConstructor
