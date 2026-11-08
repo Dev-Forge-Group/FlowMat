@@ -9,7 +9,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentCalendarHistor
 import org.myweb.flowmat.domain.catalog.domain.entity.EquipmentScheduleHistory;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentScheduleHistorySearchRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.history.HistoryPageResponse;
@@ -26,7 +26,7 @@ public class EquipmentScheduleHistorySearchService {
     private static final TypeReference<List<EquipmentCalendarHistoryResponse.Shift>> SHIFTS = new TypeReference<>() {};
     private final EquipmentScheduleHistorySearchRepository repository;
     private final EquipmentRepository equipmentRepository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ObjectMapper mapper;
 
     public HistoryPageResponse<EquipmentCalendarHistoryResponse> search(String equipmentId, String action, String savedBy,

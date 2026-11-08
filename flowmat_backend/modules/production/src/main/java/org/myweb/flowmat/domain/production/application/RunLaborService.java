@@ -27,7 +27,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
 import org.myweb.flowmat.domain.production.repository.ProductionRunLaborRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderCrewRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
 import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerTime;
@@ -63,7 +63,7 @@ public class RunLaborService {
     private final ProjectMemberQuery members;
     private final WorkerCalendarQuery workerCalendars;
     private final LinkedRunSteps linkedSteps;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     @Transactional(readOnly = true)

@@ -10,7 +10,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.request.InventorySettingReques
 import org.myweb.flowmat.domain.inventory.api.dto.response.InventorySettingResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventorySetting;
 import org.myweb.flowmat.domain.inventory.repository.InventorySettingRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class InventorySettingService {
     private static final List<String> POLICIES = List.of(WARN, REFUSE);
 
     private final InventorySettingRepository settings;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     @Transactional(readOnly = true)
     public InventorySettingResponse get(String projectId) {

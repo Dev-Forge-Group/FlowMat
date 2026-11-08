@@ -38,7 +38,7 @@ import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
 import org.myweb.flowmat.domain.inventory.repository.WarehouseTaskRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -74,7 +74,7 @@ public class WarehouseTaskService {
     private final BomQuery bomQuery;
     private final StorageLocationService storageLocationService;
     private final InventoryTransferService inventoryTransferService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final ProjectMemberQuery projectMemberQuery;
     private final IdGenerator idGenerator;
     private final org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand notifications;

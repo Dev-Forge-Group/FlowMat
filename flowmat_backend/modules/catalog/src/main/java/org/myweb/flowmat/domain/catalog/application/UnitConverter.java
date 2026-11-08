@@ -8,6 +8,7 @@ import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Component;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 
 /**
  * Converts quantities recorded in any unit into the unit an item is stocked in.
@@ -18,16 +19,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class UnitConverter {
+public class UnitConverter implements UnitConversion {
 
     /** Intermediate precision; callers round to their column scale. */
     private static final int SCALE = 8;
 
     private final UnitMasterRepository unitMasterRepository;
 
-    public record Conversion(BigDecimal quantity, String fromUnitCode, String toUnitCode, boolean converted) {
-    }
 
+    @Override
     public Conversion toItemUnit(BigDecimal quantity, String recordedUnitCode, String itemUnitId) {
         String recorded = recordedUnitCode == null ? "" : recordedUnitCode.trim();
         if (itemUnitId == null || itemUnitId.isBlank()) {

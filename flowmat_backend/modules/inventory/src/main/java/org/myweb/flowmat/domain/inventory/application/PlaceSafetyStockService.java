@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.api.dto.request.PlaceSafetyStockRequest;
 import org.myweb.flowmat.domain.inventory.api.dto.response.PlaceSafetyStockResponse;
@@ -23,7 +23,7 @@ import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
 import org.myweb.flowmat.domain.inventory.repository.PlaceSafetyStockRepository;
 import org.myweb.flowmat.domain.inventory.repository.StorageLocationRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -52,7 +52,7 @@ public class PlaceSafetyStockService {
     private final LotMasterRepository lotMasterRepository;
     private final InventoryCatalogReferences catalogReferences;
     private final ProjectCalendarQuery projectCalendar;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     /** The project's place safety stocks, by place code and item code (PS3). */

@@ -24,7 +24,7 @@ import org.myweb.flowmat.domain.inventory.domain.enums.LotStatus;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -42,7 +42,7 @@ public class ExpiredStockService {
     static final String REFERENCE_TYPE = "expiry_write_off";
     private static final String NOT_DELETED = "N";
 
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
     private final LotMasterRepository lotMasterRepository;
     private final InventoryRepository inventoryRepository;

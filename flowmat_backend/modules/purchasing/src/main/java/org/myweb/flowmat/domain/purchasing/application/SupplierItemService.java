@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.purchasing.api.dto.request.SupplierItemRequest;
 import org.myweb.flowmat.domain.purchasing.api.dto.response.SupplierItemResponse;
 import org.myweb.flowmat.domain.purchasing.domain.entity.Supplier;
@@ -41,7 +41,7 @@ public class SupplierItemService {
     private final SupplierItemRepository supplierItems;
     private final SupplierRepository suppliers;
     private final CatalogQuery catalog;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     /** By item code. */

@@ -14,7 +14,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.response.StockTransferAnalysis
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockTransferAnalysisResponse.Line;
 import org.myweb.flowmat.domain.inventory.api.dto.response.StockTransferAnalysisResponse.Route;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class StockTransferAnalysisService {
 
     private static final int MAX_DAYS = 365;
 
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final CatalogQuery catalogQuery;
 

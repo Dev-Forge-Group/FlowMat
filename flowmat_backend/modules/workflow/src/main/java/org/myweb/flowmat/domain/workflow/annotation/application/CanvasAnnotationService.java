@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.request.CanvasAnnotationBatchRequest;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.request.CanvasAnnotationCreateRequest;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.request.CanvasAnnotationPatchRequest;
@@ -30,7 +30,7 @@ public class CanvasAnnotationService {
     private static final String NOT_DELETED = "N";
 
     private final CanvasAnnotationRepository canvasAnnotationRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccessService workflowAccess;
     private final FractionalIndexService fractionalIndexService;
     private final CanvasAnnotationReconcileService reconcileService;

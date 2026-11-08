@@ -57,7 +57,7 @@ public class ProjectInviteServiceImpl implements ProjectInviteService {
     @Override
     @Transactional
     public ProjectInviteResponse createInvite(ProjectInviteRequest request) {
-        Project project = projectAccessService.requireProjectOwnerAccess(request.projectId().trim());
+        Project project = projectAccessService.requireOwnedProject(request.projectId().trim());
         String invitedEmail = request.invitedEmail().trim().toLowerCase();
         String role = normalizeAssignableRole(request.projectRole());
 

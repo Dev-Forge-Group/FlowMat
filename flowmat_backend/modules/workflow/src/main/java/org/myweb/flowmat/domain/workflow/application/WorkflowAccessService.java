@@ -3,7 +3,7 @@ package org.myweb.flowmat.domain.workflow.application;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccessView;
 import org.myweb.flowmat.domain.workflow.domain.entity.Process;
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Access checks on a workflow and the processes, ports and connections in it
  * (docs/architecture/adr/ADR-012-workflow-access-boundary.md): finds the object, then checks its project through
- * {@link ProjectAccessService}. Moved here from ProjectAccessService unchanged, so the 401, 403 and 404 answers stay.
+ * {@link ProjectAccess}. Moved here from ProjectAccess unchanged, so the 401, 403 and 404 answers stay.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,7 +32,7 @@ public class WorkflowAccessService implements WorkflowAccess {
 
     private static final String NOT_DELETED = "N";
 
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowRepository workflowRepository;
     private final ProcessRepository processRepository;
     private final ProcessIoRepository processIoRepository;

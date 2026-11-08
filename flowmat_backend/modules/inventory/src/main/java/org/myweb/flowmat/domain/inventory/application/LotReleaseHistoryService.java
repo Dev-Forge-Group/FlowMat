@@ -14,7 +14,7 @@ import org.myweb.flowmat.domain.inventory.domain.entity.LotStatusEvent;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotStatusEventRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -35,7 +35,7 @@ public class LotReleaseHistoryService {
     private final LotMasterRepository lots;
     private final InventoryTransactionRepository transactions;
     private final LotStatusEventRepository statusEvents;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     public LotReleaseHistoryResponse history(String lotId) {
         LotMaster lot = lots.findById(lotId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "LOT does not exist."));

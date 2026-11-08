@@ -6,7 +6,7 @@
 
 **Accepted (2026-11-07).** 근거: 사용자가 승인한 DevForge 이전 계획 5단계("bom API DTO를 `publicapi`로 옮긴 뒤 Gradle 모듈로 나눈다")의 남은 부분. [ADR-035](ADR-035-gradle-modules.md)로 context를 모듈로 나눈 뒤 진행했다.
 
-**후속 (2026-11-08).** 사용자 결정("포트만 publicapi로"): 결정 6을 더했다. 공유 서비스는 그대로 둔다.
+**후속 (2026-11-08).** 사용자 결정("포트만 publicapi로"): 결정 6을 더했다. 같은 날 사용자 결정("공유 서비스도 publicapi로")으로 결정 6의 공유 서비스 예외를 없앴다.
 
 ## 배경
 
@@ -37,16 +37,26 @@
 
 6. (2026-11-08) 다른 context는 한 context의 `application`을 그 `publicapi`로만 쓴다.
    - 아래 context가 정의하고 위 context가 구현하는 포트도 publicapi에 둔다: catalog `ItemUsageCheck`·`ItemStockCheck`, inventory `PickWorkOrders`·`WorkOrderAllocations`, quality `ProductionRunQuery`와 그 view `ProductionRunView`·`ProductionRunRecordingView`. 이름과 메서드는 그대로이고 패키지만 옮겼다.
-   - 예외는 여러 context가 함께 쓰는 서비스다: project `ProjectAccessService`, catalog `UnitConverter`·`ItemStatusRule`·`EquipmentScheduleService`, rule `FlowRuleEngineService`·`RuleEvaluationContext`·`RuleTarget`, production이 쓰는 inventory `LotService`. `ModuleBoundaryTest`가 이 목록 밖의 사용을 막는다. 목록에 더하려면 이 ADR에서 정한다.
+   - 여러 context가 함께 쓰는 서비스도 publicapi로 쓴다. 구현은 그 context에 그대로 두고, 다른 context가 쓰는 만큼만 publicapi에 둔다.
+
+     | context | publicapi | 구현 |
+     |---|---|---|
+     | project | `ProjectAccess`: 로그인 사용자, 읽기·쓰기·소유자 검사, 역할 | `ProjectAccessService`. 검사는 `void`이고, `Project`가 필요한 project 내부는 `requireReadableProject`·`requireOwnedProject`를 쓴다 |
+     | catalog | `UnitConversion`과 `Conversion` | `UnitConverter` |
+     | catalog | `ItemStatusRule`(상태 코드 규칙, 그대로 이동) | — |
+     | catalog | `EquipmentWorkingTimeQuery.LONGEST_WINDOW` | `EquipmentScheduleService`가 같은 상수를 쓴다 |
+     | rule | `FlowRuleEngineService`, `RuleEvaluationContext`, `RuleTarget`(그대로 이동) | `FlowRuleEngineServiceImpl` |
+     | inventory | `LotTraceCommand`: 실행이 남기는 LOT 계보 | `LotService`가 확장한다 |
+
+   - `ModuleBoundaryTest`는 다른 context의 `application`을 publicapi 밖에서 쓰면 실패한다. 예외 목록은 없다.
 
 ## 결정하지 않은 것
 
-- 결정 6의 공유 서비스를 publicapi 뒤로 옮길지. 옮기려면 인터페이스를 publicapi에 두고 구현은 그대로 두는 방식이 된다.
 - workflow의 정의 언어를 publicapi나 별도 공유 모듈로 옮길지.
 
 ## 검증
 
 - `ModuleBoundaryTest`의 새 두 규칙이 통과한다. production에 bom `BomStatus`와 bom 웹 DTO를 쓰는 클래스를 임시로 넣으면 두 규칙이 모두 실패한다.
 - `StockMovementKindTest`: 모든 `Kind`가 같은 이름의 `InventoryTransactionType`이다.
-- 결정 6의 규칙이 통과한다. production에 bom `BomTree`를 쓰는 클래스를 임시로 넣으면 실패한다.
+- 결정 6의 규칙이 예외 목록 없이 통과한다. production에 bom `BomTree`를 쓰는 클래스를 임시로 넣으면 실패한다.
 - 백엔드 전체 테스트와 커버리지 기준.

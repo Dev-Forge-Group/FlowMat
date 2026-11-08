@@ -7,7 +7,7 @@ import org.myweb.flowmat.domain.connector.api.dto.request.ConnectorProfileReques
 import org.myweb.flowmat.domain.connector.api.dto.response.ConnectorProfileResponse;
 import org.myweb.flowmat.domain.connector.api.dto.response.ConnectorProfileVersionResponse;
 import org.myweb.flowmat.domain.connector.application.ConnectorProfileService;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/projects/{projectId}/http-profiles")
 public class ConnectorProfileController {
     private final ConnectorProfileService profiles;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     @GetMapping
     public ApiResponse<List<ConnectorProfileResponse>> list(@PathVariable("projectId") String projectId) {

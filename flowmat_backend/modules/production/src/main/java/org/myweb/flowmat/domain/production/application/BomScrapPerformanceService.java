@@ -14,7 +14,7 @@ import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomStructureQuery;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.BomScrapPerformanceResponse;
@@ -45,7 +45,7 @@ public class BomScrapPerformanceService {
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
+    private final UnitConversion unitConverter;
 
     /** Running totals of one material. */
     private static final class Total {

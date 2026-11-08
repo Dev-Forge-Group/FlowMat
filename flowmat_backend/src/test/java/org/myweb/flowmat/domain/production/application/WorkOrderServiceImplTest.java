@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -198,8 +199,7 @@ class WorkOrderServiceImplTest {
     @Test
     void approveRequiresProjectOwner() {
         givenOrder("draft");
-        when(projectAccessService.requireProjectOwnerAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project owner access is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project owner access is required.")).when(projectAccessService).requireProjectOwnerAccess("project-1");
 
         assertThatThrownBy(() -> workOrderService.approveWorkOrder("wo-1")).isInstanceOf(BusinessException.class);
         verify(workOrderRepository, never()).save(any());

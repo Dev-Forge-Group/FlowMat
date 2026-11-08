@@ -5,7 +5,7 @@ import org.myweb.flowmat.domain.catalog.api.dto.response.EquipmentDayHistoryResp
 import org.myweb.flowmat.domain.catalog.domain.entity.EquipmentDayHistory;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentDayHistorySearchRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.history.HistoryPageResponse;
@@ -23,7 +23,7 @@ public class EquipmentDayHistorySearchService {
     private final EquipmentDayHistorySearchRepository repository;
     private final EquipmentDayHistoryService lines;
     private final EquipmentRepository equipmentRepository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     public HistoryPageResponse<EquipmentDayHistoryResponse> search(String equipmentId, String kind, String action, String savedBy,
                                                                    String from, String to, String limit, String cursor) {

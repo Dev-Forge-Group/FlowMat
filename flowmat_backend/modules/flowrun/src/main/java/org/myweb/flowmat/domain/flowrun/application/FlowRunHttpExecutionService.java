@@ -39,7 +39,7 @@ import org.myweb.flowmat.domain.flowrun.repository.FlowRunHttpExecutionRepositor
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepAttemptRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunStepRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowProductionQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -62,7 +62,7 @@ public class FlowRunHttpExecutionService {
     private final FlowRunStepRepository steps;
     private final FlowRunStepAttemptRepository attempts;
     private final FlowRunHttpExecutionRepository executions;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final WorkflowProductionQuery workflow;
     private final ConnectorProfileQuery profiles;
     private final ConnectorMappingQuery mapping;
@@ -74,7 +74,7 @@ public class FlowRunHttpExecutionService {
     private final FlowRunHttpInFlightRequests inFlight;
 
     public FlowRunHttpExecutionService(FlowRunRepository runs, FlowRunStepRepository steps,
-        FlowRunStepAttemptRepository attempts, FlowRunHttpExecutionRepository executions, ProjectAccessService access,
+        FlowRunStepAttemptRepository attempts, FlowRunHttpExecutionRepository executions, ProjectAccess access,
         WorkflowProductionQuery workflow, ConnectorProfileQuery profiles, ConnectorMappingQuery mapping,
         ConnectorHttpGateway gateway, FlowRunStepService stepService, IdGenerator ids, ObjectMapper mapper,
         PlatformTransactionManager transactionManager, FlowRunHttpInFlightRequests inFlight) {

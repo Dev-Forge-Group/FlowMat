@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomLineView;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomView;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.BuildableQuantityResponse;
@@ -37,7 +37,7 @@ public class BuildableQuantityService {
 
     private final BomQuery bomQuery;
     private final CatalogQuery catalogQuery;
-    private final UnitConverter unitConverter;
+    private final UnitConversion unitConverter;
     private final UsableStock usableStock;
 
     public BuildableQuantityResponse buildable(String bomId) {
@@ -113,7 +113,7 @@ public class BuildableQuantityService {
             // With the line's planned scrap on top, as the requirement plans it (ADR-031 decision 1).
             BigDecimal planned = line.scrapRate() == null || line.scrapRate().signum() == 0 ? line.quantity()
                 : line.quantity().multiply(BigDecimal.ONE.add(line.scrapRate()));
-            UnitConverter.Conversion need = unitConverter.toItemUnit(planned, line.unit(), child.unitId());
+            UnitConversion.Conversion need = unitConverter.toItemUnit(planned, line.unit(), child.unitId());
             // The BOM rounds each converted line before adding it. Repeated materials share one stock balance.
             needs.merge(child.itemId(), need.quantity().setScale(SCALE, RoundingMode.HALF_UP), BigDecimal::add);
             itemUnits.putIfAbsent(child.itemId(), need.toUnitCode());

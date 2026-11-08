@@ -20,7 +20,7 @@ import org.myweb.flowmat.domain.production.domain.entity.WorkInstruction;
 import org.myweb.flowmat.domain.production.domain.entity.WorkInstructionStep;
 import org.myweb.flowmat.domain.production.repository.WorkInstructionRepository;
 import org.myweb.flowmat.domain.production.repository.WorkInstructionStepRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardQuery;
 import org.myweb.flowmat.domain.quality.application.publicapi.InspectionStandardView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowRunQuery;
@@ -49,7 +49,7 @@ public class WorkInstructionService {
     private final WorkInstructionStepRepository stepRepository;
     private final CatalogQuery catalogQuery;
     private final InspectionStandardQuery standardQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
     private final WorkflowRunQuery workflowRuns;
 

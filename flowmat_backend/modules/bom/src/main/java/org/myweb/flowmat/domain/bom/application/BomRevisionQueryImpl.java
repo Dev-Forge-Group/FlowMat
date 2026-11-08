@@ -7,7 +7,7 @@ import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionQuery;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRevisionView;
 import org.myweb.flowmat.domain.bom.application.publicapi.EffectiveBomView;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class BomRevisionQueryImpl implements BomRevisionQuery {
     private final BomHeaderRepository headers;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final BomRevisionLock revisionLock;
     private final jakarta.persistence.EntityManager entityManager;
 

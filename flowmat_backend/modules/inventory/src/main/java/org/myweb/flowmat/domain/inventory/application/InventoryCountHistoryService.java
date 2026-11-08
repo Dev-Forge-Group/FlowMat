@@ -22,7 +22,7 @@ import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
 import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +44,7 @@ public class InventoryCountHistoryService {
     private final InventoryRepository inventoryRepository;
     private final LotMasterRepository lotMasterRepository;
     private final CatalogQuery catalogQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final CatalogUnitCostQuery unitCosts;
 
     public List<InventoryCountHistoryResponse> history(String projectId) {

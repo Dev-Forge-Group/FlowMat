@@ -13,13 +13,13 @@
 |---|---|---|---|---|
 | Core 정의 | `workflow` | 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 하위 `editor`(도형 편집 문서), `collab`(실시간 동기화), `annotation` | Workflow, Process, ProcessIo, ProcessConnection, WorkflowRevision, ProcessTemplate, WorkflowTemplate | 없음 |
 | Core 실행 | `flowrun` | 범용 실행 기록: 실행·단계·시도·이벤트, 그래프 라우팅과 실패 정책 | FlowRun, FlowRunStep, FlowRunStepAttempt, FlowRunEvent | `FlowRunCommand`(연결 실행 시작·종료) |
-| Core 규칙 | `rule` | 실행 규칙 정의와 평가 | FlowRule | 없음 |
-| 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간) |
+| Core 규칙 | `rule` | 실행 규칙 정의와 평가 | FlowRule | `FlowRuleEngineService`(실행 전 규칙 검사, 2026-11-08) |
+| 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간), `UnitConversion`(품목 단위 환산)·`ItemStatusRule`(품목 상태 규칙, 2026-11-08) |
 | 제조 계획 | `bom` | BOM 작성·승인·revision, 전개·역전개·원가 누적 | BomHeader, BomLine | 없음 |
-| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03) |
+| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03), `StockMovementCommand`(재고 이동)·`LotTraceCommand`(LOT 계보) (2026-11-07~08) |
 | 제조 실행 | `production` | 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하 | WorkOrder, WorkOrderItem, ProductionRun, ProductionRunItem, RunStateSnapshot, ProductionRunCorrection, StockAllocation, WorkInstruction, RunInstructionCheck | `WorkOrderQuery`(작업지시 조회) (2026-10-03). 실행 조회는 quality가 정의한 `ProductionRunQuery`를 구현한다(§4) |
 | 제조 품질 | `quality` | 검사·불량, 검사 기준, 부적합·시정 조치 | QualityInspection, DefectLog, InspectionStandard, Nonconformity, CorrectiveAction | 없음 |
-| 플랫폼 | `project` | 데이터 격리·접근권한 집행 경계, 멤버·초대 | Project, ProjectMember, ProjectInvite | `ProjectMemberQuery`(활성 구성원 여부, 2026-10-03). `ProjectAccessService`는 여러 context가 직접 쓴다 |
+| 플랫폼 | `project` | 데이터 격리·접근권한 집행 경계, 멤버·초대 | Project, ProjectMember, ProjectInvite | `ProjectMemberQuery`(활성 구성원 여부, 2026-10-03), `ProjectAccess`(로그인 사용자와 접근 검사, 2026-11-08) |
 | 플랫폼 | `user` | 계정, 인증, 역할·권한, 로그인 이력 | User, Role, RolePermission, UserRole, SocialAccount, UserLoginHistory | 없음 |
 | 플랫폼 | `payment` | 요금제·구독·결제의 기본 API(`PlanController`, `PaymentController`) | Plan, PlanPricing, Subscription, Payment, Coupon, Promotion | 없음 |
 
@@ -57,7 +57,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 - 다른 context의 repository를 직접 쓰지 않는다. 새 위반은 [`ModuleBoundaryTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleBoundaryTest.java)가 막는다.
 - 다른 context의 `domain.entity`도 쓰지 않는다. 2026-10-19에 동결한 39줄은 2026-10-25에 모두 없어져, 새로 쓰면 바로 실패한다([ADR-018](adr/ADR-018-entity-boundary.md)).
 - 다른 context의 웹 계층(`api`) 타입과 entity 밖의 `domain` 타입(enum 등)도 쓰지 않는다. 함께 쓰는 타입은 `publicapi`에 두고, 상태는 view의 코드와 메서드로 넘긴다. 예외는 flowrun이 실행하는 workflow의 정의 언어(`PortSchema`, `ConditionExpression`)다([ADR-036](adr/ADR-036-cross-context-contract-types.md)).
-- 다른 context의 `application`도 `publicapi`로만 쓴다. 예외는 ADR-036 결정 6에 적은 공유 서비스(`ProjectAccessService`, `UnitConverter` 등)다.
+- 다른 context의 `application`도 `publicapi`로만 쓴다. 여러 context가 쓰는 접근 검사(`ProjectAccess`)·단위 변환(`UnitConversion`) 같은 서비스도 마찬가지다([ADR-036](adr/ADR-036-cross-context-contract-types.md) 결정 6).
 - 위반은 2026-10-03에 84건이었고 동결해 두었다. 그때 많은 방향은 다음과 같았다.
   - inventory → catalog 20
   - production → catalog 16

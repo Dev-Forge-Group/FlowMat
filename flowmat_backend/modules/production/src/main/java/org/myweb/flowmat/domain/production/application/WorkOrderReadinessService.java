@@ -38,7 +38,7 @@ import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.StockAllocationRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,7 +70,7 @@ public class WorkOrderReadinessService {
     /** LOTs expiring within this many days are called out (same setting as the stock alerts). */
     @Value("${app.stock-alert.expiry-warning-days:7}")
     private int expiryWarningDays;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkOrderCrewRepository crewRepository;
     private final WorkerCalendarQuery workerCalendars;
     private final org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunSteps linkedSteps;

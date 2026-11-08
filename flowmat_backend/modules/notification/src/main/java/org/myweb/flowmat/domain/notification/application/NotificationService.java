@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.notification.api.dto.response.NotificationResponse;
 import org.myweb.flowmat.domain.notification.domain.entity.Notification;
 import org.myweb.flowmat.domain.notification.repository.NotificationRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -27,7 +27,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final ProjectMemberQuery projectMemberQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     /** The newest hundred, newest first; only the unread ones when asked. */
     public List<NotificationResponse> mine(boolean unreadOnly) {

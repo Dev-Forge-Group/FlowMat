@@ -69,13 +69,13 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public ProjectResponse getProject(String projectId) {
-        return toResponse(projectAccessService.requireProjectReadAccess(projectId));
+        return toResponse(projectAccessService.requireReadableProject(projectId));
     }
 
     @Override
     @Transactional
     public ProjectResponse updateProject(String projectId, ProjectUpdateRequest request) {
-        Project project = projectAccessService.requireProjectOwnerAccess(projectId);
+        Project project = projectAccessService.requireOwnedProject(projectId);
         if (hasText(request.projectName())) {
             project.setProjectName(request.projectName().trim());
         }
@@ -91,7 +91,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @Transactional
     public void deleteProject(String projectId) {
-        Project project = projectAccessService.requireProjectOwnerAccess(projectId);
+        Project project = projectAccessService.requireOwnedProject(projectId);
         project.setDeletedYn(DELETED);
         project.setProjectStatus("deleted");
         projectRepository.save(project);

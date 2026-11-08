@@ -11,7 +11,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.annotation.application.CanvasAnnotationService;
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionPolicyResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionBindingResponse;
@@ -54,7 +54,7 @@ public class WorkflowRevisionService {
     private final ProcessConnectionRepository connectionRepository;
     private final CanvasAnnotationService annotationService;
     private final WorkflowEditorDocumentService editorDocumentService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccessService workflowAccess;
     private final WorkflowValidationService validationService;
     private final EntityManager entityManager;

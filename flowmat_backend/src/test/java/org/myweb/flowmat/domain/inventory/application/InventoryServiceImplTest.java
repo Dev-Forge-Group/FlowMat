@@ -3,6 +3,7 @@ package org.myweb.flowmat.domain.inventory.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -21,7 +22,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryAdjustRequest
 import org.myweb.flowmat.domain.inventory.domain.entity.Inventory;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.project.application.ProjectAccessService;
-import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
+import org.myweb.flowmat.domain.rule.application.publicapi.FlowRuleEngineService;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -43,8 +44,7 @@ class InventoryServiceImplTest {
 
     @Test
     void listRequiresProjectReadAccess() {
-        when(projectAccessService.requireProjectReadAccess("other-project"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project membership is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project membership is required.")).when(projectAccessService).requireProjectReadAccess("other-project");
 
         assertThrows(BusinessException.class, () -> inventoryService.listInventories("other-project"));
 
@@ -53,8 +53,7 @@ class InventoryServiceImplTest {
 
     @Test
     void createRequiresProjectWriteAccess() {
-        when(projectAccessService.requireProjectWriteAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required.")).when(projectAccessService).requireProjectWriteAccess("project-1");
 
         assertThrows(
             BusinessException.class,
@@ -104,8 +103,7 @@ class InventoryServiceImplTest {
     @Test
     void updateChecksAccessOnStoredProjectNotRequestBody() {
         givenInventory();
-        when(projectAccessService.requireProjectWriteAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project write access is required.")).when(projectAccessService).requireProjectWriteAccess("project-1");
 
         // A caller cannot bypass the check by naming a project they do control in the request body.
         assertThrows(
@@ -122,8 +120,7 @@ class InventoryServiceImplTest {
     @Test
     void deleteRequiresProjectOwnerAccess() {
         givenInventory();
-        when(projectAccessService.requireProjectOwnerAccess("project-1"))
-            .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project owner access is required."));
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Project owner access is required.")).when(projectAccessService).requireProjectOwnerAccess("project-1");
 
         assertThrows(BusinessException.class, () -> inventoryService.deleteInventory("inventory-1"));
 

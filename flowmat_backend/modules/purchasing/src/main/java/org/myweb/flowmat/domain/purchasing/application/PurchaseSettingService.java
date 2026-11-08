@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.purchasing.api.dto.request.PurchaseSettingRequest;
 import org.myweb.flowmat.domain.purchasing.api.dto.response.PurchaseSettingResponse;
@@ -42,7 +42,7 @@ public class PurchaseSettingService {
     private final PurchaseApprovalStepRepository steps;
     private final PurchaseOrderRepository orders;
     private final ProjectMemberQuery projectMembers;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     @Transactional(readOnly = true)

@@ -1,14 +1,14 @@
 package org.myweb.flowmat.domain.inventory.application;
 
-import java.math.BigDecimal;
 import java.util.List;
 import org.myweb.flowmat.domain.inventory.api.dto.request.LotCreateRequest;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotTraceCommand;
 import org.myweb.flowmat.domain.inventory.domain.entity.LotMaster;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotResponse;
 import org.myweb.flowmat.domain.inventory.api.dto.response.LotTraceResponse;
 
-/** LOTs and their genealogy (docs/domain/inventory-bom-lot-contract.md §6). */
-public interface LotService {
+/** LOTs and their genealogy (docs/domain/inventory-bom-lot-contract.md §6). Production records genealogy through {@link LotTraceCommand}. */
+public interface LotService extends LotTraceCommand {
 
     LotResponse createLot(LotCreateRequest request);
 
@@ -30,25 +30,4 @@ public interface LotService {
      * otherwise. Access checks are the caller's job.
      */
     LotMaster requireLotForStock(String lotId, String projectId, String itemId);
-
-    /** Records that {@code parentLotId} went into {@code childLotId} in a run; recording the same edge twice is a no-op. */
-    void recordTrace(
-        String projectId,
-        String productionRunId,
-        String processId,
-        String parentLotId,
-        String childLotId,
-        BigDecimal consumedQty,
-        BigDecimal producedQty,
-        String unit
-    );
-
-    /** Marks a LOT as produced by a run if nothing else claimed it yet. */
-    void markProducedBy(String lotId, String productionRunId);
-
-    /** Undoes {@link #markProducedBy} when the run no longer produces that LOT (its output was cancelled). */
-    void clearProducedBy(String lotId, String productionRunId);
-
-    /** Drops every genealogy edge of a run so it can be rebuilt from the run's remaining items. */
-    void clearRunTrace(String productionRunId);
 }

@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.LotQuery;
@@ -30,7 +30,7 @@ import org.myweb.flowmat.domain.inventory.application.publicapi.StockReceiptComm
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockRecordQuery;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockReturnCommand;
 import org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.purchasing.api.dto.request.PurchaseCreditChangeRequest;
 import org.myweb.flowmat.domain.purchasing.api.dto.request.PurchaseCreditRequest;
@@ -119,7 +119,7 @@ public class PurchaseOrderService {
     private final LotQuery lotQuery;
     private final NonconformityQuery ncrs;
     private final StockPlaceQuery places;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     /** Newest first; only one status when asked. */

@@ -22,7 +22,7 @@ import org.myweb.flowmat.domain.inventory.domain.entity.StorageLocation;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.StorageLocationRepository;
 import org.myweb.flowmat.domain.inventory.repository.WarehouseTaskRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -57,7 +57,7 @@ public class StorageLocationService {
     private final StorageLocationRepository storageLocationRepository;
     private final InventoryRepository inventoryRepository;
     private final WarehouseTaskRepository warehouseTaskRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     /** Every place of the project, each after the place it sits in. */

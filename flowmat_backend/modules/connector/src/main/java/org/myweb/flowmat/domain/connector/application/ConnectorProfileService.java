@@ -17,7 +17,7 @@ import org.myweb.flowmat.domain.connector.domain.entity.ConnectorProfile;
 import org.myweb.flowmat.domain.connector.domain.entity.ConnectorProfileVersion;
 import org.myweb.flowmat.domain.connector.repository.ConnectorProfileRepository;
 import org.myweb.flowmat.domain.connector.repository.ConnectorProfileVersionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -32,7 +32,7 @@ public class ConnectorProfileService implements ConnectorProfileQuery {
     private static final TypeReference<List<Operation>> OPERATIONS = new TypeReference<>() { };
     private final ConnectorProfileRepository profiles;
     private final ConnectorProfileVersionRepository versions;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ConnectorTargetPolicy targets;
     private final IdGenerator ids;
     private final ObjectMapper json;

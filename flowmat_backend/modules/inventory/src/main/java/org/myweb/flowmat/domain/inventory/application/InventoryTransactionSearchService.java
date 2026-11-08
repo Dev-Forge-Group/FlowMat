@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.inventory.api.dto.response.InventoryTransactionPageResponse;
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.data.domain.Sort;
@@ -35,7 +35,7 @@ public class InventoryTransactionSearchService {
     static final int MAX_LIMIT = 500;
 
     private final InventoryTransactionRepository inventoryTransactionRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     /**
      * @param from inclusive; {@code to} exclusive. The client turns its local days into these instants.

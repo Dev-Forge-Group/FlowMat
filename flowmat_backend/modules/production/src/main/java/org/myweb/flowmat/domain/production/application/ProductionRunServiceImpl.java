@@ -15,12 +15,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
-import org.myweb.flowmat.domain.catalog.application.UnitConverter;
+import org.myweb.flowmat.domain.catalog.application.publicapi.UnitConversion;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.Kind;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockMovementCommand.StockMovement;
-import org.myweb.flowmat.domain.inventory.application.LotService;
+import org.myweb.flowmat.domain.inventory.application.publicapi.LotTraceCommand;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockView;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunFinishRequest;
 import org.myweb.flowmat.domain.production.api.dto.request.ProductionRunItemRecordRequest;
@@ -34,11 +34,11 @@ import org.myweb.flowmat.domain.production.domain.enums.WorkOrderStatus;
 import org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository;
 import org.myweb.flowmat.domain.production.repository.ProductionRunRepository;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
-import org.myweb.flowmat.domain.rule.application.FlowRuleEngineService;
-import org.myweb.flowmat.domain.rule.application.RuleEvaluationContext;
-import org.myweb.flowmat.domain.rule.application.RuleTarget;
+import org.myweb.flowmat.domain.rule.application.publicapi.FlowRuleEngineService;
+import org.myweb.flowmat.domain.rule.application.publicapi.RuleEvaluationContext;
+import org.myweb.flowmat.domain.rule.application.publicapi.RuleTarget;
 import org.myweb.flowmat.domain.workflow.application.publicapi.WorkflowAccess;
 import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessIoRunView;
 import org.myweb.flowmat.domain.workflow.application.publicapi.ProcessRunView;
@@ -69,7 +69,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
 
     private final ProductionRunRepository productionRunRepository;
     private final ProductionRunItemRepository productionRunItemRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final WorkflowAccess workflowAccess;
     private final WorkflowProductionQuery workflowReferences;
     private final WorkflowRunQuery workflowRuns;
@@ -81,9 +81,9 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     private final FlowRuleEngineService flowRuleEngineService;
     private final IdGenerator idGenerator;
     private final WorkOrderRepository workOrderRepository;
-    private final UnitConverter unitConverter;
+    private final UnitConversion unitConverter;
     private final BomQuery bomQuery;
-    private final LotService lotService;
+    private final LotTraceCommand lotService;
     private final ProductionFlowRunAdapter productionFlowRunAdapter;
     private final StockAllocationService stockAllocationService;
     private final RunInstructionService runInstructionService;
@@ -257,7 +257,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
 
         // Reject incompatible units before anything is saved, even when no stock record is linked.
         BigDecimal recordedQty = request.actualQty() != null ? request.actualQty() : request.plannedQty();
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(recordedQty, request.unit(), item.unitId());
+        UnitConversion.Conversion conversion = unitConverter.toItemUnit(recordedQty, request.unit(), item.unitId());
         if (inventory != null && run.affectsPhysicalState()) {
             requireNonNegativeQuantity(conversion.quantity(), "stockQuantity");
         }
@@ -448,7 +448,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         productionRunItemRepository.save(item);
     }
 
-    private record CorrectionRecording(CatalogItemView item, StockView inventory, UnitConverter.Conversion conversion, BigDecimal quantity) {
+    private record CorrectionRecording(CatalogItemView item, StockView inventory, UnitConversion.Conversion conversion, BigDecimal quantity) {
     }
 
     private CorrectionRecording resolveCorrectionRecording(ProductionRun run, String direction, String itemId,
@@ -485,7 +485,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
                 item.itemCode() + " is LOT-tracked; choose the stock record (LOT) this " + direction.trim().toLowerCase(Locale.ROOT)
                     + " uses.");
         }
-        UnitConverter.Conversion conversion = unitConverter.toItemUnit(qty, unit.trim(), item.unitId());
+        UnitConversion.Conversion conversion = unitConverter.toItemUnit(qty, unit.trim(), item.unitId());
         if (inventory != null && run.affectsPhysicalState()) {
             requireNonNegativeQuantity(conversion.quantity(), "stockQuantity");
         }
@@ -805,7 +805,7 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         ProductionRun run,
         ProductionRunItem runItem,
         StockView inventory,
-        UnitConverter.Conversion conversion
+        UnitConversion.Conversion conversion
     ) {
         // Stock is kept in the item's unit; inventory columns hold 4 decimals.
         BigDecimal actualQty = conversion.quantity() == null

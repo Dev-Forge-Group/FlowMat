@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.flowrun.api.dto.response.FlowRunHttpAttentionPageResponse;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunHttpExecutionRepository;
 import org.myweb.flowmat.domain.flowrun.repository.FlowRunHttpExecutionRepository.AttentionRow;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.data.domain.PageRequest;
@@ -32,7 +32,7 @@ public class FlowRunHttpAttentionService {
     private static final OffsetDateTime NO_CURSOR_TIME = OffsetDateTime.parse("1970-01-01T00:00:00Z");
     private static final Set<String> STATES = Set.of("ALL", "PENDING", "OUTCOME_UNKNOWN", "APPLY_FAILED", "LATE");
 
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final FlowRunHttpExecutionRepository executions;
 
     public FlowRunHttpAttentionPageResponse search(String projectId, String limit, String cursor, String state) {

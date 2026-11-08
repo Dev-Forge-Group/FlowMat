@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.project.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
@@ -65,7 +66,7 @@ class ProjectAccessServiceTest {
         Project project = project("project-1", "owner-1");
         when(projectRepository.findByProjectIdAndDeletedYn("project-1", "N")).thenReturn(Optional.of(project));
 
-        Project result = projectAccessService.requireProjectReadAccess("project-1");
+        Project result = projectAccessService.requireReadableProject("project-1");
 
         assertThat(result.getProjectId()).isEqualTo("project-1");
     }
@@ -78,7 +79,7 @@ class ProjectAccessServiceTest {
         when(projectMemberRepository.existsByProjectIdAndUserIdAndMemberStatus("project-2", "member-1", "active"))
             .thenReturn(true);
 
-        Project result = projectAccessService.requireProjectReadAccess("project-2");
+        Project result = projectAccessService.requireReadableProject("project-2");
 
         assertThat(result.getProjectId()).isEqualTo("project-2");
     }
@@ -129,9 +130,7 @@ class ProjectAccessServiceTest {
         when(projectMemberRepository.findByProjectIdAndUserIdAndMemberStatus("project-5", "editor-1", "active"))
             .thenReturn(Optional.of(member));
 
-        Project result = projectAccessService.requireProjectWriteAccess("project-5");
-
-        assertThat(result.getProjectId()).isEqualTo("project-5");
+        assertThatCode(() -> projectAccessService.requireProjectWriteAccess("project-5")).doesNotThrowAnyException();
     }
 
     @Test

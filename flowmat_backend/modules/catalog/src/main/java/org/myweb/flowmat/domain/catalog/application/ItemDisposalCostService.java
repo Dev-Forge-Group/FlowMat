@@ -26,7 +26,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.ItemDisposalCostHistory;
 import org.myweb.flowmat.domain.catalog.repository.ItemDisposalCostHistoryRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemDisposalCostRepository;
 import org.myweb.flowmat.domain.catalog.repository.ItemRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -44,7 +44,7 @@ public class ItemDisposalCostService implements CatalogDisposalCostQuery {
     private final ItemRepository items;
     private final ItemDisposalCostRepository costs;
     private final ItemDisposalCostHistoryRepository history;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
     private final EntityManager entities;
 

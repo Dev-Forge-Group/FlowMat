@@ -24,7 +24,7 @@ import org.myweb.flowmat.domain.catalog.domain.entity.EquipmentHourlyCostHistory
 import org.myweb.flowmat.domain.catalog.repository.EquipmentHourlyCostHistoryRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentHourlyCostRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class EquipmentHourlyCostService implements EquipmentCostQuery {
     private final EquipmentRepository equipment;
     private final EquipmentHourlyCostRepository costs;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final EntityManager entities;
     private final EquipmentHourlyCostHistoryRepository history;
 

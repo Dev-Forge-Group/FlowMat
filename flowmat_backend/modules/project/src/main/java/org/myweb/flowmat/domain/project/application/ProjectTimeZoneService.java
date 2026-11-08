@@ -19,10 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProjectTimeZoneService {
     private final ProjectAccessService access;
     private final EntityManager entities;
-    public ProjectTimeZoneResponse get(String id) { return response(access.requireProjectReadAccess(id)); }
+    public ProjectTimeZoneResponse get(String id) { return response(access.requireReadableProject(id)); }
     @Transactional
     public ProjectTimeZoneResponse set(String id, JsonNode body) {
-        Project project=access.requireProjectOwnerAccess(id);
+        Project project=access.requireOwnedProject(id);
         if(body==null || !body.isObject() || !body.path("timeZone").isTextual()) throw bad("timeZone requires an IANA zone ID.");
         String zone=body.path("timeZone").textValue();
         if(zone.length()>100 || !ZoneId.getAvailableZoneIds().contains(zone)) throw bad("timeZone requires an IANA zone ID, e.g. Asia/Seoul or UTC.");

@@ -3,7 +3,7 @@ package org.myweb.flowmat.domain.rule.application;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.rule.api.dto.request.FlowRuleCreateRequest;
 import org.myweb.flowmat.domain.rule.api.dto.request.FlowRuleUpdateRequest;
 import org.myweb.flowmat.domain.rule.api.dto.response.FlowRuleResponse;
@@ -35,7 +35,7 @@ public class FlowRuleServiceImpl implements FlowRuleService {
 
     private final FlowRuleRepository flowRuleRepository;
     private final IdGenerator idGenerator;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final FlowRuleExpressionEvaluator expressionEvaluator;
 
     @Override

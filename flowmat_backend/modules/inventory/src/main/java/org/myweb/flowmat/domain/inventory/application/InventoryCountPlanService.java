@@ -24,7 +24,7 @@ import org.myweb.flowmat.domain.inventory.repository.InventoryCountPlanRepositor
 import org.myweb.flowmat.domain.inventory.repository.InventoryCountPlanLineRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
@@ -39,7 +39,7 @@ public class InventoryCountPlanService {
     private final InventoryCountPlanLineRepository entries;
     private final InventoryRepository stocks;
     private final InventoryCountService countService;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectMemberQuery projectMembers;
     private final NotificationCommand notifications;
     private final IdGenerator ids;

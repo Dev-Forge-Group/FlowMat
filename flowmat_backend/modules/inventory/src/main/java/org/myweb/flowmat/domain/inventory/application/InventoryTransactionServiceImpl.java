@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.ItemStatusRule;
+import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.inventory.api.dto.request.InventoryReversalRequest;
@@ -17,7 +17,7 @@ import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.repository.InventoryRepository;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -39,7 +39,7 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
     private final InventoryRepository inventoryRepository;
     private final CatalogQuery catalogQuery;
     private final InventoryCommandService inventoryCommandService;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     @Override
     public List<InventoryTransactionResponse> listTransactions(String projectId, String inventoryId) {

@@ -17,7 +17,7 @@ import org.myweb.flowmat.domain.inventory.api.dto.response.StockSnapshotResponse
 import org.myweb.flowmat.domain.inventory.domain.entity.InventoryTransaction;
 import org.myweb.flowmat.domain.inventory.domain.enums.InventoryTransactionType;
 import org.myweb.flowmat.domain.inventory.repository.InventoryTransactionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -38,7 +38,7 @@ public class StockMovementSummaryService {
     private final StockSnapshotService stockSnapshotService;
     private final InventoryTransactionRepository transactionRepository;
     private final CatalogQuery catalogQuery;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
 
     /** Running totals for one item. */
     private static final class Totals {

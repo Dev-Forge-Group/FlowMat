@@ -10,6 +10,9 @@ import org.myweb.flowmat.domain.rule.repository.FlowRuleRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
+import org.myweb.flowmat.domain.rule.application.publicapi.FlowRuleEngineService;
+import org.myweb.flowmat.domain.rule.application.publicapi.RuleEvaluationContext;
+import org.myweb.flowmat.domain.rule.application.publicapi.RuleTarget;
 
 @Service
 @RequiredArgsConstructor

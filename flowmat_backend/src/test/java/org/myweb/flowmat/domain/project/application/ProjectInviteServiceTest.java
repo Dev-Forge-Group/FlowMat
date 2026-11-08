@@ -64,7 +64,7 @@ class ProjectInviteServiceTest {
     void createInviteReturnsPendingInvite() {
         Project project = project("project-1", "owner-1");
         UserView owner = user("owner-1", "owner@flowmat.local");
-        when(projectAccessService.requireProjectOwnerAccess("project-1")).thenReturn(project);
+        when(projectAccessService.requireOwnedProject("project-1")).thenReturn(project);
         when(projectAccessService.requireCurrentUserId()).thenReturn("owner-1");
         when(userQuery.findById("owner-1")).thenReturn(Optional.of(owner));
         when(userQuery.findByEmail("guest@flowmat.local")).thenReturn(Optional.empty());
@@ -87,7 +87,7 @@ class ProjectInviteServiceTest {
     @Test
     void createInviteRejectsDuplicatePendingInvite() {
         Project project = project("project-2", "owner-2");
-        when(projectAccessService.requireProjectOwnerAccess("project-2")).thenReturn(project);
+        when(projectAccessService.requireOwnedProject("project-2")).thenReturn(project);
         when(projectInviteRepository.existsByProjectIdAndInvitedEmailIgnoreCaseAndInviteStatus("project-2", "guest@flowmat.local", "pending"))
             .thenReturn(true);
 

@@ -46,7 +46,7 @@ import org.myweb.flowmat.domain.catalog.repository.EquipmentDowntimeRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentRepository;
 import org.myweb.flowmat.domain.catalog.repository.EquipmentScheduleRepository;
 import org.myweb.flowmat.domain.catalog.repository.ProjectHolidayRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -66,8 +66,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
 
-    /** The longest window availability is worked out for, and the longest downtime. */
-    public static final Duration LONGEST_WINDOW = Duration.ofDays(366);
     private static final String NOT_DELETED = "N";
     private static final Set<String> DOWNTIME_TYPES = Set.of("maintenance", "breakdown", "other");
     private static final BigDecimal SECONDS_PER_HOUR = BigDecimal.valueOf(3600);
@@ -89,7 +87,7 @@ public class EquipmentScheduleService implements EquipmentWorkingTimeQuery {
     private final EquipmentDowntimeRepository downtimeRepository;
     private final EquipmentDayOverrideRepository dayOverrideRepository;
     private final ProjectHolidayRepository holidayRepository;
-    private final ProjectAccessService projectAccessService;
+    private final ProjectAccess projectAccessService;
     private final IdGenerator idGenerator;
 
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;

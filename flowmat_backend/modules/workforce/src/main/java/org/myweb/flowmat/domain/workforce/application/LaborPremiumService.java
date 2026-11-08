@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery;
 import org.myweb.flowmat.domain.workforce.api.dto.request.LaborPremiumRuleRequest;
@@ -44,7 +44,7 @@ public class LaborPremiumService {
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
     private final LaborPremiumRuleRepository repository;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ProjectCalendarQuery calendars;
     private final ProjectMemberQuery members;
     private final IdGenerator ids;

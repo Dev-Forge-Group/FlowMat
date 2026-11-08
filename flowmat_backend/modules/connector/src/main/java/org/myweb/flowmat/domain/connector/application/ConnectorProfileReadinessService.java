@@ -7,7 +7,7 @@ import org.myweb.flowmat.domain.connector.api.dto.response.ConnectorProfileReadi
 import org.myweb.flowmat.domain.connector.api.dto.response.ConnectorProfileReadinessResponse.Blocker;
 import org.myweb.flowmat.domain.connector.repository.ConnectorProfileRepository;
 import org.myweb.flowmat.domain.connector.repository.ConnectorProfileVersionRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConnectorProfileReadinessService {
     private final ConnectorProfileRepository profiles;
     private final ConnectorProfileVersionRepository versions;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final ConnectorTargetPolicy targets;
     private final ConnectorHttpProperties properties;
 

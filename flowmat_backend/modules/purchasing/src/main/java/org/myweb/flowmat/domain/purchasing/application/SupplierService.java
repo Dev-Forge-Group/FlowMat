@@ -7,7 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.purchasing.api.dto.request.SupplierRequest;
 import org.myweb.flowmat.domain.purchasing.api.dto.response.SupplierResponse;
 import org.myweb.flowmat.domain.purchasing.domain.entity.Supplier;
@@ -34,7 +34,7 @@ public class SupplierService {
     private static final int MAX_LEAD_DAYS = 365;
 
     private final SupplierRepository suppliers;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
     private final IdGenerator ids;
 
     /** By name, ignoring case; switched-off suppliers too. */

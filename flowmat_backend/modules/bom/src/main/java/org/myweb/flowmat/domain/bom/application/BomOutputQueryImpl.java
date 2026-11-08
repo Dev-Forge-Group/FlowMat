@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomOutputQuery;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.bom.repository.BomLineRepository;
-import org.myweb.flowmat.domain.project.application.ProjectAccessService;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BomOutputQueryImpl implements BomOutputQuery {
     private final BomHeaderRepository headers;
     private final BomLineRepository lines;
-    private final ProjectAccessService access;
+    private final ProjectAccess access;
 
     @Override
     public Set<String> findByProductItemIds(String projectId, String bomId) {
