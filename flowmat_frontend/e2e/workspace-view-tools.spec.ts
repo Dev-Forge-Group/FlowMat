@@ -243,6 +243,42 @@ test('the passport moves by its handle, stays put from one process to the next a
   expect(Math.round((await boxOf(cool)).x)).toBe(Math.round(home.x))
 })
 
+test('pointing at or focusing a process previews its neighbours until something is read', async ({ page }) => {
+  await openBakery(page)
+  const edge = (id: string) => page.locator(`.react-flow__edge[data-id="${id}"]`)
+  // A resting pointer previews Bake with what it connects to; the address keeps nothing.
+  await processNode(page, 'proc-bake').hover({ position: { x: 24, y: 18 } })
+  await expect(processNode(page, 'proc-bake')).toHaveClass(/reading-origin/)
+  await expect(processNode(page, 'proc-mix')).toHaveClass(/reading-on/)
+  await expect(processNode(page, 'proc-pack')).toHaveClass(/reading-on/)
+  await expect(processNode(page, 'proc-wash')).toHaveClass(/reading-dim/)
+  await expect(edge('conn-bc')).toHaveClass(/reading-on/)
+  expect(hashOf(page)).toBe('')
+  // Leaving it ends the preview; another process previews its own.
+  await page.mouse.move(4, 4)
+  await expect(page.locator('.reading-dim')).toHaveCount(0)
+  await processNode(page, 'proc-wash').hover({ position: { x: 24, y: 18 } })
+  await expect(processNode(page, 'proc-mix')).toHaveClass(/reading-dim/)
+
+  // A selected process holds the canvas: pointing elsewhere previews nothing.
+  await processNode(page, 'proc-bake').click({ position: { x: 24, y: 18 } })
+  await expect(passport(page, 'Bake')).toBeVisible()
+  await processNode(page, 'proc-cool').hover({ position: { x: 24, y: 18 } })
+  await expect(page.locator('.reading-dim')).toHaveCount(0)
+  await page.mouse.move(4, 4)
+  await page.keyboard.press('Escape')
+  await expect(passport(page, 'Bake')).toHaveCount(0)
+
+  // The keyboard's preview is announced, and Enter opens the process.
+  await processNode(page, 'proc-bake').focus()
+  await expect(page.locator('.intent-trace-status'))
+    .toHaveText('Bake. 2 outgoing, 1 incoming. 3 connections. Press Enter for details.')
+  await expect(processNode(page, 'proc-wash')).toHaveClass(/reading-dim/)
+  await page.keyboard.press('Enter')
+  await expect(passport(page, 'Bake')).toBeVisible()
+  await expect(page.locator('.reading-dim')).toHaveCount(0)
+})
+
 test('the lens, the finder and the guide open over the canvas', async ({ page }) => {
   await openBakery(page)
   const canvas = await boxOf(page.locator('.workspace-canvas'))

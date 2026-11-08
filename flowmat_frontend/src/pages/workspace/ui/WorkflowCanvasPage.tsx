@@ -1057,6 +1057,23 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     if (!readingRef.current.pick(processId)) readingRef.current.focus(processId)
   }, [selectNode])
   const closeMap = useCallback(() => setMapOpen(false), [])
+  // archify's Intent Trace: the process pointed at or focused, with its neighbours, while nothing is read, picked,
+  // previewed or selected and the guide is closed. The keyboard's preview is announced with its connections.
+  const [intentByKeyboard, setIntentByKeyboard] = useState(false)
+  const handleIntent = useCallback((processId: string | null, keyboard: boolean) => {
+    readingRef.current.intent.show(processId)
+    setIntentByKeyboard(keyboard && processId !== null)
+  }, [])
+  const intentShown = !reading.highlight && !selectedProcessId && panel !== 'guide' ? reading.intent : null
+  const canvasHighlight = reading.highlight ?? intentShown?.highlight ?? null
+  const intentStatus = (() => {
+    if (!intentShown?.id || !intentByKeyboard) return ''
+    const relations = reading.relationsOf(intentShown.id)
+    const total = relations.out.length + relations.in.length + relations.loop.length
+    const loops = relations.loop.length > 0 ? `, ${relations.loop.length} self loop` : ''
+    return `${reading.nameOf(intentShown.id)}. ${relations.out.length} outgoing, ${relations.in.length} incoming${loops}. `
+      + `${total} connections. Press Enter for details.`
+  })()
   // archify's route begin: the process in the passport is the start, else the start is picked first; the panels close.
   const beginRoute = () => {
     setPanel(null)
@@ -1812,7 +1829,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onEditorCommandReady={handleEditorCommandReady}
               editingPresence={editingPresence}
               remoteAnnotationPreviews={remoteAnnotationPreviews}
-              reading={reading.highlight}
+              reading={canvasHighlight}
+              onIntent={handleIntent}
               onRevealReady={handleRevealReady}
               mapOpen={mapOpen}
               radarActiveIds={radarActiveIds}
@@ -1865,6 +1883,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               }} />
           )}
           <RouteProbe reading={reading} still={motion.still} onFind={() => setPanel('finder')} />
+          <p className="intent-trace-status" role="status" aria-live="polite" aria-atomic="true">{intentStatus}</p>
           <ReadingReceipts
             lens={reading.state?.kind === 'lens' && reading.view && panel !== 'lens'
               ? { text: reading.view.text, onClear: reading.clear } : null}

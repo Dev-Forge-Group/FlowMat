@@ -1136,6 +1136,20 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ---------- Intent Trace announcement (archify .intent-trace-status): read out, not shown ---------- */
+.intent-trace-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- Passport drag handle (archify .relationship-lens-drag-handle) ---------- */
 .focus-chip .relationship-lens-drag-handle {
   position: absolute;

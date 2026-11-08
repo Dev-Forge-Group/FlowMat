@@ -132,6 +132,13 @@ export function useCanvasReading(
   const [previewId, setPreviewId] = useState<string | null>(null)
   const preview = useMemo(() => (previewId ? connectionPreview(graph, previewId) : null), [graph, previewId])
 
+  // archify's Intent Trace: a process pointed at or focused on the canvas, with its neighbours, before anything is read.
+  // Never in the address; whoever shows it decides when it may (nothing read, picked or selected).
+  const [intentId, setIntentId] = useState<string | null>(null)
+  const intent = useMemo(() => (intentId && known.has(intentId)
+    ? readingView(graph, { kind: 'focus', processId: intentId, reach: null }, nameOf)?.highlight ?? null
+    : null), [graph, intentId, known, nameOf])
+
   return {
     state,
     view,
@@ -151,6 +158,8 @@ export function useCanvasReading(
     },
     /** Reading by kind: the kinds on the canvas with their counts, the one or two chosen, and a way to turn one on or off. */
     lens: { kinds, chosen: lensKinds, toggle: toggleKind },
+    /** The process pointed at or focused before it is read (archify's Intent Trace), its highlight, and a way to set it. */
+    intent: { id: intent ? intentId : null, highlight: intent, show: setIntentId },
     /** The production run shown over the canvas (its id from the address), and a way to show another or none. */
     run: { id: runId, show: showRun },
     /** The published revision the draft is compared with (its id from the address), and a way to compare with another or none. */

@@ -504,6 +504,11 @@ interface Props {
   onLayoutReady?(fn: () => LayoutSnapshot): void
   /** archify's Semantic Radar: the overview map, shown only while it is open. */
   mapOpen?: boolean
+  /**
+   * archify's Intent Trace: the process a fine pointer rests on (after 90 ms) or the keyboard focuses, and null once it
+   * leaves; `keyboard` says the focus brought it.
+   */
+  onIntent?(processId: string | null, keyboard: boolean): void
   /** The processes the radar marks as in hand. */
   radarActiveIds?: ReadonlySet<string>
   /** Reads a process picked on the radar. */
@@ -565,6 +570,13 @@ function toRfEdges(edges: CanvasEdgeViewModel[], selectedId: string | null): RfE
 
 const NO_IDS: ReadonlySet<string> = new Set()
 
+/** archify's Intent Trace waits this long under a resting pointer, so passing over a process does not flash the canvas. */
+const INTENT_DELAY_MS = 90
+
+function finePointer() {
+  return typeof window.matchMedia !== 'function' || window.matchMedia('(hover: hover) and (pointer: fine)').matches
+}
+
 function loadSavedViewport(storageKey: string): Viewport | undefined {
   try {
     const raw = localStorage.getItem(storageKey)
@@ -624,12 +636,31 @@ export function CanvasViewport({
   changeMarks = null,
   onLayoutReady,
   mapOpen = false,
+  onIntent,
   radarActiveIds = NO_IDS,
   onRadarFocus,
   onRadarClose,
   onCameraReady,
   onZoomChange,
 }: Props) {
+  // archify's Intent Trace: what the pointer rests on and what the keyboard focused, so leaving one falls back to the other.
+  const intentRef = useRef<{ hovered: string | null; focused: string | null; timer: number | undefined }>({
+    hovered: null, focused: null, timer: undefined })
+  const processIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes])
+  const intentAt = (processId: string | null) => {
+    window.clearTimeout(intentRef.current.timer)
+    intentRef.current.hovered = null
+    onIntent?.(processId, false)
+  }
+  useEffect(() => {
+    const leave = () => {
+      window.clearTimeout(intentRef.current.timer)
+      intentRef.current.hovered = null
+      onIntent?.(null, false)
+    }
+    window.addEventListener('blur', leave)
+    return () => window.removeEventListener('blur', leave)
+  }, [onIntent])
   const storageKey = `flowmat-viewport-${workflowId}`
   const savedViewport = useMemo(() => loadSavedViewport(storageKey), [storageKey])
   // A link that opens a reading opens on what it reads rather than on the last saved view.
@@ -1137,7 +1168,35 @@ export function CanvasViewport({
     <div
       className="workspace-canvas-viewport workspace-canvas-viewport--editor-layer"
       style={{ width: '100%', height: '100%', cursor: drawingEnabled ? 'crosshair' : 'default' }}
-      onMouseDown={handleFreehandPointerDown}
+      onMouseDown={(event) => {
+        // A press anywhere but on a process ends the preview, as in archify.
+        if (!(event.target as Element).closest('.react-flow__node')) intentAt(null)
+        handleFreehandPointerDown(event)
+      }}
+      onFocus={(event) => {
+        // The process itself took the focus, not a field inside it (renaming).
+        const target = event.target as HTMLElement
+        const id = target.classList.contains('react-flow__node') ? target.dataset.id : undefined
+        if (!id || !processIds.has(id)) return
+        intentRef.current.focused = id
+        window.clearTimeout(intentRef.current.timer)
+        onIntent?.(id, true)
+      }}
+      onKeyDown={(event) => {
+        // Enter on a focused process opens it, as a click does (archify's "Press Enter for details").
+        const target = event.target as HTMLElement
+        const id = target.classList.contains('react-flow__node') ? target.dataset.id : undefined
+        if (event.key !== 'Enter' || !id || !processIds.has(id)) return
+        event.preventDefault()
+        selectNode(id)
+        onNodeSelect(id)
+      }}
+      onBlur={(event) => {
+        const node = event.target as HTMLElement
+        if (!node.classList.contains('react-flow__node') || intentRef.current.focused !== node.dataset.id) return
+        intentRef.current.focused = null
+        onIntent?.(intentRef.current.hovered, false)
+      }}
       onMouseLeave={() => {
         if (isFreehandDrawing) {
           finishFreehandDrawing()
@@ -1155,6 +1214,21 @@ export function CanvasViewport({
         onNodeClick={(_e, node) => {
           selectNode(node.id)
           onNodeSelect(node.id)
+        }}
+        onNodeMouseEnter={(event, node) => {
+          // A fine pointer resting on a process, not one dragging or drawing; touch goes straight to the click.
+          if (node.type !== 'flowmatNode' || event.buttons !== 0 || !finePointer()) return
+          intentRef.current.hovered = node.id
+          window.clearTimeout(intentRef.current.timer)
+          intentRef.current.timer = window.setTimeout(() => {
+            if (intentRef.current.hovered === node.id) onIntent?.(node.id, false)
+          }, motionStill() ? 0 : INTENT_DELAY_MS)
+        }}
+        onNodeMouseLeave={(_event, node) => {
+          if (intentRef.current.hovered !== node.id) return
+          intentRef.current.hovered = null
+          window.clearTimeout(intentRef.current.timer)
+          onIntent?.(intentRef.current.focused, intentRef.current.focused !== null)
         }}
         onNodeDoubleClick={(_e, node) => {
           startInlineEdit(node.id)
