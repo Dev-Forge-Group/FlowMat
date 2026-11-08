@@ -60,7 +60,7 @@ import {
   SelectionHandles,
   SelectionOutline,
   SvgElementView,
-} from '../../../lib/flowmat-editor/react/SvgEditorSurface'
+} from '../../../lib/flowmat-editor/react'
 import {
   editorDocumentQueryKey,
   useEditorDocumentQuery,

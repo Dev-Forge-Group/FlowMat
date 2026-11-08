@@ -21,7 +21,7 @@ import {
   Ungroup,
   Undo2,
 } from 'lucide-react'
-import { SvgEditorSurface } from '../../../lib/flowmat-editor/react/SvgEditorSurface'
+import { SvgEditorSurface } from '../../../lib/flowmat-editor/react'
 import {
   angleBetween,
   boxCenter,
