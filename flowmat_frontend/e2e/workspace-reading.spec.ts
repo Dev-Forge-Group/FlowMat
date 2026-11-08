@@ -26,6 +26,10 @@ const runStep = (nodeId: string, status: string, sequenceNo: number) => ({ stepI
   endedAt: null, errorCode: null, errorMessage: null, inputSnapshot: null, outputSnapshot: null, joinWaiting: null,
   instructionRequired: 0, instructionDone: 0 })
 
+// Room for the canvas below the ribbon: at 1280×720 the route panel, at the canvas's bottom left as in archify, covers
+// Wash, and a click aimed at it lands beside it.
+test.use({ viewport: { width: 1440, height: 1000 } })
+
 async function openBakery(page: Page, hash = '') {
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request()
