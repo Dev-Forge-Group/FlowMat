@@ -73,7 +73,7 @@ for (const scenario of ['approved-retry', 'running', 'viewer', 'stale'] as const
       await expect(panel).toContainText('The result is unconfirmed.')
       await expect(panel.getByLabel('Reason *')).toBeDisabled()
       await panel.getByRole('button', { name: 'Retry schedule change' }).click()
-      expect(requests).toHaveLength(2)
+      await expect.poll(() => requests.length).toBe(2)
       expect(requests[0]).toEqual(requests[1])
     }
     await expect(panel.getByRole('status')).toHaveText('Schedule changed.')

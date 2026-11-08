@@ -71,7 +71,7 @@ for (const mode of ['normal', 'lost-reply', 'lost-clear', 'gateway-error'] as co
         await expect.poll(() => reads).toBeGreaterThan(previousReads)
       }
       await panel.getByRole('button', { name: 'Save hourly cost', exact: true }).click()
-      expect(commands[1]).toEqual(commands[0])
+      await expect.poll(() => commands[1]).toEqual(commands[0])
     }
     await expect(panel.getByText(mode === 'lost-clear' ? 'Current planning rate: not set' : 'Current planning rate: 60 per hour', { exact: true })).toBeVisible()
     expect(rate.version).toBe(1)

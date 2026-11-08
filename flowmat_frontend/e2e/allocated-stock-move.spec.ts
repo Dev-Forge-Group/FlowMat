@@ -53,7 +53,7 @@ for (const scenario of ['partial', 'retry', 'viewer'] as const) {
       await expect(form).toContainText('The result is unconfirmed.')
       await expect(panel.getByRole('button',{name:'Release all'})).toBeDisabled()
       await form.getByRole('button',{name:'Retry allocated stock move'}).click()
-      expect(requests).toHaveLength(2);expect(requests[0]).toEqual(requests[1])
+      await expect.poll(() => requests.length).toBe(2);expect(requests[0]).toEqual(requests[1])
     }
     await expect(form.getByRole('status')).toContainText('Allocated stock moved.')
     await expect(panel.getByRole('row',{name:/STAGING/})).toContainText('3')

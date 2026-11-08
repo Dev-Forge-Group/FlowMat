@@ -78,7 +78,7 @@ for (const mode of ['normal', 'lost-reply'] as const) {
       await expect(attrs.getByRole('status')).toContainText('unconfirmed')
       await expect(attrs.getByRole('textbox', { name: 'Attribute value 1', exact: true })).toBeDisabled()
       await attrs.getByRole('button', { name: 'Save setup attributes', exact: true }).click()
-      expect(attributeCommands[1]).toEqual(attributeCommands[0])
+      await expect.poll(() => attributeCommands[1]).toEqual(attributeCommands[0])
     }
     await expect(attrs.getByRole('textbox', { name: 'Attribute value 2', exact: true })).toBeEnabled()
     expect(attributes).toMatchObject({ attributes: { color: 'red', mold: 'M1' }, version: 1 })
@@ -110,7 +110,7 @@ for (const mode of ['normal', 'lost-reply'] as const) {
       await expect(panel.getByRole('status')).toContainText('unconfirmed')
       await expect(panel.getByRole('spinbutton', { name: 'Rule minutes', exact: true })).toBeDisabled()
       await panel.getByRole('button', { name: 'Add setup rule', exact: true }).click()
-      expect(ruleCommands[1]).toEqual(ruleCommands[0])
+      await expect.poll(() => ruleCommands[1]).toEqual(ruleCommands[0])
     }
     await expect(panel.getByText('Priority 10: mold=M1 → mold=M2 · 30 min', { exact: true })).toBeVisible()
     expect(rules).toHaveLength(1); expect(rules[0].version).toBe(1)

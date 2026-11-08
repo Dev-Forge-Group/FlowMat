@@ -264,7 +264,7 @@ test('an editor binds a pinned profile revision and previews exact JSON without 
   await expect(panel.getByLabel('Mapping preview result')).toHaveText('{"amount":9007199254740993.2300}')
   expect(previewBody).toContain(exactMapping)
   await panel.getByRole('button', { name: 'Save HTTP binding' }).click()
-  expect(savedBody).toContain(exactMapping)
+  await expect.poll(() => savedBody).toContain(exactMapping)
   expect(JSON.parse(savedBody)).toMatchObject({ expectedVersion: 0, profileVersionId: 'profile-v3', outputPortId: 'out-http' })
   await expect(panel).toContainText('Saved. Publish a revision to use this binding in new runs.')
 })
