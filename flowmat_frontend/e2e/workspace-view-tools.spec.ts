@@ -279,6 +279,54 @@ test('pointing at or focusing a process previews its neighbours until something 
   await expect(page.locator('.reading-dim')).toHaveCount(0)
 })
 
+test('the style menu tries archify\'s four looks on the canvas for this visit, and S cycles them', async ({ page }) => {
+  await openBakery(page)
+  const canvas = page.locator('.workspace-canvas-viewport')
+  const line = page.locator('.react-flow__edge[data-id="conn-mb"] .react-flow__edge-path')
+  const cool = page.locator('.react-flow__node[data-id="proc-cool"] .canvas-node')
+  await expect(canvas).toHaveAttribute('data-preset', 'classic')
+
+  // The menu lists the looks with the current one checked and focused; the arrow keys and Enter choose another.
+  const style = viewControls(page).getByRole('button', { name: 'Visual style: Classic. Choose visual style' })
+  await style.click()
+  await expect(style).toHaveAttribute('aria-expanded', 'true')
+  const menu = page.getByRole('menu', { name: 'Visual style' })
+  await expect(menu.getByRole('menuitemradio')).toHaveText([/^Classic/, /^Signal Flow/, /^Blueprint/, /^Editorial/])
+  await expect(menu.getByRole('menuitemradio', { name: /^Classic/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(menu.getByRole('menuitemradio', { name: /^Classic/ })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(menu).toHaveCount(0)
+  await expect(canvas).toHaveAttribute('data-preset', 'blueprint')
+  await expect(viewControls(page).getByRole('button', { name: 'Visual style: Blueprint. Choose visual style' })).toBeFocused()
+  // Blueprint: a drafting grid and square corners.
+  await expect(page.locator('.react-flow__background path').first()).toBeAttached()
+  await expect(page.locator('.react-flow__background circle')).toHaveCount(0)
+  await expect(cool).toHaveCSS('border-radius', '4px')
+
+  // S cycles: Editorial's clean page, Classic, then Signal Flow, whose lines run while motion is Live.
+  await page.keyboard.press('s')
+  await expect(canvas).toHaveAttribute('data-preset', 'editorial')
+  await expect(page.locator('.react-flow__background')).toHaveCount(0)
+  await page.keyboard.press('s')
+  await expect(canvas).toHaveAttribute('data-preset', 'classic')
+  await expect(line).toHaveCSS('animation-name', 'none')
+  await page.keyboard.press('s')
+  await expect(canvas).toHaveAttribute('data-preset', 'signal-flow')
+  await expect(line).toHaveCSS('animation-name', 'ax-signal-flow')
+  await viewControls(page).getByRole('button', { name: 'Pause motion' }).click()
+  await expect(line).toHaveCSS('animation-name', 'none')
+
+  // A press elsewhere closes the menu; the look lasts only while the page is open.
+  await viewControls(page).getByRole('button', { name: /^Visual style: Signal Flow/ }).click()
+  await expect(menu).toBeVisible()
+  await page.mouse.click(4, 4)
+  await expect(menu).toHaveCount(0)
+  await page.reload()
+  await expect(canvas).toHaveAttribute('data-preset', 'classic', { timeout: 15_000 })
+})
+
 test('the lens, the finder and the guide open over the canvas', async ({ page }) => {
   await openBakery(page)
   const canvas = await boxOf(page.locator('.workspace-canvas'))

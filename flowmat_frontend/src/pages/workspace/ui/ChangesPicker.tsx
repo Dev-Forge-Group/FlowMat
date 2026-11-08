@@ -30,7 +30,7 @@ export function ChangesPicker({ revisions, loading, shownId, changes, nameOf, on
     <div
       role="dialog"
       aria-label="Compare with a revision"
-      className="canvas-reading-popup canvas-reading-popup--side"
+      className="canvas-reading-popup"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()

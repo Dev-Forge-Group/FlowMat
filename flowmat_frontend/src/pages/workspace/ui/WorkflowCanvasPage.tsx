@@ -35,6 +35,7 @@ import { ProcessFinder, type FinderContext } from './ProcessFinder'
 import { DiagramGuide } from './DiagramGuide'
 import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
+import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
 import { useRevisionChanges } from '../model/useRevisionChanges'
@@ -1007,6 +1008,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     if (!mapOpen) setPanel((current) => (current === 'lens' ? null : current))
     setMapOpen(!mapOpen)
   }, [mapOpen])
+  // archify's visual style try-on: the canvas's look while this page is open, never saved; S cycles it.
+  const [preset, setPreset] = useState<CanvasPreset>('classic')
+  const [styleOpen, setStyleOpen] = useState(false)
+  const closeStyle = useCallback(() => setStyleOpen(false), [])
   // Where the reader moved the Semantic Passport; it stays there from one process to the next.
   const [passportPosition, setPassportPosition] = useState<PassportPosition | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -1195,12 +1200,13 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           if (e.key === '?') setMapOpen(false)
           return
         }
-        // archify's view keys: M the semantic radar, F the presentation stage, + - 0 the camera stepper. (R, L and T stay
-        // the editor's tools.)
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', '+', '=', '-', '0'].includes(e.key)) {
+        // archify's view keys: M the semantic radar, F the presentation stage, S the visual style, + - 0 the camera
+        // stepper. (R, L and T stay the editor's tools.)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', 's', 'S', '+', '=', '-', '0'].includes(e.key)) {
           e.preventDefault()
           if (e.key === 'm' || e.key === 'M') toggleMap()
           else if (e.key === 'f' || e.key === 'F') togglePresenting()
+          else if (e.key === 's' || e.key === 'S') setPreset(nextPreset)
           else if (e.key === '0') cameraRef.current?.reset()
           else cameraRef.current?.zoomStep(e.key === '-' ? -1 : 1)
           return
@@ -1833,6 +1839,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onIntent={handleIntent}
               onRevealReady={handleRevealReady}
               mapOpen={mapOpen}
+              preset={preset}
               radarActiveIds={radarActiveIds}
               onRadarFocus={focusFromRadar}
               onRadarClose={closeMap}
@@ -1905,8 +1912,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             }}
             zoom={zoom} onZoomOut={() => cameraRef.current?.zoomStep(-1)} onReset={() => cameraRef.current?.reset()}
             onZoomIn={() => cameraRef.current?.zoomStep(1)}
+            preset={preset} styleOpen={styleOpen} onStyle={() => setStyleOpen((open) => !open)}
             motion={{ still: motion.still, reduced: motion.reduced, onToggle: motion.toggle }}
             presenting={presenting} onPresent={togglePresenting} />
+          {styleOpen && <StylePresetMenu preset={preset} onChoose={setPreset} onClose={closeStyle} />}
           {panel === 'runs' && (
             <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
               onClose={() => setPanel(null)} />
