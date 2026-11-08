@@ -1326,14 +1326,13 @@
 
 /* ---------- Motion control and presentation stage (archify #btn-motion, #btn-present) ---------- */
 .diagram-nav .diagram-nav-motion {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  margin-left: 0.375rem;
   padding-inline: 0.55rem;
 }
-.diagram-nav .diagram-nav-motion::before {
+.diagram-nav .diagram-nav-style { position: relative; margin-left: 0.375rem; }
+.diagram-nav .diagram-nav-style::before {
   position: absolute;
   top: 0.55rem;
   bottom: 0.55rem;
@@ -1362,6 +1361,177 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 7.2h-4v-4M12.8 7.2h4v-4M7.2 12.8h-4v4M12.8 12.8h4v4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 7.2h-4v-4M12.8 7.2h4v-4M7.2 12.8h-4v4M12.8 12.8h4v4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
 }
+/* ---------- Visual style try-on (archify #btn-preset, .preset-menu, data-preset) ---------- */
+.preset-control-mark,
+.preset-option-swatch {
+  display: block;
+  width: 0.58rem;
+  height: 0.58rem;
+  margin: auto;
+  border: 1px solid var(--ax-frontend-stroke);
+  border-radius: 0.2rem;
+  background: color-mix(in srgb, var(--ax-frontend-stroke) 28%, transparent);
+}
+.preset-control-mark[data-preset="signal-flow"],
+.preset-option-swatch[data-preset="signal-flow"] {
+  border-radius: 50%;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ax-frontend-stroke) 78%, transparent);
+}
+.preset-control-mark[data-preset="blueprint"],
+.preset-option-swatch[data-preset="blueprint"] {
+  border-radius: 0.06rem;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ax-frontend-stroke) 32%, transparent);
+  transform: rotate(45deg) scale(0.84);
+}
+.preset-control-mark[data-preset="editorial"],
+.preset-option-swatch[data-preset="editorial"] {
+  border-color: var(--ax-security-stroke);
+  border-radius: 0;
+  background: var(--ax-security-stroke);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ax-security-stroke) 14%, transparent);
+  transform: rotate(45deg) scale(0.72);
+}
+.preset-menu {
+  position: absolute;
+  right: 1rem;
+  bottom: 4.15rem;
+  z-index: 24;
+  display: grid;
+  gap: 0.125rem;
+  width: min(17.5rem, calc(100% - 2rem));
+  padding: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--ax-panel-border) 90%, transparent);
+  border-radius: 0.875rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 18px 44px -14px rgba(15, 23, 42, 0.3);
+  font-family: var(--ax-font);
+  animation: ax-panel-rise 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.preset-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem 0.4rem;
+  color: var(--ax-text-faint);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.preset-menu-title kbd {
+  margin-left: auto;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--ax-panel-border);
+  border-bottom-width: 2px;
+  border-radius: 0.3rem;
+  font: inherit;
+  font-size: 0.625rem;
+}
+.preset-option {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 3rem;
+  padding: 0.4rem 0.55rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.preset-option:hover,
+.preset-option:focus-visible { background: var(--ax-toolbar-hover); }
+.preset-option:focus-visible { outline: 2px solid var(--ax-frontend-stroke); outline-offset: -2px; }
+.preset-option-copy strong { display: block; color: var(--ax-text); font-size: 0.75rem; }
+.preset-option-copy small { display: block; margin-top: 0.12rem; color: var(--ax-text-faint); font-size: 0.6rem; }
+.preset-option[aria-checked="true"] .preset-option-check::before {
+  content: "✓";
+  color: var(--ax-frontend-stroke);
+  font-weight: 800;
+}
+
+/* The canvas in each look. Classic is FlowMat's own; the others restyle the canvas, its processes and its lines, over
+   React Flow's own canvas colour, which the background pattern would otherwise paint in dark mode. */
+.workspace-canvas-viewport:not([data-preset="classic"]) .react-flow { --xy-background-color: transparent; }
+.workspace-canvas-viewport[data-preset="signal-flow"] .react-flow {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(229, 242, 248, 0.96));
+}
+:root[data-theme='dark'] .workspace-canvas-viewport[data-preset="signal-flow"] .react-flow {
+  background: linear-gradient(180deg, rgba(8, 20, 38, 0.92), rgba(3, 8, 18, 0.98));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .workspace-canvas-viewport[data-preset="signal-flow"] .react-flow {
+    background: linear-gradient(180deg, rgba(8, 20, 38, 0.92), rgba(3, 8, 18, 0.98));
+  }
+}
+.workspace-canvas-viewport[data-preset="signal-flow"] .canvas-node {
+  border-color: color-mix(in srgb, var(--ax-frontend-stroke) 55%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ax-frontend-stroke) 22%, transparent),
+    0 0 22px -6px color-mix(in srgb, var(--ax-frontend-stroke) 60%, transparent);
+}
+.workspace-canvas-viewport[data-preset="signal-flow"] .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ax-frontend-stroke) 65%, transparent));
+}
+/* Live: a signal runs along every line, from where it starts to where it ends. Still keeps the lines as drawn. */
+:root:not([data-motion="still"]) .workspace-canvas-viewport[data-preset="signal-flow"] .react-flow__edge-path {
+  stroke-dasharray: 10 6 !important;
+  animation: ax-signal-flow 1.1s linear infinite;
+}
+@keyframes ax-signal-flow {
+  to { stroke-dashoffset: -32; }
+}
+
+.workspace-canvas-viewport[data-preset="blueprint"] .react-flow {
+  background: color-mix(in srgb, var(--ax-frontend-fill) 45%, var(--surface));
+}
+.workspace-canvas-viewport[data-preset="blueprint"]::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset: 0.7rem;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) left top / 1.35rem 1px no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) left top / 1px 1.35rem no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) right top / 1.35rem 1px no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) right top / 1px 1.35rem no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) left bottom / 1.35rem 1px no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) left bottom / 1px 1.35rem no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) right bottom / 1.35rem 1px no-repeat,
+    linear-gradient(var(--ax-frontend-stroke), var(--ax-frontend-stroke)) right bottom / 1px 1.35rem no-repeat;
+  opacity: 0.58;
+}
+.workspace-canvas-viewport[data-preset="blueprint"] .canvas-node {
+  border-color: color-mix(in srgb, var(--ax-frontend-stroke) 60%, var(--border));
+  border-radius: 4px !important;
+  box-shadow: none;
+  font-family: var(--ax-font);
+}
+.workspace-canvas-viewport[data-preset="blueprint"] .canvas-node__name {
+  font-family: var(--ax-font);
+  letter-spacing: 0.02em;
+}
+
+.workspace-canvas-viewport[data-preset="editorial"] .react-flow {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ax-security-fill) 58%, transparent), transparent 12%),
+    var(--bg);
+}
+.workspace-canvas-viewport[data-preset="editorial"] .canvas-node {
+  border-width: 1px;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-h) 8%, transparent);
+}
+.workspace-canvas-viewport[data-preset="editorial"] .canvas-node__name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
 /* The stage gives the whole window to the canvas and its reading tools; the editing chrome stays mounted, only hidden. */
 .workspace-layout[data-present="true"] > :not(.workspace-body),
 .workspace-layout[data-present="true"] .workspace-panel,
@@ -1370,6 +1540,7 @@
 }
 
 /* Still: everything on the canvas moves at once. */
+:root[data-motion="still"] .preset-menu,
 :root[data-motion="still"] .overview-map-live,
 :root[data-motion="still"] .semantic-lens,
 :root[data-motion="still"] .diagram-guide { animation: none; }
@@ -1385,6 +1556,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .workspace-canvas-viewport[data-preset="signal-flow"] .react-flow__edge-path { animation: none !important; }
+  .preset-menu { animation: none; }
   .diagram-nav button,
   .overview-map-node,
   .semantic-lens-kind,

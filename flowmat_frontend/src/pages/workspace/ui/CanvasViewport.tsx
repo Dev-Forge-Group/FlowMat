@@ -56,6 +56,7 @@ import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { useTheme } from '../../../app/providers/ThemeProvider'
 import { motionStill } from '../model/motion'
 import { SemanticRadar } from './SemanticRadar'
+import type { CanvasPreset } from './StylePresetMenu'
 import {
   useWorkflowSync,
   type NodeMoveMessage,
@@ -509,6 +510,8 @@ interface Props {
    * leaves; `keyboard` says the focus brought it.
    */
   onIntent?(processId: string | null, keyboard: boolean): void
+  /** archify's visual style for the canvas; Classic is FlowMat's own look. */
+  preset?: CanvasPreset
   /** The processes the radar marks as in hand. */
   radarActiveIds?: ReadonlySet<string>
   /** Reads a process picked on the radar. */
@@ -637,6 +640,7 @@ export function CanvasViewport({
   onLayoutReady,
   mapOpen = false,
   onIntent,
+  preset = 'classic',
   radarActiveIds = NO_IDS,
   onRadarFocus,
   onRadarClose,
@@ -1167,6 +1171,7 @@ export function CanvasViewport({
   return (
     <div
       className="workspace-canvas-viewport workspace-canvas-viewport--editor-layer"
+      data-preset={preset}
       style={{ width: '100%', height: '100%', cursor: drawingEnabled ? 'crosshair' : 'default' }}
       onMouseDown={(event) => {
         // A press anywhere but on a process ends the preview, as in archify.
@@ -1308,7 +1313,11 @@ export function CanvasViewport({
         <ViewportPersister storageKey={storageKey} />
         <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} />
         <ZoomReporter onZoomChange={onZoomChange} />
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
+        {/* Blueprint draws a drafting grid and Editorial a clean page; the others keep the dots. */}
+        {preset === 'blueprint'
+          ? <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1}
+            color="color-mix(in srgb, var(--ax-frontend-stroke) 16%, transparent)" />
+          : preset !== 'editorial' && <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />}
         {/* archify's Semantic Radar: the overview map opens from MAP (M) instead of always taking room. */}
         <SemanticRadar open={mapOpen} activeIds={radarActiveIds} onFocus={(processId) => onRadarFocus?.(processId)}
           onClose={() => onRadarClose?.()} />
