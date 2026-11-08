@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 
-export type GuideAction = 'find' | 'route' | 'map' | 'lens' | 'runs' | 'changes'
+export type GuideAction = 'find' | 'route' | 'map' | 'lens' | 'runs' | 'changes' | 'present'
 
 const plural = (value: number, one: string, many = `${one}s`) => `${value} ${value === 1 ? one : many}`
 
-/** archify's numbered actions, with FlowMat's run and revision views in place of the presentation stage. */
+/** archify's numbered actions, with FlowMat's run and revision views before the presentation stage. */
 const ACTIONS: { action: GuideAction; title: string; aria: string; hint: string; key?: string }[] = [
   { action: 'find', title: 'Find any process', aria: 'Find any process', hint: 'Search names, kinds and stable IDs.', key: '/' },
   { action: 'route', title: 'Trace a route', aria: 'Trace a directed route', hint: 'Ask how two processes connect along the arrows.' },
@@ -16,6 +16,8 @@ const ACTIONS: { action: GuideAction; title: string; aria: string; hint: string;
     hint: 'Mark each process with its latest step: ○ ▶ ✓ ✕ ↷ ⊘.' },
   { action: 'changes', title: 'Compare with a revision', aria: 'Compare with a revision',
     hint: '+ added, Δ changed since a published revision; removed ones listed by name.' },
+  { action: 'present', title: 'Enter Presentation Stage', aria: 'Enter Presentation Stage',
+    hint: 'Give the canvas the whole window; the editing panels wait outside.', key: 'F' },
 ]
 
 const SHORTCUTS: [string, string][] = [['?', 'Guide'], ['0', 'Reset'], ['+', 'Zoom in'], ['-', 'Zoom out'], ['Esc', 'Close']]

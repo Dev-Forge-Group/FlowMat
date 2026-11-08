@@ -22,6 +22,8 @@
   --ax-cloud-stroke: #d97706;
   --ax-security-fill: rgba(251, 113, 133, 0.15);
   --ax-security-stroke: #e11d48;
+  --ax-messagebus-stroke: #ea580c;
+  --ax-external-stroke: #64748b;
   --ax-toolbar-bg: rgba(255, 255, 255, 0.92);
   --ax-toolbar-border: #cbd5e1;
   --ax-toolbar-text: #334155;
@@ -45,6 +47,8 @@
   --ax-cloud-stroke: #fbbf24;
   --ax-security-fill: rgba(136, 19, 55, 0.4);
   --ax-security-stroke: #fb7185;
+  --ax-messagebus-stroke: #fb923c;
+  --ax-external-stroke: #94a3b8;
   --ax-toolbar-bg: rgba(15, 23, 42, 0.8);
   --ax-toolbar-border: #334155;
   --ax-toolbar-text: #e2e8f0;
@@ -69,6 +73,8 @@
     --ax-cloud-stroke: #fbbf24;
     --ax-security-fill: rgba(136, 19, 55, 0.4);
     --ax-security-stroke: #fb7185;
+    --ax-messagebus-stroke: #fb923c;
+    --ax-external-stroke: #94a3b8;
     --ax-toolbar-bg: rgba(15, 23, 42, 0.8);
     --ax-toolbar-border: #334155;
     --ax-toolbar-text: #e2e8f0;
@@ -596,7 +602,7 @@
 }
 /* Beside an open passport (.focus-chip, rendered before the receipts), which sits above them on the left: the canvas
    between the side panels is narrower than both side by side, and the passport would cover the receipts' buttons. */
-.focus-chip ~ .reading-receipts {
+.focus-chip:not([data-manual-placement]) ~ .reading-receipts {
   max-width: min(30rem, calc(100% - 2.5rem - min(22rem, 100% - 13rem)));
 }
 .reading-receipt {
@@ -631,6 +637,761 @@
 .reading-receipt button:hover,
 .reading-receipt button:focus-visible { background: var(--ax-toolbar-hover); }
 
+/* ---------- Semantic Lens (archify .semantic-lens) ---------- */
+.semantic-lens {
+  position: absolute;
+  right: 1rem;
+  bottom: 4.15rem;
+  z-index: 24;
+  width: min(20rem, calc(100% - 2rem));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ax-database-stroke) 58%, var(--ax-toolbar-border));
+  border-radius: 0.82rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ax-database-fill) 34%, transparent), transparent 48%),
+    var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(18px);
+  font-family: var(--ax-font);
+  animation: ax-panel-rise 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.semantic-lens-head,
+.diagram-guide-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.72rem 0.78rem 0.62rem;
+  border-bottom: 1px solid var(--ax-toolbar-border);
+}
+.semantic-lens-eyebrow,
+.diagram-guide-eyebrow {
+  display: block;
+  color: var(--ax-database-stroke);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.semantic-lens-title,
+.diagram-guide-title {
+  display: block;
+  margin-top: 0.16rem;
+  color: var(--ax-text);
+  font-size: 0.82rem;
+  letter-spacing: -0.02em;
+}
+.semantic-lens-close,
+.diagram-guide-close,
+.node-finder-close {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.semantic-lens-close:hover,
+.semantic-lens-close:focus-visible,
+.diagram-guide-close:hover,
+.diagram-guide-close:focus-visible,
+.node-finder-close:hover,
+.node-finder-close:focus-visible { background: var(--ax-toolbar-hover); }
+.semantic-lens-instruction {
+  margin: 0;
+  padding: 0.52rem 0.78rem 0.48rem;
+  color: var(--ax-text-faint);
+  font-size: 0.55rem;
+  line-height: 1.45;
+}
+.semantic-lens-kinds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  max-height: min(15rem, 40vh);
+  padding: 0 0.5rem 0.5rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+/* archify's kind colours for FlowMat's node types. */
+.semantic-lens-kind {
+  --lens-color: var(--ax-external-stroke);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+  min-height: 2.15rem;
+  padding: 0.35rem 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--lens-color) 24%, var(--ax-toolbar-border));
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--ax-panel) 76%, transparent);
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, opacity 140ms ease;
+}
+.semantic-lens-kind[data-kind="input"] { --lens-color: var(--ax-frontend-stroke); }
+.semantic-lens-kind[data-kind="process"] { --lens-color: var(--ax-backend-stroke); }
+.semantic-lens-kind[data-kind="storage"],
+.semantic-lens-kind[data-kind="output"] { --lens-color: var(--ax-database-stroke); }
+.semantic-lens-kind[data-kind="equipment"] { --lens-color: var(--ax-cloud-stroke); }
+.semantic-lens-kind[data-kind="join"],
+.semantic-lens-kind[data-kind="split"] { --lens-color: var(--ax-messagebus-stroke); }
+.semantic-lens-kind[data-kind="exclusive"] { --lens-color: var(--ax-security-stroke); }
+.semantic-lens-kind:hover:not(:disabled),
+.semantic-lens-kind:focus-visible,
+.semantic-lens-kind[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--lens-color) 78%, var(--ax-toolbar-border));
+  background: color-mix(in srgb, var(--lens-color) 11%, var(--ax-panel));
+}
+.semantic-lens-kind:focus-visible,
+.semantic-lens-close:focus-visible,
+.semantic-lens-actions button:focus-visible {
+  outline: 2px solid var(--ax-database-stroke);
+  outline-offset: 1px;
+}
+.semantic-lens-kind:disabled { opacity: 0.34; cursor: default; }
+.semantic-lens-swatch {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: var(--lens-color);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--lens-color) 58%, transparent);
+}
+.semantic-lens-kind strong {
+  overflow: hidden;
+  color: var(--ax-text);
+  font-size: 0.61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.semantic-lens-kind em {
+  color: var(--lens-color);
+  font-size: 0.54rem;
+  font-style: normal;
+  font-weight: 800;
+}
+.semantic-lens-status {
+  min-height: 2.5rem;
+  margin: 0;
+  padding: 0.55rem 0.78rem;
+  border-top: 1px solid var(--ax-toolbar-border);
+  color: var(--ax-text-faint);
+  font-size: 0.55rem;
+  line-height: 1.45;
+}
+.semantic-lens-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  padding: 0 0.62rem 0.62rem;
+}
+.semantic-lens-actions button {
+  min-height: 1.8rem;
+  padding: 0.28rem 0.48rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  font-size: 0.56rem;
+  cursor: pointer;
+}
+.semantic-lens-actions button:hover:not(:disabled) { background: var(--ax-toolbar-hover); }
+.semantic-lens-actions button:disabled { opacity: 0.42; cursor: default; }
+.semantic-lens-actions .semantic-lens-copy { color: var(--ax-database-stroke); }
+
+/* ---------- Node finder (archify .node-finder) ---------- */
+.node-finder {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow: hidden;
+  border: 1px solid var(--ax-toolbar-border);
+  border-radius: 0.85rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+  font-family: var(--ax-font);
+}
+.node-finder[data-context="route-source"] { border-color: color-mix(in srgb, var(--ax-frontend-stroke) 68%, var(--ax-toolbar-border)); }
+.node-finder[data-context="route-target"] { border-color: color-mix(in srgb, var(--ax-security-stroke) 68%, var(--ax-toolbar-border)); }
+.node-finder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem 0.45rem;
+}
+.node-finder-head strong {
+  color: var(--ax-text);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.node-finder[data-context="route-source"] .node-finder-head strong { color: var(--ax-frontend-stroke); }
+.node-finder[data-context="route-target"] .node-finder-head strong { color: var(--ax-security-stroke); }
+.node-finder-close:focus-visible,
+.node-finder-result:focus-visible {
+  outline: 2px solid var(--ax-frontend-stroke);
+  outline-offset: -2px;
+}
+.node-finder-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.35rem;
+  margin: 0 0.55rem 0.55rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--ax-toolbar-border);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--ax-panel) 78%, transparent);
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.node-finder-search > span { color: var(--ax-frontend-stroke); font-size: 0.875rem; }
+.node-finder-search:focus-within {
+  border-color: var(--ax-frontend-stroke);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ax-frontend-stroke) 14%, transparent);
+}
+.node-finder-input {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ax-text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.node-finder-input::placeholder { color: var(--ax-text-faint); }
+.node-finder kbd,
+.diagram-guide kbd {
+  padding: 0.1rem 0.32rem;
+  border: 1px solid var(--ax-toolbar-border);
+  border-radius: 0.25rem;
+  color: var(--ax-text-faint);
+  font: inherit;
+  font-size: 0.5625rem;
+  text-align: center;
+}
+.node-finder-results {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(18rem, 48vh);
+  margin: 0 0.55rem 0.45rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 78%, transparent);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--ax-panel) 54%, transparent);
+  scrollbar-width: thin;
+}
+.node-finder-results:empty { display: none; }
+.node-finder-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 0.75rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.52rem 0.65rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ax-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+.node-finder-result:not(:last-child) { border-bottom: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 62%, transparent); }
+.node-finder-result:hover,
+.node-finder-result:focus-visible {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--ax-frontend-fill) 48%, var(--ax-toolbar-hover));
+}
+.node-finder-result strong {
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-finder-result small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--ax-text-faint);
+  font-size: 0.5625rem;
+  letter-spacing: 0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-finder-result em {
+  align-self: center;
+  color: var(--ax-frontend-stroke);
+  font-size: 0.625rem;
+  font-style: normal;
+}
+/* A zero count is absence, not information: it recedes. */
+.node-finder-result em[data-zero] { color: var(--ax-text-faint); }
+.node-finder[data-context^="route-"] .node-finder-result em {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid color-mix(in srgb, currentColor 52%, transparent);
+  border-radius: 999px;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.node-finder[data-context="route-target"] .node-finder-result em { color: var(--ax-security-stroke); }
+.node-finder-empty {
+  margin: 0;
+  padding: 1.1rem 0.75rem 1.25rem;
+  color: var(--ax-text-faint);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+.node-finder-status {
+  margin: 0;
+  padding: 0.1rem 0.8rem 0.65rem;
+  color: var(--ax-text-faint);
+  font-size: 0.5625rem;
+}
+
+/* ---------- Diagram guide (archify .diagram-guide) ---------- */
+.diagram-guide {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 26;
+  width: min(32rem, calc(100% - 2rem));
+  max-height: min(42rem, calc(100% - 2rem));
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--ax-cloud-stroke) 58%, var(--ax-toolbar-border));
+  border-radius: 0.82rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ax-cloud-fill) 32%, transparent), transparent 42%),
+    var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(18px);
+  font-family: var(--ax-font);
+  animation: ax-panel-drop 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.diagram-guide-head { gap: 1rem; padding: 0.82rem 0.9rem 0.68rem; }
+.diagram-guide-eyebrow { color: var(--ax-cloud-stroke); }
+.diagram-guide-title { font-size: 0.86rem; }
+.diagram-guide-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.54rem 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 74%, transparent);
+  color: var(--ax-text-faint);
+  font-size: 0.56rem;
+  letter-spacing: 0.025em;
+}
+.diagram-guide-stats::before {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ax-backend-stroke);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ax-backend-stroke) 72%, transparent);
+}
+.diagram-guide-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.38rem;
+  padding: 0.62rem;
+}
+.diagram-guide-action {
+  --guide-accent: var(--ax-frontend-stroke);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 4.15rem;
+  padding: 0.55rem 0.58rem;
+  border: 1px solid color-mix(in srgb, var(--guide-accent) 22%, var(--ax-toolbar-border));
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--ax-panel) 78%, transparent);
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.diagram-guide-action[data-guide-action="route"] { --guide-accent: var(--ax-backend-stroke); }
+.diagram-guide-action[data-guide-action="map"] { --guide-accent: var(--ax-database-stroke); }
+.diagram-guide-action[data-guide-action="lens"] { --guide-accent: var(--ax-messagebus-stroke); }
+.diagram-guide-action[data-guide-action="runs"] { --guide-accent: var(--ax-backend-stroke); }
+.diagram-guide-action[data-guide-action="changes"],
+.diagram-guide-action[data-guide-action="present"] { --guide-accent: var(--ax-cloud-stroke); }
+.diagram-guide-action:hover,
+.diagram-guide-action:focus-visible {
+  border-color: color-mix(in srgb, var(--guide-accent) 76%, var(--ax-toolbar-border));
+  background: color-mix(in srgb, var(--guide-accent) 9%, var(--ax-panel));
+  transform: translateY(-1px);
+}
+.diagram-guide-action:focus-visible,
+.diagram-guide-close:focus-visible {
+  outline: 2px solid var(--ax-cloud-stroke);
+  outline-offset: 1px;
+}
+.diagram-guide-index {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 1px solid color-mix(in srgb, var(--guide-accent) 64%, var(--ax-toolbar-border));
+  border-radius: 0.35rem;
+  color: var(--guide-accent);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.diagram-guide-action-copy { min-width: 0; }
+.diagram-guide-action strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ax-text);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diagram-guide-action small {
+  display: -webkit-box;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--ax-text-faint);
+  font-size: 0.5rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.diagram-guide-action kbd { align-self: start; min-width: 1.45rem; font-size: 0.5rem; }
+.diagram-guide-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem 0.62rem;
+  padding: 0.58rem 0.9rem 0.68rem;
+  border-top: 1px solid var(--ax-toolbar-border);
+  color: var(--ax-text-faint);
+  font-size: 0.5rem;
+}
+.diagram-guide-shortcuts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+}
+.diagram-guide-credit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.46rem 0.9rem 0.56rem;
+  border-top: 1px solid color-mix(in srgb, var(--ax-toolbar-border) 74%, transparent);
+  color: var(--ax-text-faint);
+  font-size: 0.5rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.diagram-guide-credit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: none;
+  opacity: 0.72;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.diagram-guide-credit:hover .diagram-guide-credit-link,
+.diagram-guide-credit:focus-visible .diagram-guide-credit-link { opacity: 1; color: var(--ax-cloud-stroke); }
+.diagram-guide-credit:focus-visible { outline: 2px solid var(--ax-cloud-stroke); outline-offset: -2px; }
+@keyframes ax-panel-rise {
+  from { opacity: 0; transform: translateY(5px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ax-panel-drop {
+  from { opacity: 0; transform: translateY(-5px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---------- Intent Trace announcement (archify .intent-trace-status): read out, not shown ---------- */
+.intent-trace-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Passport drag handle (archify .relationship-lens-drag-handle) ---------- */
+.focus-chip .relationship-lens-drag-handle {
+  position: absolute;
+  top: 0.12rem;
+  left: 50%;
+  width: 2.5rem;
+  height: 0.78rem;
+  padding: 0;
+  transform: translateX(-50%);
+  color: var(--ax-text-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.focus-chip .relationship-lens-drag-handle::before {
+  content: "";
+  display: block;
+  width: 1.25rem;
+  margin: auto;
+  border-top: 2px dotted currentColor;
+  opacity: 0.72;
+}
+.focus-chip[data-panel-dragging="true"] .relationship-lens-drag-handle { cursor: grabbing; }
+@media (hover: none), (pointer: coarse) {
+  .focus-chip .relationship-lens-drag-handle { display: none; }
+}
+
+/* ---------- Semantic Radar (archify .overview-map) ---------- */
+.overview-map {
+  position: absolute;
+  right: 1rem;
+  bottom: 4.15rem;
+  z-index: 12;
+  width: 12.5rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ax-frontend-stroke) 52%, var(--ax-toolbar-border));
+  border-radius: 0.78rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+  font-family: var(--ax-font);
+  font-size: 0.625rem;
+}
+.overview-map-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0.42rem 0.48rem 0.38rem 0.55rem;
+  border-bottom: 1px solid var(--ax-toolbar-border);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--ax-frontend-fill) 45%, transparent), transparent 68%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.overview-map[data-panel-dragging="true"] .overview-map-head { cursor: grabbing; }
+.overview-map-live {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--ax-backend-stroke);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ax-backend-stroke) 52%, transparent);
+  animation: ax-radar-live 2.4s ease-out infinite;
+}
+@keyframes ax-radar-live {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ax-backend-stroke) 52%, transparent); }
+  55%, 100% { box-shadow: 0 0 0 0.32rem transparent; }
+}
+.overview-map-copy { min-width: 0; line-height: 1.1; }
+.overview-map-copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ax-frontend-stroke);
+  font-size: 0.59rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.overview-map-copy small {
+  display: block;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--ax-text-faint);
+  font-size: 0.52rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.overview-map-close {
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.34rem;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.overview-map-close:hover,
+.overview-map-close:focus-visible { background: var(--ax-toolbar-hover); }
+.overview-map-close:focus-visible,
+.overview-map-surface:focus-visible,
+.overview-map-node:focus-visible {
+  outline: 2px solid var(--ax-frontend-stroke);
+  outline-offset: 1px;
+}
+.overview-map-surface {
+  position: relative;
+  height: 7rem;
+  margin: 0.42rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ax-panel-border) 72%, transparent);
+  border-radius: 0.42rem;
+  background:
+    linear-gradient(color-mix(in srgb, var(--ax-panel-border) 26%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ax-panel-border) 26%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--ax-toolbar-menu-bg) 86%, transparent);
+  background-size: 12px 12px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.overview-map-surface > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.overview-map-node {
+  fill: var(--ax-backend-stroke);
+  fill-opacity: 0.52;
+  stroke: var(--ax-backend-stroke);
+  stroke-opacity: 0.86;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: fill-opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+}
+.overview-map-node[data-kind="start"] { fill: var(--ax-frontend-stroke); stroke: var(--ax-frontend-stroke); }
+.overview-map-node[data-kind="database"],
+.overview-map-node[data-kind="success"] { fill: var(--ax-database-stroke); stroke: var(--ax-database-stroke); }
+.overview-map-node[data-kind="cloud"] { fill: var(--ax-cloud-stroke); stroke: var(--ax-cloud-stroke); }
+.overview-map-node[data-kind="messagebus"] { fill: var(--ax-messagebus-stroke); stroke: var(--ax-messagebus-stroke); }
+.overview-map-node[data-kind="decision"] { fill: var(--ax-security-stroke); stroke: var(--ax-security-stroke); }
+.overview-map-node[data-kind="neutral"] { fill: var(--ax-external-stroke); stroke: var(--ax-external-stroke); }
+.overview-map-node[data-radar-active="true"],
+.overview-map-node:hover,
+.overview-map-node:focus-visible {
+  fill-opacity: 0.92;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+.overview-map-viewport {
+  fill: color-mix(in srgb, var(--ax-frontend-fill) 56%, transparent);
+  stroke: var(--ax-frontend-stroke);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ax-frontend-stroke) 54%, transparent));
+}
+.overview-map-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.52rem 0.46rem;
+  color: var(--ax-text-faint);
+  font-size: 0.49rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------- Motion control and presentation stage (archify #btn-motion, #btn-present) ---------- */
+.diagram-nav .diagram-nav-motion {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.375rem;
+  padding-inline: 0.55rem;
+}
+.diagram-nav .diagram-nav-motion::before {
+  position: absolute;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  left: -0.19rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--ax-panel-border) 90%, transparent);
+  content: "";
+  pointer-events: none;
+}
+.motion-control-dot {
+  width: 0.46rem;
+  height: 0.46rem;
+  flex: none;
+  border: 1px solid var(--ax-backend-stroke);
+  border-radius: 50%;
+  background: var(--ax-backend-stroke);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--ax-backend-stroke) 62%, transparent);
+}
+.diagram-nav .diagram-nav-motion[aria-pressed="true"] { color: var(--ax-text-muted); background: transparent; }
+.diagram-nav-motion[aria-pressed="false"] .motion-control-dot { background: transparent; box-shadow: none; }
+.diagram-nav-icon.present {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 3.2h-4v4M12.8 3.2h4v4M7.2 16.8h-4v-4M12.8 16.8h4v-4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 3.2h-4v4M12.8 3.2h4v4M7.2 16.8h-4v-4M12.8 16.8h4v-4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.diagram-nav-icon.present-exit {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 7.2h-4v-4M12.8 7.2h4v-4M7.2 12.8h-4v4M12.8 12.8h4v4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.2 7.2h-4v-4M12.8 7.2h4v-4M7.2 12.8h-4v4M12.8 12.8h4v4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+/* The stage gives the whole window to the canvas and its reading tools; the editing chrome stays mounted, only hidden. */
+.workspace-layout[data-present="true"] > :not(.workspace-body),
+.workspace-layout[data-present="true"] .workspace-panel,
+.workspace-layout[data-present="true"] .panel-resize-handle {
+  display: none;
+}
+
+/* Still: everything on the canvas moves at once. */
+:root[data-motion="still"] .overview-map-live,
+:root[data-motion="still"] .semantic-lens,
+:root[data-motion="still"] .diagram-guide { animation: none; }
+:root[data-motion="still"] .semantic-lens-kind,
+:root[data-motion="still"] .node-finder-search,
+:root[data-motion="still"] .node-finder-result,
+:root[data-motion="still"] .diagram-guide-action { transition: none; }
+:root[data-motion="still"] .overview-map-node,
+:root[data-motion="still"] .diagram-nav button,
+:root[data-motion="still"] .workspace-canvas-viewport .react-flow__node,
+:root[data-motion="still"] .workspace-canvas-viewport .react-flow__edge {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .diagram-nav button { transition: none; }
+  .diagram-nav button,
+  .overview-map-node,
+  .semantic-lens-kind,
+  .node-finder-search,
+  .node-finder-result,
+  .diagram-guide-action { transition: none; }
+  .overview-map-live,
+  .semantic-lens,
+  .diagram-guide { animation: none; }
 }

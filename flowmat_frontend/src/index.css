@@ -1264,6 +1264,17 @@ code {
   width: min(340px, calc(100% - 16px));
 }
 
+/* The run and revision pickers open at the top left like archify's finder, over the Semantic Passport, and end above the
+   view controls at the bottom (archify's 4.15rem), scrolling inside when their list is long. */
+.canvas-reading-popup--side {
+  top: 1rem;
+  left: 1rem;
+  z-index: 24;
+  width: min(340px, calc(100% - 2rem));
+  max-height: calc(100% - 1rem - 4.15rem);
+  overflow-y: auto;
+}
+
 .canvas-reading-popup--lens h3,
 .canvas-reading-popup--side h3 {
   margin: 0;

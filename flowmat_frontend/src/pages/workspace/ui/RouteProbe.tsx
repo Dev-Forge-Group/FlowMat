@@ -11,13 +11,18 @@ const NO_STEPS: string[] = []
  * picked it says where to click next and offers the finder; once traced it shows the route as chips from start (cyan)
  * to end (rose), "N processes · N steps · shortest path", a Journey that steps along it, Copy link and Clear.
  */
-export function RouteProbe({ reading, onFind }: { reading: CanvasReading; onFind(): void }) {
+export function RouteProbe({ reading, still, onFind }: {
+  reading: CanvasReading
+  /** The reader chose Still (or the system asks for reduced motion): a journey that is playing pauses where it is. */
+  still: boolean
+  onFind(): void
+}) {
   const route = reading.state?.kind === 'route' ? reading.state : null
   // A new route starts its journey from the overview.
-  return <RouteProbePanel key={route ? `${route.from}~${route.to}` : 'picking'} reading={reading} onFind={onFind} />
+  return <RouteProbePanel key={route ? `${route.from}~${route.to}` : 'picking'} reading={reading} still={still} onFind={onFind} />
 }
 
-function RouteProbePanel({ reading, onFind }: { reading: CanvasReading; onFind(): void }) {
+function RouteProbePanel({ reading, still, onFind }: { reading: CanvasReading; still: boolean; onFind(): void }) {
   const picking = reading.picking
   const route = reading.state?.kind === 'route' ? reading.state : null
   const view = reading.view
@@ -25,6 +30,12 @@ function RouteProbePanel({ reading, onFind }: { reading: CanvasReading; onFind()
   // -1 is the overview; 0..n-1 a route position.
   const [at, setAt] = useState(-1)
   const [playing, setPlaying] = useState(false)
+  // As in archify, turning motion Still pauses a playing journey at its step; Play goes on from there.
+  const [wasStill, setWasStill] = useState(still)
+  if (still !== wasStill) {
+    setWasStill(still)
+    if (still) setPlaying(false)
+  }
   const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
