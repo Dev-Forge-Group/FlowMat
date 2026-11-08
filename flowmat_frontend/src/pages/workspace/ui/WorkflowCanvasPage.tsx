@@ -23,7 +23,7 @@ import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpd
 import { useWorkflowValidationQuery, workflowValidationQueryKey } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import type { PresenceMessage, GraphChangeMessage } from '../../../entities/workflow/api/useWorkflowSync'
 import { Link, useNavigate } from 'react-router-dom'
-import { PALETTE_DRAG_MIME } from './canvasConstants'
+import { NodePaletteSidebar } from './NodePaletteSidebar'
 import { EditorPublish } from './EditorPublish'
 import { SemanticPassport } from './SemanticPassport'
 import { RouteProbe } from './RouteProbe'
@@ -1682,62 +1682,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
       )}
 
       <div className="workspace-body">
-        <aside className="workspace-panel workspace-panel--left" style={{ width: localPanelWidths.left }}>
-          <div style={{ display: 'grid', gap: '10px' }}>
-            <h3 style={{ margin: 0 }}>Node Palette</h3>
-            <p className="panel-placeholder" style={{ margin: 0 }}>
-              Pick a workflow node, then click any empty canvas area.
-            </p>
-            {paletteDefinitions.map((definition) => (
-              <button
-                key={definition.tool}
-                type="button"
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(PALETTE_DRAG_MIME, definition.tool)
-                  event.dataTransfer.effectAllowed = 'move'
-                }}
-                onClick={() => setActiveTool(definition.tool)}
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  borderRadius: '12px',
-                  border:
-                    activeTool === definition.tool
-                      ? '1px solid var(--accent)'
-                      : '1px solid var(--border)',
-                  background:
-                    activeTool === definition.tool ? 'var(--accent-bg)' : 'var(--surface)',
-                  display: 'grid',
-                  gap: '4px',
-                  cursor: 'grab',
-                }}
-              >
-                <strong>{definition.label}</strong>
-                <span style={{ fontSize: '12px', opacity: 0.75 }}>
-                  {definition.description}
-                </span>
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setActiveTool('select')}
-              style={{
-                textAlign: 'left',
-                padding: '12px 14px',
-                borderRadius: '12px',
-                border:
-                  activeTool === 'select'
-                    ? '1px solid var(--accent)'
-                    : '1px solid var(--border)',
-                background: activeTool === 'select' ? 'var(--accent-bg)' : 'var(--surface)',
-              }}
-            >
-              Pointer
-            </button>
-            {/* Editor Shapes / Shape / Text / Freehand tool buttons moved to Ribbon Annotate tab > Draw group. */}
-            {/* Align/Distribute buttons moved to Ribbon Annotate tab > Align group; Group/Ungroup moved to > Group group. */}
-          </div>
+        <aside className="workspace-panel workspace-panel--left"
+          style={{ width: localPanelWidths.left, padding: 0, overflow: 'hidden' }}>
+          {/* Shapes, text and freehand are on the ribbon's Annotate tab, with align, distribute and group. */}
+          <NodePaletteSidebar paletteDefinitions={paletteDefinitions} activeTool={activeTool} setActiveTool={setActiveTool} />
         </aside>
 
         <div className="panel-resize-handle" onMouseDown={makeResizeHandler('left')} />
