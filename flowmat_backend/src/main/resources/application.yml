@@ -19,7 +19,7 @@ spring:
     baseline-version: 1
     locations: classpath:db/migration
   jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    # Hibernate works out PostgreSQL's dialect from the connection; naming it only logs a deprecation warning.
     hibernate:
       ddl-auto: none
     properties:
@@ -111,6 +111,12 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  # Request metrics are tagged by URI template. FlowMat has several hundred of them, and past the default 100 Micrometer
+  # stopped recording the rest ("Reached the maximum number of 'uri' tags"); templates keep the count bounded.
+  metrics:
+    web:
+      server:
+        max-uri-tags: 1000
   endpoint:
     health:
       probes:
