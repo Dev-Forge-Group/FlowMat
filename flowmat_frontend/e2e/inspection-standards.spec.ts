@@ -86,7 +86,7 @@ test('an item\'s standards become the run checklist and fill in the inspection f
       void dialog.dismiss()
     })
     await page.getByRole('button', { name: 'Finish', exact: true }).click()
-    expect(question).toContain(warning)
+    await expect.poll(() => question).toContain(warning)
   } finally {
     for (const one of standards) await call('DELETE', `/inspection-standards/${one.standardId}`)
   }

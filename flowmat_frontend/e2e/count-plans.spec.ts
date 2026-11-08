@@ -83,7 +83,7 @@ for (const scenario of ['blind-retry', 'changed', 'viewer', 'owner-baseline', 'r
       await expect(panel.getByLabel('Plan note')).toBeDisabled(); release()
       await expect(panel).toContainText('The result is unconfirmed.')
       await panel.getByRole('button', { name: 'Retry count plan request' }).click()
-      expect(writes[1]).toEqual(writes[0])
+      await expect.poll(() => writes[1]).toEqual(writes[0])
     }
     const first = panel.getByRole('form', { name: 'Count FIRST · Material first' })
     const second = panel.getByRole('form', { name: 'Count SECOND · Material second' })
@@ -112,7 +112,7 @@ for (const scenario of ['blind-retry', 'changed', 'viewer', 'owner-baseline', 'r
       await expect(first.getByLabel('Counted quantity')).toBeDisabled(); release()
       await expect(panel).toContainText('The result is unconfirmed.')
       await panel.getByRole('button', { name: 'Retry count plan request' }).click()
-      expect(submits).toBe(2)
+      await expect.poll(() => submits).toBe(2)
     }
     if (scenario === 'changed') {
       await expect(first).toContainText('Recount required.')

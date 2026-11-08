@@ -46,7 +46,7 @@ test('a purchase order says where it is to arrive and its receipt starts there',
   await form.getByLabel('Line 1 item').selectOption('flour')
   await form.getByLabel('Line 1 quantity').fill('10')
   await form.getByRole('button', { name: 'Save as draft' }).click()
-  expect(sent).toEqual([{ projectId, supplierName: 'Mill Co', expectedDate: null, note: null, deliverTo: 'WH-A',
+  await expect.poll(() => sent).toEqual([{ projectId, supplierName: 'Mill Co', expectedDate: null, note: null, deliverTo: 'WH-A',
     lines: [{ itemId: 'flour', quantity: 10, expectedDate: null, note: null }] }])
   const detail = page.getByRole('region', { name: 'Purchase order PO-0001' })
   await expect(detail.getByText('Deliver to WH-A')).toBeVisible()
