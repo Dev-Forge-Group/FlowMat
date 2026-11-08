@@ -48,6 +48,18 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-results/mock-${{ matrix.shard }}.json
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/3 --workers=1 --trace=off --reporter=line,json --output=test-results/mock-${{ matrix.shard }}
 
+      # A failed check's page, as Playwright last saw it, goes into the log too, so a rare failure can be read without
+      # downloading the artifacts.
+      - name: Show failed pages
+        if: failure()
+        working-directory: flowmat_frontend
+        run: |
+          find test-results/mock-${{ matrix.shard }} -name error-context.md 2>/dev/null | while read -r file; do
+            echo "::group::$file"
+            sed -n '1,250p' "$file"
+            echo "::endgroup::"
+          done || true
+
       - name: Upload mocked Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -374,6 +386,20 @@ jobs:
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/instruction-quality-real-api.spec.ts e2e/inventory-reports.spec.ts --workers=1 --retries=0 --trace=off
+
+      # As in the mocked job: each failed check's page, and the backend's last warnings and errors, go into the log.
+      - name: Show failed pages and backend warnings
+        if: failure()
+        working-directory: flowmat_frontend
+        run: |
+          find test-results -name error-context.md 2>/dev/null | while read -r file; do
+            echo "::group::$file"
+            sed -n '1,250p' "$file"
+            echo "::endgroup::"
+          done || true
+          echo "::group::backend warnings and errors"
+          grep -E ' (WARN|ERROR) ' /tmp/flowmat-backend.log | tail -n 80 || true
+          echo "::endgroup::"
 
       - name: Upload backend log
         if: always()
