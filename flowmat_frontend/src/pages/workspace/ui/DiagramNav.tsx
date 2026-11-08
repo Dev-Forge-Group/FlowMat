@@ -1,7 +1,8 @@
 /**
  * archify's diagram view controls (adapted from archify template.source.html and viewer.css, Apache-2.0): one dock at
  * the canvas's bottom right with the reading modes (ROUTE, MAP, LENS, and FlowMat's RUNS and CHANGES), the finder, the
- * guide and a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from 175%) and the zoom.
+ * guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from 175%) and the zoom, and
+ * archify's toolbar motion control (LIVE or STILL) and presentation stage.
  */
 function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
   if (zoom < 1) return 'MAP'
@@ -10,7 +11,7 @@ function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
 
 export function DiagramNav({
   routeActive, onRoute, mapOpen, onMap, lensActive, onLens, runsActive, onRuns, changesActive, onChanges, onFind, onGuide,
-  zoom, onZoomOut, onReset, onZoomIn,
+  zoom, onZoomOut, onReset, onZoomIn, motion, presenting, onPresent,
 }: {
   routeActive: boolean
   onRoute(): void
@@ -28,7 +29,12 @@ export function DiagramNav({
   onZoomOut(): void
   onReset(): void
   onZoomIn(): void
+  motion: { still: boolean; reduced: boolean; onToggle(): void }
+  presenting: boolean
+  onPresent(): void
 }) {
+  const motionLabel = motion.reduced ? 'Motion paused by reduced-motion preference'
+    : motion.still ? 'Resume motion' : 'Pause motion'
   const percent = `${Math.round(zoom * 100)}%`
   return (
     <div className="diagram-nav" role="toolbar" aria-label="Diagram view controls">
@@ -58,6 +64,16 @@ export function DiagramNav({
       </button>
       <button type="button" data-view="in" aria-label="Zoom in" title="Zoom in (+)" disabled={zoom >= 3} onClick={onZoomIn}>
         <span className="diagram-nav-icon plus" aria-hidden="true" />
+      </button>
+      <button type="button" className="diagram-nav-motion" aria-pressed={!motion.still} aria-label={motionLabel}
+        title={motionLabel} disabled={motion.reduced} onClick={motion.onToggle}>
+        <span className="motion-control-dot" aria-hidden="true" />
+        <span>{motion.still ? 'STILL' : 'LIVE'}</span>
+      </button>
+      <button type="button" className="diagram-nav-present" aria-pressed={presenting}
+        aria-label={presenting ? 'Exit presentation stage' : 'Enter presentation stage'}
+        title={presenting ? 'Exit presentation stage (F or Escape)' : 'Presentation stage (F)'} onClick={onPresent}>
+        <span className={`diagram-nav-icon ${presenting ? 'present-exit' : 'present'}`} aria-hidden="true" />
       </button>
     </div>
   )

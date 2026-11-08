@@ -22,10 +22,10 @@ import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQu
 import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpdateWorkflowMutation'
 import { useWorkflowValidationQuery, workflowValidationQueryKey } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import type { PresenceMessage, GraphChangeMessage } from '../../../entities/workflow/api/useWorkflowSync'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { NodePaletteSidebar } from './NodePaletteSidebar'
 import { EditorPublish } from './EditorPublish'
-import { SemanticPassport } from './SemanticPassport'
+import { SemanticPassport, type PassportPosition } from './SemanticPassport'
 import { RouteProbe } from './RouteProbe'
 import { DiagramNav } from './DiagramNav'
 import { ReadingReceipts } from './ReadingReceipts'
@@ -40,6 +40,7 @@ import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../mode
 import { useRevisionChanges } from '../model/useRevisionChanges'
 import { useCanvasReading } from '../model/useCanvasReading'
 import { useRunOverlay } from '../model/useRunOverlay'
+import { useMotion } from '../model/motion'
 import type {
   WorkspaceEditorCommandApi,
   WorkspaceEditorSelectionSnapshot,
@@ -1001,20 +1002,65 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const changesView = useRevisionChanges(canvas.workflow.workflowId, reading.changes.id, canvas)
   // archify's view controls: the semantic radar (overview map), the camera stepper and the zoom it shows.
   const [mapOpen, setMapOpen] = useState(false)
+  // As in archify, the radar and the lens take turns: opening one closes the other, and the guide and a route close the radar.
+  const toggleMap = useCallback(() => {
+    if (!mapOpen) setPanel((current) => (current === 'lens' ? null : current))
+    setMapOpen(!mapOpen)
+  }, [mapOpen])
+  // Where the reader moved the Semantic Passport; it stays there from one process to the next.
+  const [passportPosition, setPassportPosition] = useState<PassportPosition | null>(null)
   const [zoom, setZoom] = useState(1)
   const cameraRef = useRef<{ zoomStep(direction: 1 | -1): void; reset(): void } | null>(null)
   const handleCameraReady = useCallback((api: { zoomStep(direction: 1 | -1): void; reset(): void }) => {
     cameraRef.current = api
   }, [])
+  // archify's toolbar: the motion control (Live or Still) and the presentation stage, which the address keeps as
+  // `?present=1` so a link opens on the stage.
+  const motion = useMotion()
+  const location = useLocation()
+  const presenting = new URLSearchParams(location.search).get('present') === '1'
+  // Like the reading, it reads the rest of the address when it writes, so a reading written a moment before is kept.
+  const setPresenting = useCallback((next: boolean) => {
+    const params = new URLSearchParams(window.location.search)
+    if (next) params.set('present', '1')
+    else params.delete('present')
+    const search = params.toString()
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '', hash: window.location.hash }, { replace: true })
+  }, [location.pathname, navigate])
+  const togglePresenting = useCallback(() => {
+    setPresenting(new URLSearchParams(window.location.search).get('present') !== '1')
+  }, [setPresenting])
+  // The stage changes the canvas's size, so the camera shows the whole canvas again once it has.
+  const presentedRef = useRef(presenting)
+  useEffect(() => {
+    if (presentedRef.current === presenting) return
+    presentedRef.current = presenting
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => cameraRef.current?.reset())
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [presenting])
   // The Semantic Passport follows the process in hand: the selected one, else the one being read. While a route is picked
   // or shown the Route Probe owns the reading, as in archify, so the passport steps aside.
   const routeOwnsReading = Boolean(reading.picking) || reading.state?.kind === 'route'
   const passportProcessId = routeOwnsReading ? null
     : selectedProcessId ?? (reading.state?.kind === 'focus' ? reading.state.processId : null)
   const passportNode = passportProcessId ? canvas.nodeMap[passportProcessId] ?? null : null
+  // The radar marks the processes in hand; a process picked on it is read like one found with the finder.
+  const focusedProcessId = reading.state?.kind === 'focus' ? reading.state.processId : null
+  const radarActiveIds = useMemo(() => new Set([selectedProcessId, focusedProcessId].filter((id): id is string => Boolean(id))),
+    [focusedProcessId, selectedProcessId])
+  const focusFromRadar = useCallback((processId: string) => {
+    editorCommandApiRef.current?.clearSelection()
+    setEditorSelection(EMPTY_EDITOR_SELECTION)
+    selectNode(processId)
+    if (!readingRef.current.pick(processId)) readingRef.current.focus(processId)
+  }, [selectNode])
+  const closeMap = useCallback(() => setMapOpen(false), [])
   // archify's route begin: the process in the passport is the start, else the start is picked first; the panels close.
   const beginRoute = () => {
     setPanel(null)
+    setMapOpen(false)
     reading.startRoute(passportProcessId)
   }
   const toggleRoute = () => {
@@ -1129,18 +1175,33 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
         if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '/' || e.key === '?')) {
           e.preventDefault()
           setPanel(e.key === '/' ? 'finder' : 'guide')
+          if (e.key === '?') setMapOpen(false)
           return
         }
-        // archify's view keys: M the semantic radar, + - 0 the camera stepper. (R, L and T stay the editor's tools.)
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', '+', '=', '-', '0'].includes(e.key)) {
+        // archify's view keys: M the semantic radar, F the presentation stage, + - 0 the camera stepper. (R, L and T stay
+        // the editor's tools.)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', '+', '=', '-', '0'].includes(e.key)) {
           e.preventDefault()
-          if (e.key === 'm' || e.key === 'M') setMapOpen((open) => !open)
+          if (e.key === 'm' || e.key === 'M') toggleMap()
+          else if (e.key === 'f' || e.key === 'F') togglePresenting()
           else if (e.key === '0') cameraRef.current?.reset()
           else cameraRef.current?.zoomStep(e.key === '-' ? -1 : 1)
           return
         }
+        // archify's Esc order: the radar closes, then the route and the reading stop, then the selection clears (below),
+        // and only then the stage ends.
+        if (e.key === 'Escape' && mapOpen) {
+          e.preventDefault()
+          setMapOpen(false)
+          return
+        }
         if (e.key === 'Escape' && readingRef.current.escape()) {
           e.preventDefault()
+          return
+        }
+        if (e.key === 'Escape' && presenting && !selectedProcessId && !selectedConnectionId) {
+          e.preventDefault()
+          setPresenting(false)
           return
         }
 
@@ -1199,10 +1260,15 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     editorSelection.canUndo,
     editorSelection.elements.length,
     isEditorCommandContext,
+    mapOpen,
+    presenting,
     redo,
     selectedConnectionId,
     selectedProcessId,
     setActiveTool,
+    setPresenting,
+    toggleMap,
+    togglePresenting,
     undo,
   ])
 
@@ -1558,7 +1624,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const ribbonTabs = buildRibbonTabs(ribbonHandlers, ribbonDynamicButtons, ribbonGroupContent)
 
   return (
-    <div className="workspace-layout">
+    <div className="workspace-layout" data-present={presenting ? 'true' : undefined}>
       <header className="workspace-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Link to="/" className="topbar-home-link" title="Back to home">Home</Link>
@@ -1749,6 +1815,9 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               reading={reading.highlight}
               onRevealReady={handleRevealReady}
               mapOpen={mapOpen}
+              radarActiveIds={radarActiveIds}
+              onRadarFocus={focusFromRadar}
+              onRadarClose={closeMap}
               onCameraReady={handleCameraReady}
               onZoomChange={setZoom}
               runMarks={runView.marks}
@@ -1782,6 +1851,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           </Suspense>
           {passportNode && (
             <SemanticPassport key={passportNode.processId} reading={reading} node={passportNode}
+              position={passportPosition} onMove={setPassportPosition}
               onClose={() => {
                 clearSelection()
                 if (reading.state?.kind === 'focus') reading.clear()
@@ -1794,7 +1864,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
                 reading.reveal([processId])
               }} />
           )}
-          <RouteProbe reading={reading} onFind={() => setPanel('finder')} />
+          <RouteProbe reading={reading} still={motion.still} onFind={() => setPanel('finder')} />
           <ReadingReceipts
             lens={reading.state?.kind === 'lens' && reading.view && panel !== 'lens'
               ? { text: reading.view.text, onClear: reading.clear } : null}
@@ -1802,14 +1872,22 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             changes={changesView.summary ? { text: changesView.summary, onHide: () => reading.changes.show(null) } : null} />
           <DiagramNav
             routeActive={routeOwnsReading} onRoute={toggleRoute}
-            mapOpen={mapOpen} onMap={() => setMapOpen((open) => !open)}
-            lensActive={reading.state?.kind === 'lens'} onLens={() => setPanel((open) => (open === 'lens' ? null : 'lens'))}
+            mapOpen={mapOpen} onMap={toggleMap}
+            lensActive={reading.state?.kind === 'lens'} onLens={() => {
+              if (panel !== 'lens') setMapOpen(false)
+              setPanel((open) => (open === 'lens' ? null : 'lens'))
+            }}
             runsActive={reading.run.id != null} onRuns={() => setPanel((open) => (open === 'runs' ? null : 'runs'))}
             changesActive={reading.changes.id != null}
             onChanges={() => setPanel((open) => (open === 'changes' ? null : 'changes'))}
-            onFind={() => setPanel('finder')} onGuide={() => setPanel('guide')}
+            onFind={() => setPanel('finder')} onGuide={() => {
+              setMapOpen(false)
+              setPanel('guide')
+            }}
             zoom={zoom} onZoomOut={() => cameraRef.current?.zoomStep(-1)} onReset={() => cameraRef.current?.reset()}
-            onZoomIn={() => cameraRef.current?.zoomStep(1)} />
+            onZoomIn={() => cameraRef.current?.zoomStep(1)}
+            motion={{ still: motion.still, reduced: motion.reduced, onToggle: motion.toggle }}
+            presenting={presenting} onPresent={togglePresenting} />
           {panel === 'runs' && (
             <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
               onClose={() => setPanel(null)} />
@@ -1846,7 +1924,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             <DiagramGuide processes={canvas.nodes.length} connections={canvas.edges.length} onClose={() => setPanel(null)}
               onAction={(action) => {
                 if (action === 'route') beginRoute()
-                else if (action === 'map') {
+                else if (action === 'present') {
+                  setPanel(null)
+                  setPresenting(true)
+                } else if (action === 'map') {
                   setPanel(null)
                   setMapOpen(true)
                 } else setPanel(action === 'find' ? 'finder' : action)

@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  MiniMap,
   useViewport,
   getBezierPath,
   useUpdateNodeInternals,
@@ -55,6 +54,8 @@ import { canvasNodePosition } from '../model/canvasNodePosition'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { useTheme } from '../../../app/providers/ThemeProvider'
+import { motionStill } from '../model/motion'
+import { SemanticRadar } from './SemanticRadar'
 import {
   useWorkflowSync,
   type NodeMoveMessage,
@@ -503,6 +504,11 @@ interface Props {
   onLayoutReady?(fn: () => LayoutSnapshot): void
   /** archify's Semantic Radar: the overview map, shown only while it is open. */
   mapOpen?: boolean
+  /** The processes the radar marks as in hand. */
+  radarActiveIds?: ReadonlySet<string>
+  /** Reads a process picked on the radar. */
+  onRadarFocus?(processId: string): void
+  onRadarClose?(): void
   /** archify's camera stepper: zoom in or out to the next 25% step (25%–300%), or back to the whole canvas. */
   onCameraReady?(api: { zoomStep(direction: 1 | -1): void; reset(): void }): void
   /** The zoom when the canvas first shows and after each move ends. */
@@ -556,6 +562,8 @@ function toRfEdges(edges: CanvasEdgeViewModel[], selectedId: string | null): RfE
     data: e,
   }))
 }
+
+const NO_IDS: ReadonlySet<string> = new Set()
 
 function loadSavedViewport(storageKey: string): Viewport | undefined {
   try {
@@ -616,6 +624,9 @@ export function CanvasViewport({
   changeMarks = null,
   onLayoutReady,
   mapOpen = false,
+  radarActiveIds = NO_IDS,
+  onRadarFocus,
+  onRadarClose,
   onCameraReady,
   onZoomChange,
 }: Props) {
@@ -661,7 +672,7 @@ export function CanvasViewport({
     if (!reactFlowInstance) return
     onRevealReady?.((processIds) => {
       if (processIds.length === 0) return
-      const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      const still = motionStill()
       const lone = processIds.length === 1
       void reactFlowInstance.fitView({ nodes: processIds.map((id) => ({ id })), padding: lone ? 0.8 : 0.2,
         maxZoom: lone ? 1.25 : 1, duration: still ? 0 : 300 })
@@ -671,7 +682,7 @@ export function CanvasViewport({
   // archify's camera stepper: 25% steps between 25% and 300%, and back to the whole canvas.
   useEffect(() => {
     if (!reactFlowInstance) return
-    const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const still = motionStill
     onCameraReady?.({
       zoomStep(direction) {
         const zoom = reactFlowInstance.getZoom()
@@ -712,7 +723,7 @@ export function CanvasViewport({
 
   useEffect(() => {
     if (reactFlowInstance) {
-      onFitViewReady?.(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }))
+      onFitViewReady?.(() => reactFlowInstance.fitView({ padding: 0.15, duration: motionStill() ? 0 : 300 }))
       onSelectAllReady?.(() => {
         setLocalNodes((nds) => {
           if (nds.every((n) => n.selected)) return nds
@@ -1225,7 +1236,8 @@ export function CanvasViewport({
         <ZoomReporter onZoomChange={onZoomChange} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
         {/* archify's Semantic Radar: the overview map opens from MAP (M) instead of always taking room. */}
-        {mapOpen && <MiniMap zoomable pannable nodeStrokeWidth={2} ariaLabel="Semantic radar" />}
+        <SemanticRadar open={mapOpen} activeIds={radarActiveIds} onFocus={(processId) => onRadarFocus?.(processId)}
+          onClose={() => onRadarClose?.()} />
       </ReactFlow>
     </div>
   )

@@ -14,13 +14,14 @@ in [`licenses/`](licenses).
 What was adapted: the reading tools of Archify's diagram viewer (`viewer/viewer.css`, `template.source.html` and the viewer
 scripts), rewritten as React components and CSS for FlowMat's workflow canvas:
 
-- Semantic Passport, Route Probe, Semantic Lens, the node finder, the diagram guide, the diagram view controls and the
-  reading receipts in `flowmat_frontend/src/pages/workspace/ui/` (`SemanticPassport.tsx`, `RouteProbe.tsx`,
-  `SemanticLens.tsx`, `ProcessFinder.tsx`, `DiagramGuide.tsx`, `DiagramNav.tsx`, `ReadingReceipts.tsx`,
+- Semantic Passport, Route Probe, Semantic Lens, Semantic Radar, the node finder, the diagram guide, the diagram view
+  controls with the motion control and the presentation stage, and the reading receipts in
+  `flowmat_frontend/src/pages/workspace/ui/` (`SemanticPassport.tsx`, `RouteProbe.tsx`, `SemanticLens.tsx`,
+  `SemanticRadar.tsx`, `ProcessFinder.tsx`, `DiagramGuide.tsx`, `DiagramNav.tsx`, `ReadingReceipts.tsx`,
   `ProcessConnections.tsx`)
 - Their styles and design tokens in `flowmat_frontend/src/pages/workspace/ui/archifyReading.css`
 - The reading models they use in `flowmat_frontend/src/pages/workspace/model/` (canvas reading, relations, run overlay,
-  revision changes, layout checks, SVG export)
+  revision changes, layout checks, SVG export, motion)
 
 Each adapted file says so in its header comment. FlowMat changed them to read FlowMat's processes, connections, runs and
 revisions instead of Archify's diagram data. FlowMat does not include Archify's fonts or brand icons; the CSS only names

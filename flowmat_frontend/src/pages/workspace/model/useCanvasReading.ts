@@ -45,10 +45,12 @@ export function useCanvasReading(
   // So does the published revision the draft is compared with.
   const changesId = useMemo(() => parseChangesParam(location.hash), [location.hash])
 
+  // The query is read from the address when the reading is written, so a change to it that has not rendered yet (the
+  // presentation stage) is kept.
   const write = useCallback((next: ReadingState | null, run: string | null = runId, changes: string | null = changesId) => {
-    navigate({ pathname: location.pathname, search: location.search,
+    navigate({ pathname: location.pathname, search: window.location.search,
       hash: withViewParams(formatReadingHash(next), run, changes) }, { replace: true })
-  }, [changesId, location.pathname, location.search, navigate, runId])
+  }, [changesId, location.pathname, navigate, runId])
 
   const showRun = useCallback((id: string | null) => write(state, id), [state, write])
   const showChanges = useCallback((id: string | null) => write(state, runId, id), [runId, state, write])
