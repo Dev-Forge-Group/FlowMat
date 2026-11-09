@@ -2,7 +2,7 @@ name: Backend Tests & Build
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
   pull_request:
     branches: [ main, develop ]
 

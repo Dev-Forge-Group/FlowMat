@@ -1,6 +1,6 @@
 # 도메인 지도
 
-> **현행 문서** · 최종 확인 2026-10-02(코드 `45f5df0` + 작업 트리), 의존 방향 2026-11-07 · 패키지나 책임이 바뀌면 같은 변경에서 고친다.
+> **현행 문서** · 모듈·공개 API·의존 규칙 확인 2026-11-09(코드 `f33a5bd`) · 패키지나 책임이 바뀌면 같은 변경에서 고친다. 기능별 상세 상태는 [CURRENT_CAPABILITIES](../status/CURRENT_CAPABILITIES.md)가 기준이다.
 > 이전 판(2026-09-24): [archive/2026-09-architecture/enterprise-domain-map.md](../archive/2026-09-architecture/enterprise-domain-map.md)
 
 백엔드 `flowmat_backend`의 bounded context와 각자의 책임, 서로의 의존 규칙을 한곳에 모은다. 결정의 근거는 [ADR-002](adr/ADR-002-module-dependency.md)(모듈 의존)와 [ADR-003](adr/ADR-003-resource-port-contract.md)(Core와 도메인 확장)이다. 기능별 구현 여부는 [CURRENT_CAPABILITIES](../status/CURRENT_CAPABILITIES.md)가 기준이다.
@@ -11,46 +11,51 @@
 
 | 구분 | context | 책임 | 주요 엔티티 | 공개 API(`application.publicapi`) |
 |---|---|---|---|---|
-| Core 정의 | `workflow` | 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 하위 `editor`(도형 편집 문서), `collab`(실시간 동기화), `annotation` | Workflow, Process, ProcessIo, ProcessConnection, WorkflowRevision, ProcessTemplate, WorkflowTemplate | 없음 |
+| Core 정의 | `workflow` | 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 하위 `editor`(도형 편집 문서), `collab`(실시간 동기화), `annotation` | Workflow, Process, ProcessIo, ProcessConnection, WorkflowRevision, ProcessTemplate, WorkflowTemplate | `WorkflowAccess`, `WorkflowRunQuery`, `WorkflowProductionQuery`, `WorkflowProcessOrder`와 공개 view |
 | Core 실행 | `flowrun` | 범용 실행 기록: 실행·단계·시도·이벤트, 그래프 라우팅과 실패 정책 | FlowRun, FlowRunStep, FlowRunStepAttempt, FlowRunEvent | `FlowRunCommand`(연결 실행 시작·종료) |
 | Core 규칙 | `rule` | 실행 규칙 정의와 평가 | FlowRule | `FlowRuleEngineService`(실행 전 규칙 검사, 2026-11-08) |
+| 외부 연동 | `connector` | HTTP 프로필·판, 매핑, 요청 실행·취소 | ConnectorProfile, ConnectorProfileVersion | `ConnectorProfileQuery`, `ConnectorMappingQuery`, `ConnectorHttpGateway`, `CancellableConnectorHttpGateway`와 실행 계약 |
 | 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간), `UnitConversion`(품목 단위 환산)·`ItemStatusRule`(품목 상태 규칙, 2026-11-08) |
-| 제조 계획 | `bom` | BOM 작성·승인·revision, 전개·역전개·원가 누적 | BomHeader, BomLine | 없음 |
+| 제조 계획 | `bom` | BOM 작성·승인·revision, 전개·역전개·원가 누적 | BomHeader, BomLine | `BomQuery`, `BomRevisionQuery`, `BomStructureQuery`, `BomOutputQuery`와 공개 view·`BomRequirement` |
 | 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03), `StockMovementCommand`(재고 이동)·`LotTraceCommand`(LOT 계보) (2026-11-07~08) |
 | 제조 실행 | `production` | 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하 | WorkOrder, WorkOrderItem, ProductionRun, ProductionRunItem, RunStateSnapshot, ProductionRunCorrection, StockAllocation, WorkInstruction, RunInstructionCheck | `WorkOrderQuery`(작업지시 조회) (2026-10-03). 실행 조회는 quality가 정의한 `ProductionRunQuery`를 구현한다(§4) |
-| 제조 품질 | `quality` | 검사·불량, 검사 기준, 부적합·시정 조치 | QualityInspection, DefectLog, InspectionStandard, Nonconformity, CorrectiveAction | 없음 |
-| 플랫폼 | `project` | 데이터 격리·접근권한 집행 경계, 멤버·초대 | Project, ProjectMember, ProjectInvite | `ProjectMemberQuery`(활성 구성원 여부, 2026-10-03), `ProjectAccess`(로그인 사용자와 접근 검사, 2026-11-08) |
-| 플랫폼 | `user` | 계정, 인증, 역할·권한, 로그인 이력 | User, Role, RolePermission, UserRole, SocialAccount, UserLoginHistory | 없음 |
+| 제조 품질 | `quality` | 검사·불량, 검사 기준, 부적합·시정 조치 | QualityInspection, DefectLog, InspectionStandard, Nonconformity, CorrectiveAction | `InspectionStandardQuery`, `NonconformityQuery`, `RunInspectionCommand`. 조회 포트 `ProductionRunQuery`는 production이 구현한다(§4) |
+| 구매 | `purchasing` | 공급처·품목별 조건, 발주·승인·입고·반품·공급처 대변 | Supplier, SupplierItem, PurchaseOrder, PurchaseOrderLine | `PurchaseSupplyQuery`(주문 중 공급 조회) |
+| 인력·근무 | `workforce` | 작업자 달력·순환 근무표, 근태, 인건비 단가·급여 계산 | WorkerShift, WorkerRota, WorkerAttendance | `WorkerCalendarQuery`, `WorkerAttendanceQuery`, `WorkerLaborRateQuery`, `WorkerPayQuery`와 공개 view |
+| 플랫폼 | `project` | 조직 metadata, 프로젝트 데이터 격리·접근권한 집행 경계, 멤버·초대 | Organization, OrganizationMember, Project, ProjectMember, ProjectInvite | `ProjectMemberQuery`, `ProjectAccess`, `ProjectCalendarQuery`, `ProjectWorkflowCommand` |
+| 플랫폼 | `user` | 계정, 인증, 역할·권한, 로그인 이력(`modules/platform`) | User, Role, RolePermission, UserRole, SocialAccount, UserLoginHistory | `UserQuery`, `UserView` |
+| 플랫폼 | `notification` | 앱 안 알림, 읽음 상태, 프로젝트별 구독 | Notification, NotificationSubscription | `NotificationCommand`, `NotificationSubscriptionQuery`, `NotificationSubscriptionView` |
 | 플랫폼 | `payment` | 요금제·구독·결제의 기본 API(`PlanController`, `PaymentController`) | Plan, PlanPricing, Subscription, Payment, Coupon, Promotion | 없음 |
 
 `global`(보안·설정·예외·ID)과 `batch`(정기 작업)는 bounded context가 아니다.
 
-없는 것: Organization·Site·거래처([ADR-001](adr/ADR-001-organization-project-boundary.md)에 따라 아직 만들지 않음), `domain/erp`·`mes`·`scm`·`wms` 같은 대형 패키지(만들지 않음).
+Organization은 [ADR-001](adr/ADR-001-organization-project-boundary.md)에 따라 project 안에 구현돼 있고, 공급처는 purchasing이 소유한다. 독립 Site 엔티티와 CRM context는 없다. 보관 위치의 `site` 계층은 inventory의 `StorageLocation` 모델이다. `domain/erp`·`mes`·`scm`·`wms` 같은 대형 패키지는 만들지 않는다.
 
 ## 2. Core와 도메인 확장
 
 [ADR-003](adr/ADR-003-resource-port-contract.md) 결정 10을 따른다.
 
 - **Core**: `workflow`·`flowrun`·`rule`. 업종 개념을 넣지 않는다. 포트의 의미는 `resourceType`과 `schemaJson`으로 나타내고, `itemId`는 Catalog와 연결될 때만 쓰는 선택적 binding이다.
-- **제조 확장**: `catalog`·`bom`·`inventory`·`production`·`quality`. 재고 부수효과는 여기서만 일어난다.
-- **플랫폼**: `project`·`user`·`payment`.
+- **제조·업무 확장**: `catalog`·`bom`·`inventory`·`production`·`quality`·`purchasing`·`workforce`. 재고 원장의 변경은 inventory의 명령 계약을 통해 수행한다.
+- **외부 연동**: `connector`. workflow가 실행 binding을 정의하고 flowrun이 공개 HTTP 실행 계약을 사용한다.
+- **플랫폼**: `project`·`user`·`payment`·`notification`.
 - FlowRun의 범용성은 비제조 vertical slice로 검증될 때까지 목표다(ADR-003 결정 8).
 
 ## 3. 기업 시스템 개념과의 대응
 
 FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 기존 context에 넣는다.
 
-| 개념 | FlowMat에서 맡는 곳 | 지금 있는 것 | 없는 것 |
+| 개념 | FlowMat에서 맡는 곳 | 지금 있는 것 | 남은 범위·경계 |
 |---|---|---|---|
-| ERP 기준정보 | `catalog` | 품목 상세·상태·CSV, 단위 환산, 설비 정보 | 거래처, 사업장(ADR-001 보류) |
-| ERP 재고 회계 | `inventory`, `bom` | 재료비·재고 금액, 원가 누적 | 단가 이력, 통화, 총계정원장 |
-| MRP / SCM 계획 | `bom`, `production` | 다단계 전개, 간이 MRP, 만들 수 있는 양, 재주문 목록 | ~~구매·발주~~ → 아래 구매(2026-10-24), 리드타임, 공급 계획 |
-| 구매 | `purchasing` | 발주서(초안 → 주문 → 줄마다 입고, 닫기·취소), 입고는 inventory 공개 명령([ADR-027](adr/ADR-027-purchasing.md), 2fm) | 공급처 목록, 단가·금액, 승인, 반품, 자재 소요 예정 공급 |
-| MES 실행 | `production`, `flowrun` | 작업지시, 실행 기록, revision 고정, 보정, 작업 지침, 준비 점검 | 노드 자동 실행, 작업자 배정 |
-| APS / 용량 | `catalog`, `production` | 설비 달력(교대 여러 개)·정지·휴일, 전환 시간, 부하표, 작업지시 계획 기간 제안 | 순서 최적화, 여러 작업지시 한꺼번에 배치 |
-| WMS | `inventory` | 위치 목록, 이동, 할당, Putaway·Pick, 실사 | 모바일 스캔 작업, 위치 용량 |
-| QMS | `quality` | 검사·불량, 검사 기준, NCR·CAPA | 효과 확인, 알림 |
-| BPM / Workflow | `workflow`, `flowrun`, `rule` | 정의·발행·검증, 실행 단계·시도·이벤트, 조건 라우팅 | BPMN, 실행기, 시간 제한 |
+| ERP 기준정보 | `catalog` | 품목 상세·상태·CSV, 단위 환산, 설비 정보 | 거래처 전체 모델과 독립 사업장은 없음. 공급처는 purchasing에 있음 |
+| ERP 재고 회계 | `inventory`, `bom`, `catalog` | 재료비·재고 금액, 원가 누적, 품목 단가 이력 | 다중 통화·총계정원장 없음 |
+| MRP / SCM 계획 | `bom`, `production`, `purchasing` | 다단계 전개, 간이 MRP, 만들 수 있는 양, 재주문 목록, 발주 예정 공급·부족 시점 | 범용 공급망 계획 전체를 구현한 것은 아님 |
+| 구매 | `purchasing` | 공급처·단가, 단계별 승인, 발주·입고·반품·대변, 예정 공급. 입고·반품은 inventory 공개 명령([ADR-027](adr/ADR-027-purchasing.md)) | 발주서 전송 등 상세 잔여 범위는 [구매 계약](../domain/purchasing.md) 기준 |
+| MES 실행 | `production`, `flowrun`, `workforce` | 작업지시, 실행 기록, revision 고정, 보정, 작업 지침, 준비 점검, 필요한 인력과 실행 작업자 기록 | 범용 작업 자동 실행기는 없음 |
+| APS / 용량 | `catalog`, `production`, `workforce` | 설비·인력 달력, 전환 시간, 부하표, 한 건·여러 건의 일정 제안, 전환 시간 합을 줄이는 순서 제안 | 납기·부하 균형을 함께 보는 최적화는 남음 |
+| WMS | `inventory` | 위치 목록, 이동, 할당, Putaway·Pick, 실사, 휴대 기기용 스캔 화면 | 위치 용량 모델 없음 |
+| QMS | `quality`, `notification` | 검사·불량, 검사 기준, NCR·CAPA, 효과 확인, 담당·기한 알림 | 상세 검증 범위는 [현재 기능 기준선](../status/CURRENT_CAPABILITIES.md) 기준 |
+| BPM / Workflow | `workflow`, `flowrun`, `rule`, `connector` | 정의·발행·검증, 실행 단계·시도·이벤트, 조건 라우팅, 시간 제한·재시도·동시 실행 제한, 명시적 HTTP 단계 실행 | BPMN·범용 자동 실행기·예약 반복 실행은 없음 |
 
 ## 4. 의존 규칙과 지금의 위반
 
@@ -67,7 +72,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
   - quality → catalog 5
 - 2026-10-18에 마지막 7건까지 없애고([ADR-012](adr/ADR-012-workflow-access-boundary.md)) 동결을 풀었다. 이제 위반이 하나라도 생기면 테스트가 실패한다.
 - Stage B(위반이 있는 파일을 고칠 때 공개 API로 바꾸기)는 2026-10-18에 끝났다(ADR-002).
-- 다른 context의 `application` 클래스(`UnitConverter`, `ProjectAccessService` 등)를 직접 쓰는 것은 아직 막지 않는다(ADR-002 보류 항목).
+- ADR-002에 남아 있던 다른 context의 `application` 직접 접근 허용은 ADR-036 결정 6으로 대체됐다. `UnitConverter`·`ProjectAccessService` 같은 구현 대신 `UnitConversion`·`ProjectAccess` 공개 계약을 사용하며, 위반은 테스트가 바로 막는다.
 - context 사이 의존은 한 방향만 둔다(2026-11-07부터 `ModuleBoundaryTest`가 순환을 막는다). 각 context를 따로 Gradle 모듈로 뗄 수 있게 하기 위해서다. 지금 가능한 순서는 다음과 같다. 오른쪽 context는 왼쪽을 쓸 수 있고, 왼쪽은 오른쪽을 모른다.
 
   `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality` < `purchasing`·`workforce` < `production`

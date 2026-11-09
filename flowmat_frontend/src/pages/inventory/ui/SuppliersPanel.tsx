@@ -94,7 +94,7 @@ export function SuppliersPanel({ projectId, items }: { projectId: string; items:
     const current = usual.find((one) => one.itemId === usualForm.itemId)
     const unitPrice = typedPrice(usualForm.unitPrice)
     if (unitPrice === undefined) {
-      setUsualError('Their price is 0 or more with at most four decimals, or empty.')
+      setUsualError('Their price is 0 or more with at most four decimals, or empty. Use at most 10 digits before the decimal.')
       return
     }
     setUsualError(null)

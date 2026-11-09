@@ -2,7 +2,7 @@ name: Browser E2E with Backend Services
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:

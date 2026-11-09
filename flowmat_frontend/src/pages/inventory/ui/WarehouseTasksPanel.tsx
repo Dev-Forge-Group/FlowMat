@@ -84,7 +84,9 @@ export function WarehouseTasksPanel({ projectId, items }: { projectId: string; i
     event.preventDefault()
     const payload = putawayPayload(putaway, selected, free)
     setPutawayError(payload.error)
-    if (payload.input) create.mutate(payload.input, { onSuccess: () => setPutaway(EMPTY_PUTAWAY) })
+    const submitted = putaway
+    if (payload.input) create.mutate(payload.input,
+      { onSuccess: () => setPutaway((current) => current === submitted ? EMPTY_PUTAWAY : current) })
   }
 
   function submitPick(event: FormEvent) {
