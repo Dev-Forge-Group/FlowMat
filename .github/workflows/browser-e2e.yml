@@ -315,6 +315,12 @@ jobs:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts
 
+      - name: Run real purchase and warehouse recovery E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts
+
       - name: Run real equipment schedule E2E
         working-directory: flowmat_frontend
         env:

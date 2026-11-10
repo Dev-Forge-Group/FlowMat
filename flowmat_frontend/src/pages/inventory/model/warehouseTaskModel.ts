@@ -1,4 +1,4 @@
-import type { PickListInput, PickListLine, PutawayInput, WarehouseTaskDto } from '../../../entities/inventory/api/useWarehouseTasks'
+import type { PickListInput, PickListLine, PutawayInput, WarehouseTaskCompletionInput, WarehouseTaskDto } from '../../../entities/inventory/api/useWarehouseTasks'
 import type { InventoryDto, WorkOrderDto } from '../../../shared/types/api'
 
 /** What of a record is not already planned in open tasks; the server checks the same. */
@@ -20,6 +20,14 @@ export function partQuantity(
     return { quantity: null, error: `Enter a quantity above 0 and at most ${task.quantity}.` }
   }
   return { quantity, error: null }
+}
+
+/** Keep the observed remaining quantity with this intention, including retries after an uncertain partial result. */
+export function taskCompletionInput(
+  task: Pick<WarehouseTaskDto, 'taskId' | 'quantity'>,
+  options: Pick<WarehouseTaskCompletionInput, 'quantity' | 'expectedToLocation'> = {},
+): WarehouseTaskCompletionInput {
+  return { taskId: task.taskId, expectedQuantity: task.quantity, ...options }
 }
 
 export function freeToMove(record: InventoryDto, openTasks: WarehouseTaskDto[]): number {

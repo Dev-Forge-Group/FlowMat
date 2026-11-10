@@ -56,7 +56,7 @@ public class WarehouseTaskController {
         @Valid @RequestBody(required = false) WarehouseTaskCompleteRequest request
     ) {
         return ApiResponse.ok(warehouseTaskService.complete(taskId, request == null ? null : request.quantity(),
-            request == null ? null : request.expectedToLocation()));
+            request == null ? null : request.expectedToLocation(), request == null ? null : request.expectedQuantity()));
     }
 
     /** Who should do an open task (docs/domain/warehouse-task.md W7). */

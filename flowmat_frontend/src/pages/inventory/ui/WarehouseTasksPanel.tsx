@@ -4,6 +4,7 @@ import { useInventoriesQuery } from '../../../entities/inventory/api/useInventor
 import {
   useWarehouseTaskMutations,
   useWarehouseTasksQuery,
+  type WarehouseTaskCompletionInput,
   type WarehouseTaskStatus,
 } from '../../../entities/inventory/api/useWarehouseTasks'
 import { useWorkOrdersQuery } from '../../../entities/production/api/useWorkOrders'
@@ -24,6 +25,7 @@ import {
   putawayPayload,
   scannerTasks,
   shortageText,
+  taskCompletionInput,
   tasksFor,
   type AssigneeFilter,
 } from '../model/warehouseTaskModel'
@@ -59,8 +61,8 @@ export function WarehouseTasksPanel({ projectId, items }: { projectId: string; i
   const [pickError, setPickError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-  // The open task being done in part, and how much of it moves now.
-  const [parting, setParting] = useState<string | null>(null)
+  // Reopening starts a new intention; a refresh after a lost response must not rebase the existing form.
+  const [parting, setParting] = useState<WarehouseTaskCompletionInput | null>(null)
   const [partText, setPartText] = useState('')
   const [partError, setPartError] = useState<string | null>(null)
   // A handheld's view (W9) is ?view=scanner on the Tasks tab, so a device can keep it as a bookmark.
@@ -113,7 +115,7 @@ export function WarehouseTasksPanel({ projectId, items }: { projectId: string; i
           <h2 style={{ margin: 0 }}>Tasks</h2>
           <button type="button" style={{ marginLeft: 'auto', minHeight: 44 }} onClick={() => showScanner(false)}>Full view</button>
         </div>
-        <TaskScan large tasks={openTasks} items={items} me={me} complete={(taskId, expectedToLocation) => complete.mutateAsync({ taskId, expectedToLocation })} />
+        <TaskScan large tasks={openTasks} items={items} me={me} complete={(input) => complete.mutateAsync(input)} />
         {openQuery.isError && <p role="alert">{errorMessage(openQuery.error)}</p>}
         <h3 style={{ margin: 0, fontSize: 16 }}>My open tasks ({mine.length})</h3>
         {mine.length === 0 ? (
@@ -152,7 +154,7 @@ export function WarehouseTasksPanel({ projectId, items }: { projectId: string; i
           <option value="nobody">Not assigned</option>
         </select>{' '}
         <button type="button" style={{ marginBottom: 8, fontSize: 12 }} onClick={() => showScanner(true)}>Scanner view</button>
-        <TaskScan tasks={openTasks} items={items} me={me} complete={(taskId, expectedToLocation) => complete.mutateAsync({ taskId, expectedToLocation })} />
+        <TaskScan tasks={openTasks} items={items} me={me} complete={(input) => complete.mutateAsync(input)} />
         {tasksQuery.isError && <p role="alert">{errorMessage(tasksQuery.error)}</p>}
         {rowError && <p role="alert" style={{ color: '#dc2626' }}>{rowError}</p>}
         {tasks.length === 0 && !tasksQuery.isPending && <p className="inspector-hint">No tasks{status ? ` ${status}` : ''}.</p>}
@@ -183,24 +185,31 @@ export function WarehouseTasksPanel({ projectId, items }: { projectId: string; i
                   {task.note && <div className="inspector-hint">{task.note}</div>}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  {task.status === 'open' && cancelling !== task.taskId && parting !== task.taskId && (
+                  {task.status === 'open' && cancelling !== task.taskId && parting?.taskId !== task.taskId && (
                     <>
-                      <button type="button" disabled={complete.isPending} onClick={() => complete.mutate({ taskId: task.taskId })}>Done</button>{' '}
-                      <button type="button" onClick={() => { setParting(task.taskId); setPartText(''); setPartError(null) }}>Part…</button>{' '}
+                      <button type="button" disabled={complete.isPending} onClick={() => complete.mutate(taskCompletionInput(task))}>Done</button>{' '}
+                      <button type="button" onClick={() => { setParting(taskCompletionInput(task)); setPartText(''); setPartError(null) }}>Part…</button>{' '}
                       <button type="button" onClick={() => { setCancelling(task.taskId); setReason('') }}>Cancel</button>
                     </>
                   )}
-                  {parting === task.taskId && (
+                  {parting?.taskId === task.taskId && (
                     <form aria-label={`Move part of ${task.taskNo}`} style={{ display: 'flex', gap: 4, alignItems: 'center' }} onSubmit={(event) => {
                       event.preventDefault()
                       const part = partQuantity(task, partText)
                       setPartError(part.error)
-                      if (part.quantity !== null) {
-                        complete.mutate({ taskId: task.taskId, quantity: part.quantity }, { onSuccess: () => setParting(null) })
+                      if (part.quantity !== null && parting) {
+                        const submitted = parting
+                        complete.mutate({ ...submitted, quantity: part.quantity }, {
+                          onSuccess: () => setParting((current) => current === submitted ? null : current),
+                        })
                       }
                     }}>
                       <input aria-label="Quantity moved" type="number" min="0" step="any" value={partText} style={{ width: 70 }}
-                        onChange={(event) => setPartText(event.target.value)} />
+                        onChange={(event) => {
+                          setPartText(event.target.value)
+                          // A newer draft keeps the same confirmation, but must survive an older response.
+                          setParting((current) => current ? { ...current } : null)
+                        }} />
                       <button type="submit" disabled={complete.isPending}>Move</button>
                       <button type="button" onClick={() => setParting(null)}>Back</button>
                       {partError && <span role="alert" style={{ color: '#dc2626' }}>{partError}</span>}
