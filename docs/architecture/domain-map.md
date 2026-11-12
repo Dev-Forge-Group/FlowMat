@@ -1,6 +1,6 @@
 # 도메인 지도
 
-> **현행 문서** · 최종 확인 2026-10-02(코드 `45f5df0` + 작업 트리), 의존 방향 2026-11-07 · 패키지나 책임이 바뀌면 같은 변경에서 고친다.
+> **현행 문서** · 최종 확인 2026-10-02(코드 `45f5df0` + 작업 트리), 의존 방향 2026-11-07, 모듈 카탈로그 2026-11-13 · 패키지나 책임이 바뀌면 같은 변경에서 고친다.
 > 이전 판(2026-09-24): [archive/2026-09-architecture/enterprise-domain-map.md](../archive/2026-09-architecture/enterprise-domain-map.md)
 
 백엔드 `flowmat_backend`의 bounded context와 각자의 책임, 서로의 의존 규칙을 한곳에 모은다. 결정의 근거는 [ADR-002](adr/ADR-002-module-dependency.md)(모듈 의존)와 [ADR-003](adr/ADR-003-resource-port-contract.md)(Core와 도메인 확장)이다. 기능별 구현 여부는 [CURRENT_CAPABILITIES](../status/CURRENT_CAPABILITIES.md)가 기준이다.
@@ -24,6 +24,8 @@
 | 플랫폼 | `payment` | 요금제·구독·결제의 기본 API(`PlanController`, `PaymentController`) | Plan, PlanPricing, Subscription, Payment, Coupon, Promotion | 없음 |
 
 `global`(보안·설정·예외·ID)과 `batch`(정기 작업)는 bounded context가 아니다.
+
+이 표는 손으로 고치는 설명이라 늦을 수 있다. 모듈 목록, 모듈 사이 의존, 공개 API가 있는지, 데이터 소유는 테스트가 코드·DB와 대조하는 [`modules.yml`](../../modules.yml)이 기준이다(§6). 표에 없는 `connector`·`notification`·`purchasing`·`workforce`도 거기에 있다.
 
 없는 것: Organization·Site·거래처([ADR-001](adr/ADR-001-organization-project-boundary.md)에 따라 아직 만들지 않음), `domain/erp`·`mes`·`scm`·`wms` 같은 대형 패키지(만들지 않음).
 
@@ -67,7 +69,6 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
   - quality → catalog 5
 - 2026-10-18에 마지막 7건까지 없애고([ADR-012](adr/ADR-012-workflow-access-boundary.md)) 동결을 풀었다. 이제 위반이 하나라도 생기면 테스트가 실패한다.
 - Stage B(위반이 있는 파일을 고칠 때 공개 API로 바꾸기)는 2026-10-18에 끝났다(ADR-002).
-- 다른 context의 `application` 클래스(`UnitConverter`, `ProjectAccessService` 등)를 직접 쓰는 것은 아직 막지 않는다(ADR-002 보류 항목).
 - context 사이 의존은 한 방향만 둔다(2026-11-07부터 `ModuleBoundaryTest`가 순환을 막는다). 각 context를 따로 Gradle 모듈로 뗄 수 있게 하기 위해서다. 지금 가능한 순서는 다음과 같다. 오른쪽 context는 왼쪽을 쓸 수 있고, 왼쪽은 오른쪽을 모른다.
 
   `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality` < `purchasing`·`workforce` < `production`
@@ -90,3 +91,29 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 3. 기존 context 책임 안에 들어가는가? 들어가면 거기에 둔다. 새 context는 책임 경계가 분명할 때만 만든다.
 4. 다른 context의 데이터가 필요한가? 필요하면 그 context의 공개 API를 쓰거나 만든다.
 5. Project 경계 안의 데이터인가? (지금 모든 업무 데이터는 `project_id`로 격리한다)
+
+## 6. 모듈 카탈로그와 데이터 묶임
+
+저장소 루트의 [`modules.yml`](../../modules.yml)이 모듈 카탈로그다. 모듈마다 책임, 경로, 의존(`depends_on`), 공개 계약이 있는지, 외래키로 가리키는 모듈(`data.foreign_keys_to`), 추출 상태(`status`)와 후보 저장소를 적는다. 실행 설정이 아니라 설명과 검증의 기준이다.
+
+- [`ModuleCatalogTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleCatalogTest.java): 모듈 목록은 `settings.gradle`, `depends_on`은 각 모듈의 `build.gradle`, `contract`는 `publicapi` 패키지와 같아야 한다. 적힌 경로가 있어야 하고, 후보 저장소는 `repositories`에 있어야 한다.
+- [`ModuleCatalogDataTest`](../../flowmat_backend/src/test/java/org/myweb/flowmat/architecture/ModuleCatalogDataTest.java): 마이그레이션을 모두 적용한 DB에서 본다. 테이블은 그것을 매핑한 엔티티의 모듈이 소유한다. 테이블마다 소유 모듈이 하나이거나 `unowned_tables`에 있어야 하고, 모듈 사이 외래키는 `data.foreign_keys_to`와 같아야 한다.
+- 그래서 모듈을 더하거나, 모듈 의존을 바꾸거나, 다른 모듈의 테이블로 외래키를 새로 걸면 같은 변경에서 `modules.yml`을 고쳐야 테스트가 통과한다.
+
+2026-11-13에 확인한 데이터 묶임(V133까지, 테이블 135개)은 다음과 같다.
+
+- 123개 테이블은 소유 모듈이 하나씩 있다. 나머지 12개는 V1이 만들었지만 엔티티도 쓰는 코드도 없고 행도 없다(`unowned_tables`).
+- 외래키로 이어진 테이블 쌍은 127개다. 84개는 한 모듈 안, 22개는 `project`·`platform`으로 가고, 21개가 업무 모듈 사이다.
+- 업무 모듈 사이 외래키는 `production`·`inventory`·`quality`·`flowrun`·`workflow`·`catalog`·`connector` 일곱 모듈을 한 덩어리로 묶는다. DB를 모듈별로 나누려면 이 외래키부터 없애야 한다.
+- 그중 넷은 코드 의존과 반대 방향이다. 코드에서는 `production`이 위에 있지만, 테이블은 아래 모듈이 `production`을 가리킨다.
+
+  | 가리키는 테이블 | 가리켜지는 테이블 | 코드 의존 |
+  |---|---|---|
+  | flowrun `flow_run` | production `production_run` | production → flowrun |
+  | inventory `warehouse_task` | production `stock_allocation`, `work_order` | production → inventory |
+  | quality `nonconformity` | production `production_run` | production → quality |
+
+  `production`도 `inventory`를 가리키므로(`stock_allocation` → `inventory`·`lot_master`) 두 모듈의 테이블은 서로 묶여 있다.
+- `bom`·`purchasing`·`rule`·`payment`·`platform`의 테이블은 다른 모듈로 가는 외래키가 없다. 다른 모듈의 행은 id 값으로만 가리킨다. 외래키가 없다고 독립인 것은 아니다. id로 가리키는 행의 정합성과, 같은 트랜잭션에서 부르는 공개 명령(예: 구매 입고의 재고 반영)은 따로 봐야 한다.
+
+후보 저장소(`candidate_repository`)는 계획의 제안이고 결정이 아니다. `status`가 `internal`인 모듈의 원본은 이 저장소이고, 후보 저장소에 같은 코드를 두지 않는다.
