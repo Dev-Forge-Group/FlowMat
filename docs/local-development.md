@@ -62,6 +62,19 @@ npm run dev
 | 브라우저 E2E(가짜 API) | `npm run test:e2e` | 실 API가 필요한 spec 4개는 건너뛴다 |
 | 브라우저 E2E(실 API) | 백엔드·Vite를 띄운 뒤 `REAL_API_E2E=1 BASE_URL=http://localhost:5173 npx playwright test` | 한 worker로 돈다. 로그인 제한(계정당 10분 8회, IP당 12회)에 걸리면 429가 나므로, 전체를 돌릴 때는 백엔드를 `AUTH_LOGIN_ACCOUNT_LIMIT`·`AUTH_LOGIN_IP_LIMIT`를 크게 준 환경변수로 띄운다 |
 
+GitHub Actions는 바뀐 경로에 맞는 검사만 돌린다(2026-11-13, 비공개 저장소의 Actions 사용량 한도 때문). 같은 PR에 다시 push하면 이전 실행은 취소된다.
+
+| 워크플로 | 도는 조건(바뀐 경로) |
+|---|---|
+| `backend.yml` | `flowmat_backend/**`, `modules.yml` |
+| `frontend.yml` | `flowmat_frontend/**`, `modules.yml` |
+| `mock-e2e.yml`(가짜 API 브라우저) | `flowmat_frontend/**` |
+| `browser-e2e.yml`(실 API 브라우저) | `flowmat_backend/**`, `flowmat_frontend/**`, `scripts/**` |
+| `security.yml`의 npm audit | 프런트 `package.json`·`package-lock.json`, 그리고 매주 일요일 |
+| `commit-attribution.yml` | 항상 |
+
+각 워크플로는 자기 파일이 바뀔 때도 돈다. 문서만 바꾼 변경은 작성자 표기 검사만 돈다. 경로와 상관없이 전부 돌리려면 Actions 화면에서 워크플로를 직접 실행한다(`workflow_dispatch`).
+
 모듈 경계 테스트(`ModuleBoundaryTest`)는 2026-10-18부터 동결 목록 없이 돈다. 다른 도메인의 repository를 쓰면 바로 실패한다([ADR-002](architecture/adr/ADR-002-module-dependency.md), [ADR-012](architecture/adr/ADR-012-workflow-access-boundary.md)).
 
 ## 사본 두 개를 함께 띄우기

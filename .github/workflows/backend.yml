@@ -1,10 +1,28 @@
 name: Backend Tests & Build
 
+# Runs only when the backend, the module catalog its tests read, or this file changes, because Actions minutes are
+# limited. A frontend or docs change does not change these results: the one thing here that reads the frontend, the
+# catalog's folder paths, is checked by the frontend's own tests too.
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'flowmat_backend/**'
+      - 'modules.yml'
+      - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'flowmat_backend/**'
+      - 'modules.yml'
+      - '.github/workflows/backend.yml'
+  # Runs it whatever changed.
+  workflow_dispatch:
+
+# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   build:
