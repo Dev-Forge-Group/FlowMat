@@ -122,4 +122,4 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
   `production`도 `inventory`를 가리키므로(`stock_allocation` → `inventory`·`lot_master`) 두 모듈의 테이블은 서로 묶여 있다.
 - `bom`·`purchasing`·`rule`·`payment`·`platform`의 테이블은 다른 모듈로 가는 외래키가 없다. 다른 모듈의 행은 id 값으로만 가리킨다. 외래키가 없다고 독립인 것은 아니다. id로 가리키는 행의 정합성과, 같은 트랜잭션에서 부르는 공개 명령(예: 구매 입고의 재고 반영)은 따로 봐야 한다.
 
-후보 저장소(`candidate_repository`)는 계획의 제안이고 결정이 아니다. `status`가 `internal`인 모듈의 원본은 이 저장소이고, 후보 저장소에 같은 코드를 두지 않는다.
+후보 저장소(`candidate_repository`)는 [분리 후보](extraction-candidates.md)의 묶음을 따르며, 제안이고 결정이 아니다. `status`가 `internal`인 모듈의 원본은 이 저장소이고, 후보 저장소에 같은 코드를 두지 않는다.

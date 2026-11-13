@@ -8,11 +8,13 @@
 | --- | --- | --- |
 | ERP | backend `catalog`, `bom`, `inventory`, `purchasing` 모듈과 대응 frontend entities/pages | **우선:** 승인→부분 입고→putaway→LOT·원장·반품 대사를 기존 API로 연결하고 실패 복구를 검증한다. 별도 저장소는 독립 변경·릴리스 수요와 소비 계약을 확인한 뒤 판단한다. |
 | MES | backend `production`, `quality`, `workforce`, `workflow`, `flowrun` 및 기존 재고 공개 계약 | 구매·창고 여정 다음에 생산·품질·LOT까지 한 여정을 확장한다. ERP/MES 양쪽에 품목·재고·BOM 쓰기 책임을 복사하지 않는다. |
-| flowmat-editor | `flowmat_frontend/src/lib/flowmat-editor`의 core와 React 연결부, 제품의 저장·권한 adapter | 공개 export·host 계약, 실제 독립 consumer, pack/consumer fixture, 직렬화 호환·단일 React·되돌리기를 확인한다. 다른 작업 공간에서 이미 추출한 정본이 있으면 먼저 비교한다. |
+| flowmat-editor | 정본은 [Dev-Forge-Group/flowmat-editor](https://github.com/Dev-Forge-Group/flowmat-editor)이고 `@dev-forge-group/flowmat-editor@0.1.0`으로 발행돼 있다(2026-11-08). `flowmat_frontend/src/lib/flowmat-editor`는 그 릴리스의 사본이며 테스트가 내용을 고정한다. 제품의 저장·권한 adapter는 FlowMat에 있다 | FlowMat이 사본 대신 패키지를 설치하도록 바꾸고 사본을 지운다. 그 전에는 사본을 고치지 않고 편집기 저장소에서 고쳐 릴리스를 가져온다. |
 | flowmat-compute | 기존 production·flowrun·workflow·rule 계산과 실행 계약 | 대표 입력의 병목을 측정하고 Java/TypeScript 개선과 비교한다. 개정·단위·정밀도·권한·취소·비물리 실행 계약과 단일 원장 writer를 고정한 뒤 별도 언어/실행 단위를 선택한다. |
 | flowmat-ai | 이 checkout에서 독립 FlowMat AI 프로젝트는 확인되지 않음 | 실제 의사결정 한 가지와 평가 사례·데이터 audience·비용·fallback·운영 owner를 먼저 정한다. UniPlace AI 사본을 FlowMat 정본으로 복제하지 않는다. |
 | flowmat-crm | 독립 CRM 프로젝트는 확인되지 않음. 공급처·구매는 현 purchasing 책임 | 고객·영업·견적·상담의 실제 요구와 기존 기능의 부족을 확인한다. 기존 공급처 기능을 이름만 바꿔 별도 제품으로 만들지 않는다. |
 | devforge-deploy | 현 `.github/workflows`, backend `compose.yaml`과 제품별 배포 정의 | 기존 릴리스의 source·artifact·DB·설정 호환과 격리 환경 적용·복구를 먼저 연결한다. 여러 저장소 산출물을 조합해야 할 때 활성 원본과 불변 버전 관리 책임을 확정한다. |
+
+후보별 모듈 묶음은 테스트가 코드·DB와 대조하는 [`modules.yml`](../../modules.yml)의 `candidate_repository`에도 적혀 있다. ERP와 MES 묶음은 DB에서 서로 묶여 있다. inventory와 production이 서로 외래키로 가리키고, quality가 catalog·inventory를 가리킨다([도메인 지도](domain-map.md) §6). 두 묶음을 다른 저장소나 DB로 나누려면 이 외래키부터 없애야 한다.
 
 새 폴더나 다른 작업 공간이 추가되면 `.git`뿐 아니라 manifest·실제 소스·생성물·submodule·외부 template 여부를 함께 확인한다. 기존 원격/다른 대화의 정본, local-only 변경, 현재 소비자와 소유 경로를 대조한 뒤 초기화·이동한다. Git 초기화, npm 패키지 추출, 독립 프로세스, DB 분리, 배포 조합은 각각 별도로 결정한다. 설정 YAML은 구현된 선택지를 연결하며 새 업무 로직·권한·트랜잭션을 대신하지 않는다.
 

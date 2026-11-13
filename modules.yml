@@ -18,8 +18,8 @@
 #   independent 독립 운영. 이 저장소에는 버전 고정 의존만 남는다
 #   retired     폐기
 #
-# candidate_repository는 계획의 제안이지 결정이 아니다. status가 internal인 동안 원본은 이 저장소이고,
-# 후보 저장소에 같은 코드를 두지 않는다(살아 있는 사본은 하나).
+# candidate_repository는 docs/architecture/extraction-candidates.md의 후보 묶음을 따른다. 제안이지 결정이 아니다.
+# status가 internal인 동안 원본은 이 저장소이고, 후보 저장소에 같은 코드를 두지 않는다(살아 있는 사본은 하나).
 
 schema: 1
 product: FlowMat
@@ -117,6 +117,9 @@ modules:
     data:
       foreign_keys_to: [connector]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - 업종과 무관한 Core다(domain-map §2). MES 저장소로 옮기면 다른 업종의 확장이 MES에 의존하게 된다.
 
   - id: flowrun
     kind: backend-module
@@ -130,6 +133,9 @@ modules:
       # flow_run이 production_run을 가리킨다. 코드 의존(production → flowrun)과 반대 방향이다.
       foreign_keys_to: [connector, production, project, workflow]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - 업종과 무관한 Core다(domain-map §2). flow_run이 production_run을 외래키로 가리킨다.
 
   - id: rule
     kind: backend-module
@@ -167,6 +173,9 @@ modules:
     data:
       foreign_keys_to: [project]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - MES 묶음의 production·quality가 품목과 설비를 외래키로 가리킨다.
 
   - id: bom
     kind: backend-module
@@ -179,6 +188,9 @@ modules:
     data:
       foreign_keys_to: []
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - 다른 모듈과 외래키가 없다. production과 inventory가 publicapi로 읽는다.
 
   - id: inventory
     kind: backend-module
@@ -193,6 +205,9 @@ modules:
       # 반대 방향이고, production도 inventory를 가리키므로 두 모듈의 테이블은 서로 묶여 있다.
       foreign_keys_to: [catalog, production, project]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - DB에서 MES 묶음의 production과 서로 외래키로 묶여 있다(warehouse_task → stock_allocation·work_order, stock_allocation → inventory·lot_master). ERP와 MES를 나누려면 이 외래키부터 없앤다.
 
   - id: quality
     kind: backend-module
@@ -206,6 +221,9 @@ modules:
       # nonconformity가 production_run을 가리킨다. 코드 의존(production → quality)과 반대 방향이다.
       foreign_keys_to: [catalog, inventory, production, project]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - ERP 묶음의 catalog·inventory를 외래키로 가리킨다(inspection_standard·nonconformity → item, nonconformity → lot_master).
 
   - id: purchasing
     kind: backend-module
@@ -235,6 +253,7 @@ modules:
     data:
       foreign_keys_to: [project]
     status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
 
   - id: production
     kind: backend-module
