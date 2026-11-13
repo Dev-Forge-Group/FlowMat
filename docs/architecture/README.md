@@ -13,6 +13,7 @@ FlowMat은 업종이 아니라 흐름을 모델링하고 실행한다. 업종 �
 | [decision-handoff.md](decision-handoff.md) | 확정된 결정, 아직 정하면 안 되는 것, 다음 작업 순서와 진행 상황 | 아키텍처에 닿는 작업을 시작하기 전 |
 | [adr/](adr/README.md) | ADR-001 Organization/Project 경계, ADR-002 모듈 의존 규칙, ADR-003 Resource·Port 계약과 실행 Core, ADR-004 Flow Run 실행 정책(Proposed) | 해당 결정의 근거·보류 항목·재검토 조건이 필요할 때 |
 | [domain-map.md](domain-map.md) | bounded context별 책임·엔티티·공개 API, 기업 시스템 개념 대응, 의존 규칙 | 새 기능을 어디에 둘지 정할 때 |
+| [`modules.yml`](../../modules.yml) | 모듈 카탈로그: 모듈별 경로·의존·공개 계약·외래키로 묶인 모듈·추출 상태와 후보 저장소. 테스트가 코드·DB와 대조한다([domain-map](domain-map.md) §6) | 모듈을 더하거나 나눌 때, 저장소 분리를 검토할 때 |
 | [execution-model.md](execution-model.md) | 정의 → 발행 revision → 실행, 상태, Flow Run, 시뮬레이션, 재고 부수효과 | 실행·계획 기능을 만들거나 바꿀 때 |
 
 ## 우선순위
