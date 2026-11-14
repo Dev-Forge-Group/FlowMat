@@ -86,9 +86,15 @@
 |---|---|---|---|
 | **archify 온전 이식** | 없음. 프런트만 바뀌므로 업무 검증과 나란히 한다. 대조표는 [archify 뷰어 기능 대조](../editor/archify-parity.md)이고, 11-14에 연결 고정 링크(`#relation=`)부터 시작했다 | 2주차: archify 뷰어의 기능 전체와 FlowMat을 대조한 표. 2~4주차: 빠진 것을 이식 | 대조표의 모든 줄이 "있음" 또는 "가져오지 않음(이유)"이고, 이식한 것마다 브라우저 테스트가 있다 |
 | **Rust 마이그레이션** | 3주차의 성능 기준선과 입출력 스냅숏. 계산이 DB 트랜잭션과 섞여 있어 그대로는 옮길 수 없다 | 3~4주차: JPA 없는 `modules/compute`로 순수 계산을 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 4주차: 계산 하나를 Rust로 구현해 같은 입력으로 비교 | Rust 구현이 스냅숏 입력 전부에서 Java와 같은 결과를 내고, 시간·메모리 비교가 기록돼 있다. 실제 전환은 다음 달 |
-| **optimized_setup 기능 가져오기** | 소스를 볼 수 있어야 한다. 지금 이 세션에서는 그 PC의 폴더가 보이지 않는다 | 3주차: 기능 목록과 FlowMat 대응표. 4주차: 고른 것 중 첫 기능 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
+| **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | 3주차: 기능 목록과 FlowMat 대응표. 4주차: 고른 것 중 첫 기능 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
 
-Rust의 대상은 계산(시뮬레이션, 그래프, BOM 전개)으로 잡았다. 권한·주문·재고 같은 업무 처리 전체를 옮기는 뜻이라면 계획을 다시 세워야 한다.
+**Rust의 범위(2026-11-14, 코드를 보고 정함): 계산만 옮긴다. 백엔드 전체는 옮기지 않는다.**
+
+- 백엔드는 모듈 15개, Java 약 72,000줄(1,192파일)이다. 저장소(repository) 123개, `@Transactional` 클래스 171개, 테스트 클래스 452개(3,302건), Flyway 마이그레이션 133개, Spring Security·JWT·OAuth2, STOMP, Redis를 쓴다. 전체를 다시 쓰면 이것을 모두 다시 만들고 검증할 때까지 기능을 내보낼 수 없다.
+- 무거운 서비스는 계산보다 DB 읽기가 크다. `EquipmentScheduleService` 1,009줄에 저장소 참조 50곳, `WorkerCalendarService` 1,058줄에 63곳, 시뮬레이션이 있는 `ProductionRunServiceImpl` 935줄에 23곳, `BomServiceImpl` 690줄에 26곳이다. Rust로 옮겨도 DB 왕복은 줄지 않는다. 느리다고 잰 곳도 아직 없다.
+- DB 없이 도는 계산은 지금 약 1,200줄이다: `FlowRunGraph`(400줄), `FlowRuleExpressionEvaluator`(343), `ConditionExpression`(271), `JsonMappingEngine`(174). 모두 테스트가 있다. BOM 전개·MRP·일정은 JPA 읽기와 섞여 있어 `modules/compute`로 먼저 떼어 내야 한다.
+- 수량과 금액은 `BigDecimal`과 정해진 반올림을 쓴다. Rust 구현은 같은 결과를 내는지 같은 입력으로 비교해야 한다.
+- **첫 대상은 조건식 언어**(`ConditionExpression`과 규칙 평가)다. 순수 계산이고 테스트가 있다. WASM으로도 빌드하면 편집기가 서버와 같은 코드로 입력 중에 조건을 검사할 수 있다(지금은 저장할 때 서버만 검사한다). 다음은 `FlowRunGraph`의 경로 계산, 그다음이 떼어 낸 BOM 전개다.
 
 네 줄기를 4주에 다 넣으면 빠듯하다. 밀릴 때 지키는 순서는 밑작업 → 두 여정과 릴리스 후보 → archify → compute와 Rust → optimized_setup이다.
 
@@ -101,17 +107,17 @@ Rust의 대상은 계산(시뮬레이션, 그래프, BOM 전개)으로 잡았다
 
 ## 사용자가 정해 줄 것
 
-한꺼번에 정해 두면 한 달 동안 묻지 않고 진행할 수 있다. 괄호 안은 권장안이다. 공개 범위(FlowMat과 flowmat-editor)와 두 작업 줄기 합치기는 11-13에 정해졌다.
+한꺼번에 정해 두면 한 달 동안 묻지 않고 진행할 수 있다. 괄호 안은 권장안이다. 공개 범위(FlowMat과 flowmat-editor)와 두 작업 줄기 합치기는 11-13에, Rust의 범위와 optimized_setup 소스는 11-14에 정해졌다.
 
 | 항목 | 선택 |
 |---|---|
 | 라이선스 | 정하지 않음, 또는 오픈소스 라이선스 (권장: 정할 때까지 README에 "라이선스 없음, 재사용 불가"를 적는다) |
 | 미사용 테이블 | 둔다, 또는 지운다 (권장: 3주차 복원 리허설 뒤에 지운다) |
 | 릴리스 후보의 이름 | 태그 이름과 버전 (권장: `v0.9.0-rc.1`) |
-| Rust의 범위 | 계산(시뮬레이션·그래프·BOM 전개)만, 또는 백엔드 전체 (이 계획은 계산만으로 잡았다) |
-| optimized_setup 소스 | Remote Control 폴더로 연결, 또는 비공개 저장소로 올림 (3주차 전까지 하나가 필요하다) |
 
 ## 위험
+
+- **settingTool을 가져올 때.** FlowMat은 공개 저장소다. settingTool에는 `yolov8n-seg.pt`(Ultralytics YOLOv8 가중치, AGPL-3.0)와 다른 조직의 서브모듈 `apgs_imgproc`(APGS-Group)가 있다. 가중치와 그 서브모듈의 코드는 라이선스와 소유를 확인하기 전에는 FlowMat에 넣지 않고, 설계 방식만 가져온다.
 
 - **Actions 사용량.** FlowMat과 flowmat-editor는 공개라 무료다. IBM-1st-Project와 uniplace-ai는 비공개라 이번 달 사용량이 초기화될 때까지 돌지 않는다.
 - **공개 뒤.** 지난 Actions 로그, PR과 댓글, `docs/status`의 내부 기록, 커밋 기록의 팀원 이메일이 모두 보인다. 전환 전 전체 이력 검사에서 키·토큰·실제 사용자 데이터는 나오지 않았다.
