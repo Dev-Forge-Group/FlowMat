@@ -238,8 +238,13 @@ public class WarehouseTaskService {
      * done.
      */
     @Transactional
-    public WarehouseTaskResponse complete(String taskId, BigDecimal quantity, String expectedToLocation) {
+    public WarehouseTaskResponse complete(String taskId, BigDecimal quantity, String expectedToLocation, BigDecimal expectedQuantity) {
         WarehouseTask task = lockOpen(taskId);
+        // W16: a partial move leaves the original task open with less quantity. An unchanged retry must not move it again.
+        if (expectedQuantity != null && expectedQuantity.compareTo(task.getQuantity()) != 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "expectedQuantity no longer matches task " + task.getTaskNo()
+                + ". Refresh the task list and check completed moves before reopening the completion form.");
+        }
         // W12: verify the actual scanned code after the same project lock used by location renames.
         if (expectedToLocation != null && !required(expectedToLocation, "expectedToLocation").equalsIgnoreCase(task.getToLocation())) {
             throw new BusinessException(ErrorCode.CONFLICT, "expectedToLocation does not match task " + task.getTaskNo()

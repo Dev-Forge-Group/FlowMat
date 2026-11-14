@@ -114,6 +114,10 @@ tasks.named('test') {
 	// The integration suite retains several JPA/Redis contexts in one test JVM.
 	maxHeapSize = '2g'
 	systemProperty 'spring.test.context.cache.maxSize', '4'
+	// The module catalog tests read these files, which are not on the test classpath: without them as inputs, a change
+	// to the catalog or to a module's dependencies alone would leave the test task up to date.
+	inputs.file(file('../modules.yml')).withPropertyName('moduleCatalog')
+	inputs.files(file('settings.gradle'), fileTree('modules') { include '*/build.gradle' }).withPropertyName('moduleBuildFiles')
 	finalizedBy tasks.named('jacocoTestReport')
 }
 

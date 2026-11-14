@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { WarehouseTaskDto } from '../../../entities/inventory/api/useWarehouseTasks'
+import type { WarehouseTaskCompletionInput, WarehouseTaskDto } from '../../../entities/inventory/api/useWarehouseTasks'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { formatQty } from '../../../shared/lib/formatQty'
 import type { ItemDto } from '../../../shared/types/api'
 import { findItemByScan } from '../model/itemScanModel'
-import { scannedPlaceFits, selectedScanTask, tasksForScan } from '../model/warehouseTaskModel'
+import { scannedPlaceFits, selectedScanTask, taskCompletionInput, tasksForScan } from '../model/warehouseTaskModel'
 
 /**
  * Doing a task with a scanner (docs/domain/warehouse-task.md W8): scan the item (barcode, SKU or code) to find its open
@@ -23,7 +23,7 @@ export function TaskScan({
   tasks: WarehouseTaskDto[]
   items: ItemDto[]
   me: string | null
-  complete: (taskId: string, expectedToLocation: string) => Promise<WarehouseTaskDto>
+  complete: (input: WarehouseTaskCompletionInput) => Promise<WarehouseTaskDto>
   large?: boolean
 }) {
   const big = large ? { fontSize: 18, minHeight: 44 } : undefined
@@ -69,7 +69,7 @@ export function TaskScan({
     }
     setBusy(true)
     try {
-      const done = await complete(chosen.taskId, placeText.trim())
+      const done = await complete(taskCompletionInput(chosen, { expectedToLocation: placeText.trim() }))
       setMessage({ error: false, text: `${done.taskNo} done: ${formatQty(done.quantity)} moved to ${done.toLocation}.` })
       setItemText('')
       setPlaceText('')

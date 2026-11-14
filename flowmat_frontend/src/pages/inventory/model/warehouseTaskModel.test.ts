@@ -16,6 +16,7 @@ import {
   selectedScanTask,
   shortageText,
   stagingPlacesFor,
+  taskCompletionInput,
   tasksFor,
   tasksForScan,
 } from './warehouseTaskModel'
@@ -35,6 +36,16 @@ function task(inventoryId: string, quantity: number, status: WarehouseTaskDto['s
     transferId: null, cancelReason: null, assignedTo: null,
   }
 }
+
+it('keeps the observed remaining quantity with a completion when the task later changes', () => {
+  const observed = task('record', 6)
+  const whole = taskCompletionInput(observed, { expectedToLocation: 'SHELF' })
+  const part = taskCompletionInput(observed, { quantity: 2 })
+  observed.quantity = 4
+  expect(whole).toEqual({ taskId: observed.taskId, expectedQuantity: 6, expectedToLocation: 'SHELF' })
+  expect(part).toEqual({ taskId: observed.taskId, expectedQuantity: 6, quantity: 2 })
+  expect(taskCompletionInput(observed)).toEqual({ taskId: observed.taskId, expectedQuantity: 4 })
+})
 
 describe('freeToMove and movableRecords', () => {
   it('keeps reserved pick tasks separate from free stock already planned for putaway', () => {

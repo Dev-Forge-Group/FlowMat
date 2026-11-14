@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createEllipseElement } from '../elements/EllipseElement'
-import { createLineElement } from '../elements/LineElement'
-import { createRectangleElement } from '../elements/RectangleElement'
-import { createTriangleElement } from '../elements/PolygonElement'
-import { createEmptyEditorDocument } from '../model/EditorDocument'
-import { toElementId } from '../model/ElementId'
+import {
+  createEllipseElement,
+  createEmptyEditorDocument,
+  createLineElement,
+  createRectangleElement,
+  createTriangleElement,
+  toElementId,
+} from '../../../lib/flowmat-editor'
 import {
   backendDtoToEditorDocument,
   editorDocumentToBackendSaveInput,
