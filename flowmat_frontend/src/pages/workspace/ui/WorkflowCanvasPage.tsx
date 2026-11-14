@@ -1049,7 +1049,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   // or shown the Route Probe owns the reading, as in archify, so the passport steps aside.
   const routeOwnsReading = Boolean(reading.picking) || reading.state?.kind === 'route'
   const passportProcessId = routeOwnsReading ? null
-    : selectedProcessId ?? (reading.state?.kind === 'focus' ? reading.state.processId : null)
+    : selectedProcessId ?? (reading.state?.kind === 'focus' ? reading.state.processId : reading.pinned?.from ?? null)
   const passportNode = passportProcessId ? canvas.nodeMap[passportProcessId] ?? null : null
   // The radar marks the processes in hand; a process picked on it is read like one found with the finder.
   const focusedProcessId = reading.state?.kind === 'focus' ? reading.state.processId : null
@@ -1879,7 +1879,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               position={passportPosition} onMove={setPassportPosition}
               onClose={() => {
                 clearSelection()
-                if (reading.state?.kind === 'focus') reading.clear()
+                if (reading.state?.kind === 'focus' || reading.state?.kind === 'relation') reading.clear()
               }}
               onFollow={(processId) => {
                 // Walks the graph: the process at the other end is selected and brought into view.

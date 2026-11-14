@@ -45,6 +45,28 @@ describe('readingView', () => {
   })
 })
 
+describe('a pinned connection', () => {
+  it('shows the connection with its two processes and names them', () => {
+    const view = readingView(graph, { kind: 'relation', connectionId: 'c2' }, nameOf)
+
+    expect(view?.text).toBe('Pinned connection from Bake to Cool')
+    expect([...view!.highlight!.nodeIds]).toEqual(['bake', 'cool'])
+    expect([...view!.highlight!.edgeIds]).toEqual(['c2'])
+    expect(view?.highlight?.origin).toBe('bake')
+    expect(readingTargets(graph, { kind: 'relation', connectionId: 'c2' })).toEqual(['bake', 'cool'])
+  })
+
+  it('names a loop once, and has nothing for a connection that is gone', () => {
+    const looping: ReadingGraph = { ...graph, edges: [...graph.edges, { id: 'c9', from: 'wash', to: 'wash' }] }
+
+    expect(readingView(looping, { kind: 'relation', connectionId: 'c9' }, nameOf)?.text)
+      .toBe('Pinned connection: Wash loops back to itself')
+    expect(readingTargets(looping, { kind: 'relation', connectionId: 'c9' })).toEqual(['wash'])
+    expect(readingView(graph, { kind: 'relation', connectionId: 'gone' }, nameOf)).toBeNull()
+    expect(readingTargets(graph, { kind: 'relation', connectionId: 'gone' })).toEqual([])
+  })
+})
+
 describe('reading by kind', () => {
   it('shows one kind with every connection touching it and the other ends nearby', () => {
     const storage = readingView(graph, { kind: 'lens', kinds: ['storage'] }, nameOf)!

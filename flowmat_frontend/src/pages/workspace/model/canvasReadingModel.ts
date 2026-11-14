@@ -31,6 +31,18 @@ const count = (value: number, one: string, many = `${one}s`) => `${value} ${valu
  */
 export function readingView(graph: ReadingGraph, state: ReadingState, nameOf: (processId: string) => string): ReadingView | null {
   if (state.kind === 'lens') return lensView(graph, state.kinds)
+  if (state.kind === 'relation') {
+    const edge = graph.edges.find((candidate) => candidate.id === state.connectionId)
+    if (!edge) return null
+    // archify's pinned relationship receipt: "Pinned relationship from Mix to Bake".
+    return {
+      highlight: { nodeIds: new Set([edge.from, edge.to]), edgeIds: new Set([edge.id]), tone: 'focus', origin: edge.from },
+      text: edge.from === edge.to
+        ? `Pinned connection: ${nameOf(edge.from)} loops back to itself`
+        : `Pinned connection from ${nameOf(edge.from)} to ${nameOf(edge.to)}`,
+      steps: [],
+    }
+  }
   if (state.kind === 'route') {
     const found = route(graph, state.from, state.to)
     if (!found) {
@@ -77,6 +89,10 @@ export function readingTargets(graph: ReadingGraph, state: ReadingState): string
     return shown ? [...shown.nodeIds, ...(shown.nearIds ?? [])] : []
   }
   if (state.kind === 'route') return route(graph, state.from, state.to)?.nodeIds ?? [state.from, state.to]
+  if (state.kind === 'relation') {
+    const edge = graph.edges.find((candidate) => candidate.id === state.connectionId)
+    return edge ? [...new Set([edge.from, edge.to])] : []
+  }
   if (!state.reach) return neighbourhood(graph, state.processId).nodeIds
   return reach(graph, state.processId, state.reach)?.nodeIds ?? []
 }

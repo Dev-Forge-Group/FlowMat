@@ -239,7 +239,8 @@ test('the passport lists a process\'s connections, previews one on the canvas an
   await processNode(page, 'proc-bake').click({ position: { x: 24, y: 18 } })
   const relationships = passport(page, 'Bake').getByRole('group', { name: 'Connected relationships' })
   await expect(relationships.locator('.relationship-lens-group-title')).toHaveText(['Outgoing', 'Incoming'])
-  const rows = relationships.getByRole('button')
+  // Each row has its pin beside it; the rows are the buttons that go to the other end.
+  const rows = relationships.locator('button.relationship-lens-row')
   await expect(rows).toHaveText([/Cool\s*connects to · material flow/, /Pack\s*connects to · material flow/,
     /Mix\s*connects from · material flow/])
 
@@ -263,6 +264,50 @@ test('the passport lists a process\'s connections, previews one on the canvas an
   await expect(page.locator('.inspector__title')).toHaveText('Mix')
   await expect(passport(page, 'Mix').locator('.relationship-lens-group-title')).toHaveText(['Outgoing'])
   await expect(page.locator('.reading-dim')).toHaveCount(0)
+})
+
+test('a pinned connection keeps a link to it, opens from the link and unpins back to its process', async ({ page }) => {
+  await openBakery(page)
+  await processNode(page, 'proc-bake').click({ position: { x: 24, y: 18 } })
+  const bake = passport(page, 'Bake')
+  const pinPack = bake.getByRole('button', { name: 'Pin the connection to Pack' })
+  await expect(pinPack).toHaveAttribute('aria-pressed', 'false')
+
+  // Pinning shows just that connection with its two processes, says which it is, and puts it in the address.
+  await pinPack.click()
+  expect(hashOf(page)).toBe('#relation=conn-bp')
+  await expect(bake.getByRole('button', { name: 'Unpin the connection to Pack' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(bake.getByRole('status')).toHaveText('Pinned connection from Bake to Pack')
+  await expect(connectionEdge(page, 'conn-bp')).toHaveClass(/reading-on/)
+  await expect(connectionEdge(page, 'conn-bc')).toHaveClass(/reading-dim/)
+  await expect(processNode(page, 'proc-pack')).toHaveClass(/reading-on/)
+  await expect(processNode(page, 'proc-cool')).toHaveClass(/reading-dim/)
+  await expect(bake.getByRole('button', { name: 'Copy link to pinned connection' })).toBeVisible()
+
+  // The link opens the same: the passport of the connection's start, with the connection pinned.
+  await page.goto('/projects/prj-e2e/workflows/wf-read')
+  await expect(page.locator('.relationship-lens')).toHaveCount(0)
+  await page.goto('/projects/prj-e2e/workflows/wf-read#relation=conn-mb')
+  const mix = passport(page, 'Mix')
+  await expect(mix.getByRole('button', { name: 'Unpin the connection to Bake' })).toHaveAttribute('aria-pressed', 'true',
+    { timeout: 15_000 })
+  await expect(mix.getByRole('status')).toHaveText('Pinned connection from Mix to Bake')
+  await expect(connectionEdge(page, 'conn-mb')).toHaveClass(/reading-on/)
+
+  // Unpinning goes back to reading the connection's start. As on any fresh page, the first Esc leaves the tool the page
+  // opens with and the next one stops reading.
+  await mix.getByRole('button', { name: 'Unpin the connection to Bake' }).click()
+  expect(hashOf(page)).toBe('#focus=proc-mix')
+  await expect(mix.getByRole('button', { name: 'Pin the connection to Bake' })).toHaveAttribute('aria-pressed', 'false')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect.poll(() => hashOf(page)).toBe('')
+
+  // A link to a connection that is gone opens the canvas unread.
+  await page.goto('/projects/prj-e2e/workflows/wf-read#relation=conn-gone')
+  await expect(page.locator('.react-flow__edge')).toHaveCount(3, { timeout: 15_000 })
+  await expect(page.locator('.reading-dim')).toHaveCount(0)
+  await expect(page.locator('.relationship-lens')).toHaveCount(0)
 })
 
 test('Runs shows a production run over the canvas, keeps it beside a reading in the link and hides it', async ({ page }) => {

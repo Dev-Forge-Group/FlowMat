@@ -5,19 +5,22 @@ import type { ReachDirection } from './graphReading'
 export type ReadingState =
   | { kind: 'focus'; processId: string; reach: ReachDirection | null }
   | { kind: 'route'; from: string; to: string }
+  /** One connection, pinned in its start process's passport (archify's `#relation=`). */
+  | { kind: 'relation'; connectionId: string }
   /** One or two process kinds, as the palette names them. */
   | { kind: 'lens'; kinds: readonly string[] }
 
 const LENS_KINDS = new Set(getWorkflowPaletteDefinitions().map((definition) => definition.nodeType))
 
 /**
- * `#focus=<id>`, `#focus=<id>&reach=upstream|downstream`, `#route=<from>~<to>` or `#lens=<kind>[~<kind>]`; empty for no
- * reading.
+ * `#focus=<id>`, `#focus=<id>&reach=upstream|downstream`, `#route=<from>~<to>`, `#relation=<connection id>` or
+ * `#lens=<kind>[~<kind>]`; empty for no reading.
  */
 export function formatReadingHash(state: ReadingState | null): string {
   if (!state) return ''
   if (state.kind === 'route') return `#route=${encodeURIComponent(state.from)}~${encodeURIComponent(state.to)}`
   if (state.kind === 'lens') return `#lens=${state.kinds.map(encodeURIComponent).join('~')}`
+  if (state.kind === 'relation') return `#relation=${encodeURIComponent(state.connectionId)}`
   return `#focus=${encodeURIComponent(state.processId)}${state.reach ? `&reach=${state.reach}` : ''}`
 }
 
@@ -47,11 +50,17 @@ export function withViewParams(readingHash: string, runId: string | null, revisi
 }
 
 /**
- * The reading an address asks for, if every process or kind it names is known; anything else (other keys, a bad direction,
- * a process that is gone, a third kind) reads as no reading rather than a broken view.
+ * The reading an address asks for, if every process, connection or kind it names is known; anything else (other keys, a
+ * bad direction, a process or connection that is gone, a third kind) reads as no reading rather than a broken view.
  */
-export function parseReadingHash(hash: string, knownProcessIds: ReadonlySet<string>): ReadingState | null {
+export function parseReadingHash(
+  hash: string,
+  knownProcessIds: ReadonlySet<string>,
+  knownConnectionIds: ReadonlySet<string> = new Set(),
+): ReadingState | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const connectionId = params.get('relation')
+  if (connectionId != null) return knownConnectionIds.has(connectionId) ? { kind: 'relation', connectionId } : null
   const routeValue = params.get('route')
   if (routeValue != null) {
     const parts = routeValue.split('~')

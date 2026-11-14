@@ -127,7 +127,10 @@ export function SemanticPassport({ reading, node, position, onMove, onClose, onF
   const relations = reading.relationsOf(processId)
   const state = reading.state
   const reach = state?.kind === 'focus' && state.processId === processId ? state.reach : undefined
-  const receipt = reach ? reading.view?.text ?? null : null
+  // A connection pinned here (`#relation=`): one of this process's, from either end.
+  const pinnedId = reading.pinned && (reading.pinned.from === processId || reading.pinned.to === processId)
+    ? reading.pinned.connectionId : null
+  const receipt = reach || pinnedId ? reading.view?.text ?? null : null
   const kind = getWorkflowNodeDefinition(node.nodeType).label
 
   function toggleReach(direction: 'upstream' | 'downstream') {
@@ -136,7 +139,7 @@ export function SemanticPassport({ reading, node, position, onMove, onClose, onF
   }
 
   async function copyLink() {
-    const hash = state?.kind === 'focus' && state.processId === processId
+    const hash = pinnedId || (state?.kind === 'focus' && state.processId === processId)
       ? window.location.hash
       : withViewParams(formatReadingHash({ kind: 'focus', processId, reach: null }), reading.run.id, reading.changes.id)
     const url = `${window.location.origin}${window.location.pathname}${window.location.search}${hash}`
@@ -193,14 +196,15 @@ export function SemanticPassport({ reading, node, position, onMove, onClose, onF
         <div className="relationship-lens-actions">
           <button type="button" className="relationship-lens-close" aria-label="Close semantic passport" title="Close"
             onClick={onClose}>&#215;</button>
-          <button type="button" className="relationship-lens-copy-link" aria-label="Copy link to focused process"
+          <button type="button" className="relationship-lens-copy-link"
+            aria-label={pinnedId ? 'Copy link to pinned connection' : 'Copy link to focused process'}
             onClick={() => void copyLink()}>
             {copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy link'}
           </button>
         </div>
       </div>
       <ProcessConnections key={`passport-${processId}`} relations={relations} nameOf={reading.nameOf}
-        onPreview={reading.previewConnection} onFollow={onFollow} />
+        pinnedId={pinnedId} onPin={reading.pin} onPreview={reading.previewConnection} onFollow={onFollow} />
     </div>
   )
 }
