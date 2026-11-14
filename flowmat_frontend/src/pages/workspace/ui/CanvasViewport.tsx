@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
-import { toPng } from 'html-to-image'
+import { toBlob, toPng } from 'html-to-image'
 import {
   ReactFlow,
   Background,
@@ -49,7 +49,7 @@ import type { ChangeMark } from '../model/revisionChanges'
 import type { LayoutLine, LayoutSnapshot } from '../model/layoutChecks'
 import { CanvasNode } from './CanvasNode'
 import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
-import { workflowSvg } from '../model/workflowSvg'
+import { workflowSvg, type SvgTheme } from '../model/workflowSvg'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
 import { reuseUnchangedNodes } from '../model/reuseUnchangedNodes'
@@ -295,9 +295,17 @@ function AnnotationPreviewLayer({
   )
 }
 
+/** How a picture export ended: made, nothing to draw, the browser cannot, or it failed with a message. */
+export type ExportOutcome = { kind: 'done' } | { kind: 'empty' } | { kind: 'unsupported' } | { kind: 'failed'; message: string }
+
+/** The raster picture's target: a file to save, or the clipboard (archify's "PNG to clipboard"). */
+export type PngTarget = 'download' | 'clipboard'
+export type PngExport = (filename: string, target?: PngTarget) => Promise<ExportOutcome>
+export type SvgExport = (filename: string, theme?: SvgTheme) => Promise<ExportOutcome>
+
 function ExportController({ onReady, onSvgReady }: {
-  onReady?: (fn: (filename: string) => void) => void
-  onSvgReady?: (fn: (filename: string) => void) => void
+  onReady?: (fn: PngExport) => void
+  onSvgReady?: (fn: SvgExport) => void
 }) {
   const { getNodes, getEdges } = useReactFlow()
   const getNodesRef = useRef(getNodes)
@@ -307,9 +315,9 @@ function ExportController({ onReady, onSvgReady }: {
 
   // The vector picture: the boxes React Flow measured and the paths it drew, each line in its kind's own look.
   useEffect(() => {
-    onSvgReady?.((filename: string) => {
+    onSvgReady?.(async (filename: string, theme: SvgTheme = 'light') => {
       const nodes = (getNodesRef.current() as unknown as RfNode[]).filter((node) => node.type === 'flowmatNode')
-      if (nodes.length === 0) return
+      if (nodes.length === 0) return { kind: 'empty' }
       const measured = (node: RfNode) => (node as unknown as { measured?: { width?: number; height?: number } }).measured
       const processes = nodes.map((node) => ({ id: node.id, x: node.position.x, y: node.position.y,
         width: measured(node)?.width ?? node.width, height: measured(node)?.height ?? node.height,
@@ -328,30 +336,36 @@ function ExportController({ onReady, onSvgReady }: {
         return [{ id: edge.id, d, stroke: look.stroke, dash: look.strokeDasharray ?? null, label: edge.data.label,
           labelAt: length > 0 ? at(length / 2) : null, ends: length > 0 ? [at(0), at(length)] as const : null }]
       })
-      const url = URL.createObjectURL(new Blob([workflowSvg(filename, processes, connections)], { type: 'image/svg+xml' }))
+      const url = URL.createObjectURL(new Blob([workflowSvg(filename, processes, connections, theme)], { type: 'image/svg+xml' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${filename}.svg`
+      a.download = theme === 'light' ? `${filename}.svg` : `${filename}-${theme}.svg`
       a.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      return { kind: 'done' }
     })
   }, [onSvgReady])
 
   useEffect(() => {
-    onReady?.((filename: string) => {
+    onReady?.(async (filename: string, target: PngTarget = 'download') => {
       const nodes = getNodesRef.current() as unknown as RfNode[]
-      if (nodes.length === 0) return
+      if (nodes.length === 0) return { kind: 'empty' }
+      // The clipboard takes a picture only where the browser can write one (archify checks the same before offering it).
+      const clipboard = target === 'clipboard'
+      if (clipboard && (typeof ClipboardItem === 'undefined' || typeof navigator.clipboard?.write !== 'function')) {
+        return { kind: 'unsupported' }
+      }
       const bounds = getNodesBounds(nodes as unknown as Node[])
       const W = 2400
       const H = 1600
       const viewport = getViewportForBounds(bounds, W, H, 0.1, 2, 0.1)
       const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
-      if (!el) return
+      if (!el) return { kind: 'empty' }
       // The picture is the workflow itself: reading highlights and the selection stay out of it.
       const frame = el.closest('.workspace-canvas-viewport')
       frame?.classList.add('reading-exporting')
       const restoreLines = plainSelectedLines(el)
-      void toPng(el, {
+      const options = {
         backgroundColor: '#f4f3f8',
         width: W,
         height: H,
@@ -361,15 +375,32 @@ function ExportController({ onReady, onSvgReady }: {
           transform: `translate(${viewport.x}px,${viewport.y}px) scale(${viewport.zoom})`,
           transformOrigin: 'top left',
         },
-      }).then((dataUrl) => {
-        const a = document.createElement('a')
-        a.href = dataUrl
-        a.download = `${filename}.png`
-        a.click()
-      }).finally(() => {
+      }
+      const restore = () => {
         restoreLines()
         frame?.classList.remove('reading-exporting')
-      })
+      }
+      try {
+        if (clipboard) {
+          // The item is made at once, with the picture to come, so the write stays inside the press that asked for it.
+          const picture = toBlob(el, options).then((blob) => {
+            if (!blob) throw new Error('the picture came out empty')
+            return blob
+          })
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': picture })])
+        } else {
+          const dataUrl = await toPng(el, options)
+          const a = document.createElement('a')
+          a.href = dataUrl
+          a.download = `${filename}.png`
+          a.click()
+        }
+        return { kind: 'done' }
+      } catch (error) {
+        return { kind: 'failed', message: error instanceof Error ? error.message : String(error) }
+      } finally {
+        restore()
+      }
     })
   }, [onReady])
 
@@ -497,9 +528,9 @@ interface Props {
   onFitViewReady?(fn: () => void): void
   onSelectAllReady?(fn: () => void): void
   onAnnotationSelectionReady?(getSelectedAnnotationIds: () => string[]): void
-  onExportReady?(fn: (filename: string) => void): void
+  onExportReady?(fn: PngExport): void
   /** A way to download the workflow as a vector picture (workflowSvg.ts). */
-  onSvgExportReady?(fn: (filename: string) => void): void
+  onSvgExportReady?(fn: SvgExport): void
   onEdgeReconnect?(oldEdgeId: string, newConnection: ConnectCompletePayload): void
   onPresence?(msg: PresenceMessage): void
   onGraphChange?(msg: GraphChangeMessage): void

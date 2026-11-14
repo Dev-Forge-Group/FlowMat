@@ -23,9 +23,9 @@ archify는 Apache-2.0이다. 가져온 코드와 스타일의 고지는 [THIRD_P
 | 움직임 Live/Still, 동작 줄이기 | `motion-governor.js` | 보기 도구 | 있음 |
 | 패스포트 이동·연결 목록·따라가기 | `focus.js` | `SemanticPassport`, `ProcessConnections` | 있음 |
 | 연결 하나를 고정하고 링크로 남기기(`#relation=<id>`) | `focus.js` | 패스포트 연결 줄의 고정 단추, `readingHash`의 `relation` | 있음(2026-11-14) |
-| **내보내기 메뉴(`E`)** | `export.js` | 리본에 PNG·SVG 내보내기만 있다 | 일부 |
-| └ PNG를 클립보드로 | `export.js` | | 없음 |
-| └ SVG 밝게·어둡게·자동 | `export.js` | SVG 한 가지(`workflowSvg`) | 일부 |
+| 내보내기 메뉴(`E`) | `export.js` | 보기 도구의 내보내기 단추와 `E`, `ExportMenu`. 리본의 PNG·SVG도 같은 길로 내보낸다 | 있음(2026-11-14). 공유 카드와 WebM은 아래 두 줄 |
+| └ PNG를 클립보드로 | `export.js` | 메뉴의 PNG to clipboard. 그림을 못 쓰는 브라우저면 그렇다고 알린다 | 있음(2026-11-14) |
+| └ SVG 밝게·어둡게·자동 | `export.js` | `workflowSvg`의 `light`·`dark`·`auto`. 자동은 밝은 그림에 `prefers-color-scheme: dark` 스타일을 넣는다 | 있음(2026-11-14) |
 | └ 경로·도달 공유 카드 | `export.js` | | 없음 |
 | └ 6초 움직임 WebM | `export.js` | | 없음 |
 | **공정 목록(Node index)과 옆 패널** | `node-outline.js`, 셸의 rail | | 없음 |
@@ -41,7 +41,7 @@ archify는 Apache-2.0이다. 가져온 코드와 스타일의 고지는 [THIRD_P
 FlowMat의 데이터에 그대로 맞는 것부터, 화면만 바뀌는 것부터 한다.
 
 1. ~~`#relation=<connectionId>`~~ **끝(2026-11-14).** 패스포트의 연결 줄 옆 고정 단추로 고정하면 그 연결과 양 끝만 보이고 주소에 남는다. 링크로 열면 시작 공정의 패스포트가 그 연결을 고정한 채 열린다. archify는 캔버스의 연결을 눌러 고정하지만, FlowMat에서 연결을 누르면 편집용으로 선택되므로 고정은 패스포트에서 한다.
-2. **내보내기 메뉴(`E`).** 보기 도구에 메뉴를 두고 리본의 PNG·SVG를 같이 부른다. PNG 클립보드 복사, SVG 밝게·어둡게를 더한다. 경로·도달 공유 카드는 그다음이다.
+2. ~~내보내기 메뉴(`E`)~~ **끝(2026-11-14).** 보기 도구의 단추와 `E`로 열고, PNG 저장·PNG 클립보드 복사·SVG 밝게·어둡게·자동을 고른다. 끝나면 한 줄로 알린다(archify의 토스트). 남은 것은 경로·도달 공유 카드와 WebM이다.
 3. **공정 목록과 옆 패널.** archify는 레인·단계로 묶는다. FlowMat에는 레인이 없으니 공정 종류로 묶고, 항목을 누르면 그 공정을 읽는다.
 4. **안내 보기.** 장 목록을 워크플로에 저장해야 하므로 서버 모델이 필요하다. 저장 위치(워크플로 판에 묶을지, 편집 문서에 둘지)를 ADR로 먼저 정한다.
 5. **6초 WebM.** 브라우저 `MediaRecorder`가 필요하고 움직임이 Live일 때만 뜻이 있다. 마지막에 한다.

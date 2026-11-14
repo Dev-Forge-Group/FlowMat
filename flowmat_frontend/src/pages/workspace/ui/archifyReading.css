@@ -583,6 +583,10 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 5v10M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 5v10M5 10h10' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
 }
+.diagram-nav-icon.export {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 3.5v8.5M6.5 8.5 10 12l3.5-3.5M4 13.5v2.5h12v-2.5' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 3.5v8.5M6.5 8.5 10 12l3.5-3.5M4 13.5v2.5h12v-2.5' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 /* Zoom out / level / zoom in join into one stepper well. */
 .diagram-nav [data-view="out"],
 .diagram-nav [data-view="reset"],
@@ -1479,6 +1483,35 @@
   content: "✓";
   color: var(--ax-frontend-stroke);
   font-weight: 800;
+}
+
+/* archify's export menu shares the style menu's panel; its outputs come in sections. */
+.export-menu-section { display: grid; gap: 0.125rem; }
+.export-menu-section + .export-menu-section { margin-top: 0.2rem; padding-top: 0.25rem; border-top: 1px solid var(--ax-panel-border); }
+.export-menu-section-title {
+  padding: 0.2rem 0.55rem 0.1rem;
+  color: var(--ax-text-faint);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.preset-option.export-option { grid-template-columns: minmax(0, 1fr); min-height: 2.5rem; }
+/* What the last export said, above the view controls, as archify's toast. Empty, it takes no room. */
+.export-status:empty { display: none; }
+.export-status {
+  position: absolute;
+  right: 1rem;
+  bottom: 4.15rem;
+  z-index: 23;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--ax-panel-border);
+  border-radius: 0.6rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-toolbar-text);
+  font-family: var(--ax-font);
+  font-size: 0.72rem;
+  box-shadow: 0 8px 24px -12px rgba(15, 23, 42, 0.35);
 }
 
 /* The canvas in each look. Classic is FlowMat's own; the others restyle the canvas, its processes and its lines, over

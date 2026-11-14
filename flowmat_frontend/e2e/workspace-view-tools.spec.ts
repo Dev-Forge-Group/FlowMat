@@ -1,10 +1,11 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
 /**
  * archify's view tools on the workspace canvas against a mocked API: the Semantic Radar opened from MAP, the Live and
- * Still motion control, the presentation stage, moving the Semantic Passport, and the reading panels sitting over the
- * canvas. Mix → Bake → Cool, Bake → Pack, and Wash on its own; Bake is equipment, Cool storage, Pack an output.
+ * Still motion control, the presentation stage, moving the Semantic Passport, the export menu, and the reading panels
+ * sitting over the canvas. Mix → Bake → Cool, Bake → Pack, and Wash on its own; Bake is equipment, Cool storage, Pack an output.
  */
 const workflow = { workflowId: 'wf-view', projectId: 'prj-e2e', workflowName: 'Bakery line', workflowDesc: null,
   workflowType: 'standard', workflowStatus: 'draft' }
@@ -281,6 +282,64 @@ test('pointing at or focusing a process previews its neighbours until something 
   await page.keyboard.press('Enter')
   await expect(passport(page, 'Bake')).toBeVisible()
   await expect(page.locator('.reading-dim')).toHaveCount(0)
+})
+
+test('E opens the export menu: SVG in three themes, a PNG to save and a PNG to copy', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await openBakery(page)
+  const status = page.locator('.export-status')
+  const exportButton = viewControls(page).getByRole('button', { name: 'Export diagram' })
+  await expect(exportButton).toHaveAttribute('aria-expanded', 'false')
+
+  // E opens it with the first output focused; the arrow keys move between them and Esc gives the button the focus back.
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('e')
+  const menu = page.getByRole('menu', { name: 'Export diagram' })
+  await expect(menu.getByRole('menuitem')).toHaveText([/^PNG to clipboard/, /^PNG/, /^SVG · Light/, /^SVG · Dark/, /^SVG · Auto/])
+  await expect(menu.getByRole('menuitem').first()).toBeFocused()
+  await expect(exportButton).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('ArrowUp')
+  await expect(menu.getByRole('menuitem', { name: /^SVG · Auto/ })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(exportButton).toBeFocused()
+
+  // A dark SVG: the workflow in dark colours, named for its theme.
+  await exportButton.click()
+  const darkDownload = page.waitForEvent('download')
+  await menu.getByRole('menuitem', { name: /^SVG · Dark/ }).click()
+  const dark = await darkDownload
+  expect(dark.suggestedFilename()).toBe('Bakery line-dark.svg')
+  const darkSvg = await readFile(await dark.path(), 'utf8')
+  expect(darkSvg).toContain('fill="#0b1120"')
+  expect(darkSvg).toContain('>Bake</text>')
+  await expect(status).toHaveText('Downloaded SVG · Dark')
+  await expect(menu).toHaveCount(0)
+
+  // Auto follows the viewer's setting; the light one keeps the plain name the ribbon has always used.
+  await exportButton.click()
+  const autoDownload = page.waitForEvent('download')
+  await menu.getByRole('menuitem', { name: /^SVG · Auto/ }).click()
+  const autoSvg = await readFile(await (await autoDownload).path(), 'utf8')
+  expect(autoSvg).toContain('@media (prefers-color-scheme: dark)')
+
+  // The PNG goes to the clipboard as a picture.
+  await exportButton.click()
+  await menu.getByRole('menuitem', { name: /^PNG to clipboard/ }).click()
+  await expect(status).toHaveText('Copied PNG to clipboard', { timeout: 15_000 })
+  expect(await page.evaluate(async () => (await navigator.clipboard.read())[0]?.types ?? [])).toContain('image/png')
+
+  // Where the browser cannot write a picture to the clipboard, it says so.
+  await page.evaluate(() => { Reflect.deleteProperty(window, 'ClipboardItem') })
+  await page.keyboard.press('e')
+  await menu.getByRole('menuitem', { name: /^PNG to clipboard/ }).click()
+  await expect(status).toHaveText('Clipboard image write not supported by this browser')
+
+  // Opening the style menu closes the export menu: only one sits above the view controls.
+  await exportButton.click()
+  await viewControls(page).getByRole('button', { name: /Choose visual style$/ }).click()
+  await expect(menu).toHaveCount(0)
+  await expect(page.getByRole('menu', { name: 'Visual style' })).toBeVisible()
 })
 
 test('the style menu tries archify\'s four looks on the canvas for this visit, and S cycles them', async ({ page }) => {

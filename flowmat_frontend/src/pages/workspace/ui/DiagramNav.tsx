@@ -4,7 +4,7 @@ import { presetLabel, type CanvasPreset } from './StylePresetMenu'
  * archify's diagram view controls (adapted from archify template.source.html and viewer.css, Apache-2.0): one dock at
  * the canvas's bottom right with the reading modes (ROUTE, MAP, LENS, and FlowMat's RUNS and CHANGES), the finder, the
  * guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from 175%) and the zoom, and
- * archify's toolbar controls: the visual style, motion (LIVE or STILL) and the presentation stage.
+ * archify's toolbar controls: the visual style, export, motion (LIVE or STILL) and the presentation stage.
  */
 function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
   if (zoom < 1) return 'MAP'
@@ -13,7 +13,7 @@ function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
 
 export function DiagramNav({
   routeActive, onRoute, mapOpen, onMap, lensActive, onLens, runsActive, onRuns, changesActive, onChanges, onFind, onGuide,
-  zoom, onZoomOut, onReset, onZoomIn, preset, styleOpen, onStyle, motion, presenting, onPresent,
+  zoom, onZoomOut, onReset, onZoomIn, preset, styleOpen, onStyle, exportOpen, onExport, motion, presenting, onPresent,
 }: {
   routeActive: boolean
   onRoute(): void
@@ -34,6 +34,8 @@ export function DiagramNav({
   preset: CanvasPreset
   styleOpen: boolean
   onStyle(): void
+  exportOpen: boolean
+  onExport(): void
   motion: { still: boolean; reduced: boolean; onToggle(): void }
   presenting: boolean
   onPresent(): void
@@ -74,6 +76,10 @@ export function DiagramNav({
         aria-label={`Visual style: ${presetLabel(preset)}. Choose visual style`} title="Choose visual style (S cycles)"
         onClick={onStyle}>
         <span className="preset-control-mark" data-preset={preset} aria-hidden="true" />
+      </button>
+      <button type="button" className="diagram-nav-export" aria-haspopup="menu" aria-expanded={exportOpen}
+        aria-label="Export diagram" title="Export diagram (E)" onClick={onExport}>
+        <span className="diagram-nav-icon export" aria-hidden="true" />
       </button>
       <button type="button" className="diagram-nav-motion" aria-pressed={!motion.still} aria-label={motionLabel}
         title={motionLabel} disabled={motion.reduced} onClick={motion.onToggle}>

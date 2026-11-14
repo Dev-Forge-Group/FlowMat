@@ -36,6 +36,8 @@ import { DiagramGuide } from './DiagramGuide'
 import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
+import { ExportMenu, type ExportChoice } from './ExportMenu'
+import type { ExportOutcome, PngExport, SvgExport } from './CanvasViewport'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
 import { useRevisionChanges } from '../model/useRevisionChanges'
@@ -978,8 +980,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const canvasContainerRef = useRef<HTMLElement>(null)
   const fitViewRef = useRef<() => void>(() => {})
   const selectAllRef = useRef<() => void>(() => {})
-  const exportPngRef = useRef<(filename: string) => void>(() => {})
-  const exportSvgRef = useRef<(filename: string) => void>(() => {})
+  const exportPngRef = useRef<PngExport>(async () => ({ kind: 'empty' }))
+  const exportSvgRef = useRef<SvgExport>(async () => ({ kind: 'empty' }))
   // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
   const revealRef = useRef<(processIds: string[]) => void>(() => {})
   const handleRevealReady = useCallback((fn: (processIds: string[]) => void) => { revealRef.current = fn }, [])
@@ -1012,6 +1014,31 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const [preset, setPreset] = useState<CanvasPreset>('classic')
   const [styleOpen, setStyleOpen] = useState(false)
   const closeStyle = useCallback(() => setStyleOpen(false), [])
+  // archify's export menu (E) and what the last export said, shown for a moment as archify's toast is.
+  const [exportOpen, setExportOpen] = useState(false)
+  const closeExport = useCallback(() => setExportOpen(false), [])
+  const [exportStatus, setExportStatus] = useState<string | null>(null)
+  useEffect(() => {
+    if (!exportStatus) return
+    const timer = window.setTimeout(() => setExportStatus(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [exportStatus])
+  // Called inside the press that chose it, so the clipboard accepts the picture.
+  const runExport = useCallback((choice: ExportChoice) => {
+    const name = canvas.workflow.workflowName
+    const done = choice.kind === 'png-clipboard' ? 'Copied PNG to clipboard'
+      : choice.kind === 'png' ? 'Downloaded PNG'
+        : `Downloaded SVG · ${choice.theme[0].toUpperCase()}${choice.theme.slice(1)}`
+    const outcome = choice.kind === 'svg'
+      ? exportSvgRef.current(name, choice.theme)
+      : exportPngRef.current(name, choice.kind === 'png-clipboard' ? 'clipboard' : 'download')
+    void outcome.then((result: ExportOutcome) => {
+      setExportStatus(result.kind === 'done' ? done
+        : result.kind === 'empty' ? 'Nothing to export: add a process first'
+          : result.kind === 'unsupported' ? 'Clipboard image write not supported by this browser'
+            : `Export failed: ${result.message}`)
+    })
+  }, [canvas.workflow.workflowName])
   // Where the reader moved the Semantic Passport; it stays there from one process to the next.
   const [passportPosition, setPassportPosition] = useState<PassportPosition | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -1200,11 +1227,15 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           if (e.key === '?') setMapOpen(false)
           return
         }
-        // archify's view keys: M the semantic radar, F the presentation stage, S the visual style, + - 0 the camera
-        // stepper. (R, L and T stay the editor's tools.)
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', 's', 'S', '+', '=', '-', '0'].includes(e.key)) {
+        // archify's view keys: M the semantic radar, F the presentation stage, S the visual style, E the export menu,
+        // + - 0 the camera stepper. (R, L and T stay the editor's tools.)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', 's', 'S', 'e', 'E', '+', '=', '-', '0'].includes(e.key)) {
           e.preventDefault()
           if (e.key === 'm' || e.key === 'M') toggleMap()
+          else if (e.key === 'e' || e.key === 'E') {
+            setStyleOpen(false)
+            setExportOpen((open) => !open)
+          }
           else if (e.key === 'f' || e.key === 'F') togglePresenting()
           else if (e.key === 's' || e.key === 'S') setPreset(nextPreset)
           else if (e.key === '0') cameraRef.current?.reset()
@@ -1525,12 +1556,12 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     },
     'export-json': { onClick: exportJson, disabled: canvas.nodes.length === 0, title: 'Export as JSON' },
     'export-png': {
-      onClick: () => exportPngRef.current(canvas.workflow.workflowName),
+      onClick: () => runExport({ kind: 'png' }),
       disabled: canvas.nodes.length === 0,
       title: 'Export as PNG',
     },
     'export-svg': {
-      onClick: () => exportSvgRef.current(canvas.workflow.workflowName),
+      onClick: () => runExport({ kind: 'svg', theme: 'light' }),
       disabled: canvas.nodes.length === 0,
       title: 'Export as SVG (vector, the workflow only)',
     },
@@ -1912,10 +1943,19 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             }}
             zoom={zoom} onZoomOut={() => cameraRef.current?.zoomStep(-1)} onReset={() => cameraRef.current?.reset()}
             onZoomIn={() => cameraRef.current?.zoomStep(1)}
-            preset={preset} styleOpen={styleOpen} onStyle={() => setStyleOpen((open) => !open)}
+            preset={preset} styleOpen={styleOpen} onStyle={() => {
+              setExportOpen(false)
+              setStyleOpen((open) => !open)
+            }}
+            exportOpen={exportOpen} onExport={() => {
+              setStyleOpen(false)
+              setExportOpen((open) => !open)
+            }}
             motion={{ still: motion.still, reduced: motion.reduced, onToggle: motion.toggle }}
             presenting={presenting} onPresent={togglePresenting} />
           {styleOpen && <StylePresetMenu preset={preset} onChoose={setPreset} onClose={closeStyle} />}
+          {exportOpen && <ExportMenu onChoose={runExport} onClose={closeExport} />}
+          <span className="export-status" role="status" aria-live="polite">{exportStatus}</span>
           {panel === 'runs' && (
             <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
               onClose={() => setPanel(null)} />
