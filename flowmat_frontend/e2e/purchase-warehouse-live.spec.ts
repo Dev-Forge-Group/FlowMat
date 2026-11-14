@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend, PostgreSQL/Redis and demo-owner seed')
 // Login and route.fetch use real credentials; preserve assertions, not a trace of those exchanges.
@@ -63,7 +64,7 @@ test('real purchase receipts and putaway reconcile after a lost partial-completi
   test.setTimeout(120_000)
   // One login supplies the UI and fixture API: another login of the same account can invalidate its previous session.
   const call = api(request, await loginUi(page))
-  const suffix = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`.toUpperCase()
+  const suffix = uniqueSuffix()
   const project = await call<{ projectId: string }>('POST', '/projects', {
     projectName: `Purchase warehouse live ${suffix}`, ownerId: 'demo-owner',
   })

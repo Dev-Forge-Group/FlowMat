@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 /**
  * BOM + LOT happy path through the real UI and API (docs/domain/inventory-bom-lot-contract.md §5–6).
@@ -6,7 +7,7 @@ import { test, expect, type Page } from '@playwright/test'
  * against a database that already holds earlier runs.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const FLOUR = `FLR-${suffix}`
 const BREAD = `BRD-${suffix}`
 const LOT = `LOT-${suffix}`

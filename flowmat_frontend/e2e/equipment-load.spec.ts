@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 // Weeks start at local Monday midnight; the orders below are in the planning zone (Asia/Seoul).
@@ -10,7 +11,7 @@ test.use({ timezoneId: 'Asia/Seoul' })
  * equipment deleted at the end.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const CODE = `EQ-LD-${suffix}`
 
 async function api(request: APIRequestContext) {

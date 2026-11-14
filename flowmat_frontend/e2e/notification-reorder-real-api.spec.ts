@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E || process.env.FLOWMAT_NOTIFICATION_E2E_DISPOSABLE !== '1',
   'Requires an explicitly disposable DB with notification-e2e-member/project fixtures')
@@ -29,7 +30,7 @@ async function loginUi(page: Page, userId: string) {
 test('real assignments show only the recipient their NCR, warehouse and work order notifications', async ({ request, page }) => {
   const projectId = 'prj_notification_e2e'
   const memberId = 'notification-e2e-member'
-  const suffix = Date.now().toString(36)
+  const suffix = uniqueSuffix()
   const owner = await apiFor(request)
   const member = await apiFor(request, memberId)
   const ncr = await owner.api('POST', '/nonconformities', { projectId, title: `Private dents ${suffix}` })
@@ -98,7 +99,7 @@ test('real assignments show only the recipient their NCR, warehouse and work ord
 
 test('real location safety stock counts child bins and can be changed and removed in the stock UI', async ({ request, page }) => {
   const { api } = await apiFor(request)
-  const suffix = Date.now().toString(36)
+  const suffix = uniqueSuffix()
   const project = await api('POST', '/projects', { projectName: `Place API ${suffix}`, ownerId: 'demo-owner' })
   const projectId = project.projectId
   try {

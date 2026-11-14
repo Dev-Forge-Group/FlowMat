@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 
@@ -7,7 +8,7 @@ test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
  * project lists a place, free-text stock locations stop working there, which would break other specs in the demo
  * project. The project is deleted at the end.
  */
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const LOOSE = `loose-${suffix}`
 const WAREHOUSE = `WH-${suffix}`
 const BIN = `B-${suffix}`

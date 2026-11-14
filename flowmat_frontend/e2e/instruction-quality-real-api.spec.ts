@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs a disposable backend with the demo seed')
 
@@ -19,7 +20,7 @@ async function authenticatedApi(request: APIRequestContext) {
 
 test('instruction confirmation records one inspection and shows it in the real run UI', async ({ page, request }) => {
   const projectId = 'prj_demo_main'
-  const suffix = `${Date.now().toString(36)}-${test.info().workerIndex}`
+  const suffix = `${uniqueSuffix()}-${test.info().workerIndex}`
   const { headers, api } = await authenticatedApi(request)
 
   const item = await api('POST', '/items', {
@@ -76,7 +77,7 @@ test('instruction confirmation records one inspection and shows it in the real r
 
 test('LOT release history groups moved rows and empty work order estimates stay read only', async ({ request }) => {
   const projectId = 'prj_demo_main'
-  const suffix = Date.now().toString(36)
+  const suffix = uniqueSuffix()
   const { headers, api } = await authenticatedApi(request)
   const item = await api('POST', '/items', {
     projectId, itemCode: `REL-H-${suffix}`, itemName: `Release history ${suffix}`, unitId: 'unit_kg',
@@ -122,7 +123,7 @@ test('LOT release history groups moved rows and empty work order estimates stay 
 test('a closed NCR can move or clear its check date until its effectiveness is recorded', async ({ request }) => {
   const { headers, api } = await authenticatedApi(request)
   const ncr = await api('POST', '/nonconformities', {
-    projectId: 'prj_demo_main', title: `Verification date ${Date.now().toString(36)}`, severity: 'minor',
+    projectId: 'prj_demo_main', title: `Verification date ${uniqueSuffix()}`, severity: 'minor',
   })
   const path = `/nonconformities/${ncr.nonconformityId}`
   await api('PUT', path, { rootCause: 'Worn tooling', disposition: 'rework' })

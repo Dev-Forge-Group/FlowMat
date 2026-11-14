@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 
@@ -7,7 +8,7 @@ test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
  * inspection that follows one of them marks it passed. The standards are deleted at the end.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const ITEM = `RCV-${suffix}`
 const LOT = `L-RCV-${suffix}`
 
