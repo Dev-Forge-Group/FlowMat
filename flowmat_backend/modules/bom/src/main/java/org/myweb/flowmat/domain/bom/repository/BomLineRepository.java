@@ -11,6 +11,9 @@ public interface BomLineRepository extends JpaRepository<BomLine, String> {
 
     List<BomLine> findAllByBomIdIn(Collection<String> bomIds);
 
+    /** The lines of several BOMs, each BOM's in the order {@link #findAllByBomIdOrderBySortOrderAscBomLineIdAsc} gives. */
+    List<BomLine> findAllByBomIdInOrderByBomIdAscSortOrderAscBomLineIdAsc(Collection<String> bomIds);
+
     /** Lines that use an item, across BOMs; for where-used. */
     List<BomLine> findAllByChildItemId(String childItemId);
 }

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.bom.api.dto.response.BomExplosionResponse;
 import org.myweb.flowmat.domain.bom.application.publicapi.BomRequirement;
 import org.myweb.flowmat.domain.bom.domain.entity.BomHeader;
+import org.myweb.flowmat.domain.bom.application.publicapi.BomQuery;
 import org.myweb.flowmat.domain.bom.repository.BomHeaderRepository;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogItemView;
 import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
@@ -54,10 +55,21 @@ public class BomExplosionService {
         projectAccessService.requireProjectReadAccess(header.getProjectId());
         BigDecimal quantity = quantity(quantityText);
         java.time.LocalDate day = on != null ? on : projectCalendar.today(header.getProjectId());
-        BomRequirement top = bomService.requirementsForRun(bomId, header.getProjectId(), null, quantity, day);
+        Map<String, BomHeader> approved = BomTree.approvedByItem(bomHeaderRepository, header.getProjectId(), day);
+        BomQuery.RequirementsBatch batch = bomService.requirementsBatch(header.getProjectId());
+        // The tree is read level by level first, a few queries for each level, so the walk below reads nothing more
+        // (docs/operations/performance-baseline.md).
+        Set<String> read = new HashSet<>();
+        List<String> level = List.of(bomId);
+        for (int depth = 0; depth <= BomTree.MAX_LEVELS && !level.isEmpty(); depth++) {
+            read.addAll(level);
+            level = batch.prefetch(level).values().stream().flatMap(List::stream)
+                .map(approved::get).filter(java.util.Objects::nonNull).map(BomHeader::getBomId)
+                .filter(id -> !read.contains(id)).distinct().toList();
+        }
+        BomRequirement top = batch.forRun(bomId, null, quantity, day, List.of());
 
-        Walk walk = new Walk(header.getProjectId(), day,
-            BomTree.approvedByItem(bomHeaderRepository, header.getProjectId(), day));
+        Walk walk = new Walk(batch, day, approved);
         Set<String> path = new HashSet<>();
         path.add(header.getTargetItemId());
         walk.level(top, header.getTargetItemId(), 1, path);
@@ -97,7 +109,7 @@ public class BomExplosionService {
 
     /** One explosion's state: the tree so far, bought materials added up, and the deepest level. */
     private final class Walk {
-        private final String projectId;
+        private final BomQuery.RequirementsBatch batch;
         private final java.time.LocalDate day;
         private final Map<String, BomHeader> approved;
         private final List<Node> lines = new ArrayList<>();
@@ -106,8 +118,8 @@ public class BomExplosionService {
         private final List<String> problems = new ArrayList<>();
         private int deepest;
 
-        private Walk(String projectId, java.time.LocalDate day, Map<String, BomHeader> approved) {
-            this.projectId = projectId;
+        private Walk(BomQuery.RequirementsBatch batch, java.time.LocalDate day, Map<String, BomHeader> approved) {
+            this.batch = batch;
             this.day = day;
             this.approved = approved;
         }
@@ -128,7 +140,7 @@ public class BomExplosionService {
                 }
                 BomRequirement below;
                 try {
-                    below = bomService.requirementsForRun(own.getBomId(), projectId, child, line.requiredItemQuantity(), day);
+                    below = batch.forRun(own.getBomId(), child, line.requiredItemQuantity(), day, List.of());
                 } catch (BusinessException exception) {
                     problems.add(child + ": " + exception.getMessage());
                     continue;
