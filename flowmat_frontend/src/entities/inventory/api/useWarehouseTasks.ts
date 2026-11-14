@@ -43,6 +43,14 @@ export interface PutawayInput {
   note: string | null
 }
 
+export interface WarehouseTaskCompletionInput {
+  taskId: string
+  quantity?: number
+  expectedToLocation?: string
+  /** Remaining task quantity observed before this completion; omitted only by legacy callers. */
+  expectedQuantity?: number
+}
+
 /** A work order, or lines in each item's stock unit. */
 export interface PickListInput {
   stagingLocation: string
@@ -110,9 +118,9 @@ export function useWarehouseTaskMutations(projectId: string) {
   })
   /** Without a quantity the whole task; with a smaller one only that much moves and the rest stays open. */
   const complete = useMutation({
-    mutationFn: async ({ taskId, quantity, expectedToLocation }: { taskId: string; quantity?: number; expectedToLocation?: string }) =>
+    mutationFn: async ({ taskId, quantity, expectedToLocation, expectedQuantity }: WarehouseTaskCompletionInput) =>
       unwrapApiResponse(await httpClient.post<ApiEnvelope<WarehouseTaskDto>>(`${task(taskId)}/complete`,
-        { quantity, expectedToLocation })),
+        { quantity, expectedToLocation, expectedQuantity })),
     onSuccess: async (result) => {
       await refreshStock()
       if (result.workOrderId) {
@@ -120,7 +128,8 @@ export function useWarehouseTaskMutations(projectId: string) {
         void queryClient.invalidateQueries({ queryKey: ['work-order-readiness', result.workOrderId] })
       }
     },
-    onError: refreshTasks,
+    // A failed response can still follow a committed move. Reconcile stock as well as the remaining task.
+    onError: refreshStock,
   })
   const cancel = useMutation({
     mutationFn: async ({ taskId, reason }: { taskId: string; reason: string }) =>

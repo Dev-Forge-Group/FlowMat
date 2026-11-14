@@ -5,7 +5,7 @@ name: Commit Attribution
 on:
   pull_request:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
 
 permissions:
   contents: read

@@ -44,12 +44,14 @@ test('a connection save response preserves the next split choice typed while sav
     await page.goto(`/projects/prj-e2e/workflows/${workflow.workflowId}`)
     const edgePath = page.locator('.react-flow__edge[data-id="conn-pending"] .react-flow__edge-interaction')
     await expect(edgePath).toBeAttached()
+    await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
+    // The initial fit can move the SVG while the toolbar is being clicked. Read
+    // the connection's screen coordinates only after choosing the pointer.
     const point = await edgePath.evaluate((element) => {
       const path = element as SVGPathElement
       const point = path.getPointAtLength(path.getTotalLength() / 4).matrixTransform(path.getScreenCTM()!)
       return { x: point.x, y: point.y }
     })
-    await page.getByRole('button', { name: 'Pointer', exact: true }).first().click()
     await page.mouse.click(point.x, point.y)
     const kind = page.getByRole('combobox', { name: 'Split share' })
     const save = page.getByRole('button', { name: 'Save Connection', exact: true })

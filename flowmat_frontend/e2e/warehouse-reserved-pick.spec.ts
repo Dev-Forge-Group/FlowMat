@@ -22,6 +22,7 @@ for(const scenario of ['partial','released'] as const){
       }
       if(pathname==='/api/warehouse-tasks/task-reserved/complete'){
         const body=request.postDataJSON() as Record<string,unknown>;completeRequests.push(body)
+        expect(body.expectedQuantity).toBe(6)
         if(scenario==='released')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({success:false,message:'Only this work order’s remaining allocated stock can be picked.',data:null})})
         expect(body.quantity).toBe(2);task.quantity=4
         return ok(route,{...task,taskId:'task-part',taskNo:'WT-PART',status:'done',quantity:2,transferId:'transfer-part'})
