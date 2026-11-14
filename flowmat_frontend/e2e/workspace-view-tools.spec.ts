@@ -269,7 +269,11 @@ test('pointing at or focusing a process previews its neighbours until something 
   await page.keyboard.press('Escape')
   await expect(passport(page, 'Bake')).toHaveCount(0)
 
-  // The keyboard's preview is announced, and Enter opens the process.
+  // The keyboard's preview is announced, and Enter opens the process. Bake still has the focus from the click above, and
+  // focusing it again would fire nothing, so the step would test only what the click left behind: move the focus off it
+  // first, then onto it.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await expect(page.locator('.intent-trace-status')).toHaveText('')
   await processNode(page, 'proc-bake').focus()
   await expect(page.locator('.intent-trace-status'))
     .toHaveText('Bake. 2 outgoing, 1 incoming. 3 connections. Press Enter for details.')
