@@ -30,7 +30,7 @@
 | [architecture/](architecture/README.md) | 결정 인계, ADR, 도메인 지도, 실행 모델 | [README](architecture/README.md) |
 | [domain/](domain/README.md) | 기능별 계약·설계(재고·BOM·LOT·생산·품질·설비·공정 포트·revision·Flow Run). **파일을 옮기거나 이름을 바꾸지 않는다.** 코드 주석이 `docs/domain/*.md` 경로를 가리킨다 | [README](domain/README.md) |
 | [editor/](editor/README.md) | 캔버스·도형 편집 엔진·리본 | [current-state](editor/current-state.md) |
-| [operations/](operations/backup-restore.md) | 백업·복원 리허설과 운영 절차 | [backup-restore](operations/backup-restore.md) |
+| [operations/](operations/backup-restore.md) | 백업·복원 리허설, 성능 기준선 | [backup-restore](operations/backup-restore.md), [performance-baseline](operations/performance-baseline.md) |
 | [local-development.md](local-development.md) | 로컬 실행 | |
 
 코드 주석이 가리키는 문서 경로: `docs/domain/*.md`, `docs/architecture/adr/*.md`, `docs/editor/toolbar_ribbon_migration_plan.md`, `docs/local-development.md`. 이 파일들을 옮기면 코드 주석도 같이 고친다.
