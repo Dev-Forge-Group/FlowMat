@@ -21,7 +21,7 @@
   - PR #93(초안): 바뀐 경로에 맞는 검사만 돌리고, 이전 실행을 취소한다. Actions가 돌아야 검증된다.
   - Dependabot PR 6건(#86–#91).
 - 편집기: `@dev-forge-group/flowmat-editor@0.1.0`이 발행돼 있고 FlowMat은 내용이 고정된 사본을 쓴다.
-- DB: 업무 모듈 사이 외래키 21쌍이 production·inventory·quality·flowrun·workflow·catalog·connector를 묶는다. V1의 미사용 테이블이 12개 있다. V133은 개발 DB에 적용되지 않았다.
+- DB: 업무 모듈 사이 외래키 21쌍이 production·inventory·quality·flowrun·workflow·catalog·connector를 묶는다. V1의 미사용 테이블 12개는 V135(11-14)가 지웠다. V133은 개발 DB에 적용되지 않았다.
 - 조직의 후보 저장소 6개(flowmat-erp·mes·crm·compute·ai, devforge-deploy)는 비어 있다.
 
 ## 준비 (11-13 ~ 11-15)
@@ -66,7 +66,7 @@
 | 2 | 업그레이드 리허설 | (11-14) 절차와 `scripts/ops/upgrade-rehearsal.sh`를 만들었다([backup-restore.md](../operations/backup-restore.md) §5). 데모 자료의 V132 DB로 돌려 V132 → V134 통과(표 135개의 행과 합계 그대로, 다시 띄우면 적용 0). **남은 것:** 개발 DB(5434)는 사용자 PC에 있어 여기서 닿지 않는다. 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db scripts/ops/upgrade-rehearsal.sh`가 통과하면 같은 jar로 5434에 적용한다 |
 | 3 | ~~릴리스 점검표~~ | **끝(11-14).** [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) 한 장. 자동 검사 6가지(전체 테스트, 모의·실 API 브라우저, 작성자 표기, 의존성 감사), 두 여정, 손으로 돌리는 5가지(복원, 업그레이드, 운영 프로필, 적용 설정 개정, 성능)와 후보별 기록 표. 쓰다가 실 API 스펙 두 개(`production-quality-live`, `workflow-validation`)가 `browser-e2e.yml`에 빠져 있어 CI에서 돌지 않던 것을 찾아 넣었다 |
 | 4 | ~~성능 기준선~~ | **끝(11-14).** [performance-baseline.md](../operations/performance-baseline.md), `scripts/perf/baseline.mjs`. 중앙값은 4단계 131품목 BOM 전개 629ms(SQL 750개), 작업지시 40건 간이 MRP 1,599ms(SQL 2,193개), 공정 60개 시뮬레이션 실행 시작 17ms다. 느린 두 곳은 계산이 아니라 줄마다 질의하는 N+1이다. 그래서 flowmat-compute를 따로 만들거나 Rust로 옮길 근거는 없다. 같은 날 읽기를 묶어 전개 43ms(SQL 40개), MRP 59ms(SQL 65개)가 됐고 응답은 전과 같다 |
-| 5 | 미사용 테이블 12개 | 지울지 결정한다. 지운다면 삭제 마이그레이션이 복제본 리허설을 통과한다 |
+| 5 | ~~미사용 테이블 12개~~ | **끝(11-14): 지웠다.** 권장안대로 복원 리허설 뒤에 정했다. 12개 모두 행 0, 드나드는 외래키 0, 읽고 쓰는 코드 0이다. V135가 지우되, 행이 있는 테이블을 만나면 아무것도 지우지 않고 멈춘다(`UnusedTableDropMigrationTest`). 두 여정 자료가 있는 로컬 DB의 사본에서 V134 → V135 업그레이드 리허설 통과(남은 표 124개의 행과 프로젝트 20개의 합계 그대로). `modules.yml`의 `unowned_tables`는 비었다 |
 
 ## 4주차 (12-07 ~ 12-11): 편집기 전환과 릴리스 후보 고정
 
@@ -113,7 +113,7 @@
 | 항목 | 선택 |
 |---|---|
 | 라이선스 | 정하지 않음, 또는 오픈소스 라이선스 (권장: 정할 때까지 README에 "라이선스 없음, 재사용 불가"를 적는다) |
-| 미사용 테이블 | 둔다, 또는 지운다 (권장: 3주차 복원 리허설 뒤에 지운다) |
+| 미사용 테이블 | ~~둔다, 또는 지운다~~ **지웠다(11-14, V135).** 권장안대로 복원 리허설 뒤에 했다. 되돌리려면 V1의 정의로 다시 만드는 마이그레이션을 더한다 |
 | 릴리스 후보의 이름 | 태그 이름과 버전 (권장: `v0.9.0-rc.1`) |
 
 ## 위험

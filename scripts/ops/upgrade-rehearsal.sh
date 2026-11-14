@@ -107,7 +107,7 @@ say "3. Nothing that existed was lost"
 psql_target -q -f - < "$FINGERPRINT" > "$WORK_DIR/after.txt"
 # A table may gain rows (the application writes some on start, a migration may fill a new table) and new tables appear.
 # No table may lose rows or disappear, and no project's stock, ledger or purchase totals may change. A table a migration
-# drops on purpose is named in ALLOW_DROPPED (space separated).
+# drops on purpose is named in ALLOW_DROPPED (space separated); even then it must have been empty.
 python3 - "$WORK_DIR/before.txt" "$WORK_DIR/after.txt" "${ALLOW_DROPPED:-}" <<'PY' || fail "the upgrade lost rows or changed totals"
 import sys
 def read(path):
@@ -122,11 +122,13 @@ def read(path):
 before_rows, before_projects = read(sys.argv[1])
 after_rows, after_projects = read(sys.argv[2])
 allowed = set(sys.argv[3].split())
-problems, grown = [], []
+problems, grown, dropped = [], [], []
 for table, count in sorted(before_rows.items()):
     now = after_rows.get(table)
     if now is None:
-        if table not in allowed:
+        if table in allowed and count == 0:
+            dropped.append(table)
+        else:
             problems.append(f"table {table} is gone ({count} rows)")
     elif now < count:
         problems.append(f"table {table} lost rows: {count} -> {now}")
@@ -136,7 +138,8 @@ for project, totals in sorted(before_projects.items()):
     if after_projects.get(project) != totals:
         problems.append(f"project {project}: {totals} -> {after_projects.get(project)}")
 new = sorted(set(after_rows) - set(before_rows))
-print(f"kept: {len(before_rows)} tables' rows and {len(before_projects)} projects' totals")
+print(f"kept: {len(before_rows) - len(dropped) - sum(1 for p in problems if p.startswith('table') and 'is gone' in p)} tables' rows and {len(before_projects)} projects' totals")
+print(f"empty tables dropped as allowed ({len(dropped)}): {', '.join(dropped) if dropped else 'none'}")
 print(f"new tables ({len(new)}): {', '.join(new) if new else 'none'}")
 print(f"tables that gained rows ({len(grown)}): {'; '.join(grown) if grown else 'none'}")
 for problem in problems:
