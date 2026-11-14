@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
@@ -61,6 +62,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductionRunServiceImpl implements ProductionRunService {
 
     private static final String NOT_DELETED = "N";
+    /** The request part of a single keyed recording; a split by LOT numbers its rows from 1 (RR3). */
+    static final int SINGLE_RECORDING = 0;
+    static final int MAX_REQUEST_KEY = 100;
     private static final Set<String> OPEN_RUN_STATUSES = Set.of("pending", "running");
     private static final Set<String> RUN_ITEM_DIRECTIONS = Set.of("input", "output");
     private static final Set<String> RUN_TYPES = Set.of("actual", "simulation", "test", "dry_run");
@@ -224,17 +228,49 @@ public class ProductionRunServiceImpl implements ProductionRunService {
     @Override
     @Transactional
     public ProductionRunItemResponse recordRunItem(String productionRunId, ProductionRunItemRecordRequest request) {
+        return record(productionRunId, request, SINGLE_RECORDING, true);
+    }
+
+    @Override
+    @Transactional
+    public ProductionRunItemResponse recordRunItemPart(String productionRunId, ProductionRunItemRecordRequest request, int requestPart) {
+        if (requestPart <= SINGLE_RECORDING || requestPart > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("A split's rows are numbered from 1.");
+        }
+        return record(productionRunId, request, requestPart, false);
+    }
+
+    /**
+     * Records one item. With a request key, a single recording ({@code replayable}) first looks for what was already recorded
+     * under the key and answers with it, also when the run has finished since or the row was cancelled (RR1-RR2); a split's
+     * rows were checked by the split (RR3).
+     */
+    private ProductionRunItemResponse record(String productionRunId, ProductionRunItemRecordRequest request, int requestPart,
+        boolean replayable) {
         ProductionRun run = findRunForUpdate(productionRunId);
         projectAccessService.requireProjectWriteAccess(run.getProjectId());
-        requireOpenRun(run);
         ProductionText.requireStorable(request.itemId(), "itemId");
         ProductionText.requireStorable(request.inventoryId(), "inventoryId");
         ProductionText.requireStorable(request.processId(), "processId");
         ProductionText.requireStorable(request.processIoId(), "processIoId");
         requireKnownDirection(request.direction());
+        String requestId = requestKey(request.requestId());
         request = new ProductionRunItemRecordRequest(request.processId(), request.processIoId(), request.inventoryId(),
             request.itemId(), request.direction(), storedQuantity(request.plannedQty(), "plannedQty"),
-            request.actualQty() == null ? null : storedQuantity(request.actualQty(), "actualQty"), storedUnit(request.unit()));
+            request.actualQty() == null ? null : storedQuantity(request.actualQty(), "actualQty"), storedUnit(request.unit()),
+            requestId);
+        if (requestId != null && replayable) {
+            List<ProductionRunItem> previous = productionRunItemRepository
+                .findAllByProductionRunIdAndRequestIdOrderByRequestPartAsc(run.getProductionRunId(), requestId);
+            if (!previous.isEmpty()) {
+                if (previous.size() != 1 || !sameRecording(previous.get(0), request)) {
+                    throw new BusinessException(ErrorCode.CONFLICT,
+                        "requestId already belongs to a different recording of this run; send a new requestId for a new recording.");
+                }
+                return toItemResponse(previous.get(0));
+            }
+        }
+        requireOpenRun(run);
         CatalogItemView item = findActiveItem(request.itemId());
         validateSameProject(run.getProjectId(), item.projectId());
         StockView inventory = null;
@@ -277,6 +313,8 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         runItem.setUnit(request.unit().trim());
         runItem.setQuantitySource("manual");
         runItem.setLotId(inventory != null ? inventory.lotId() : null);
+        runItem.setRequestId(requestId);
+        runItem.setRequestPart(requestId == null ? null : (short) requestPart);
         ProductionRunItem savedRunItem = productionRunItemRepository.save(runItem);
 
         if (inventory != null && run.affectsPhysicalState()) {
@@ -708,7 +746,41 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         return revision;
     }
 
-    private static ProductionRunItemResponse toItemResponse(ProductionRunItem item) {
+    /**
+     * A request key as sent, or null when none was. A key must be storable, and 1 to 100 characters once trimmed (RR1).
+     */
+    static String requestKey(String requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        ProductionText.requireStorable(requestId, "requestId");
+        String key = requestId.trim();
+        if (key.isEmpty() || key.length() > MAX_REQUEST_KEY) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "requestId must be 1 to " + MAX_REQUEST_KEY + " characters.");
+        }
+        return key;
+    }
+
+    /** Whether a keyed single recording is the one now sent again: the same stock, item, direction, quantities and unit (RR2). */
+    private static boolean sameRecording(ProductionRunItem recorded, ProductionRunItemRecordRequest request) {
+        String processId = trimToNull(request.processId());
+        String processIoId = trimToNull(request.processIoId());
+        return recorded.getRequestPart() != null && recorded.getRequestPart() == SINGLE_RECORDING
+            && recorded.getItemId().equals(request.itemId())
+            && recorded.getDirection().equals(request.direction().trim().toLowerCase(Locale.ROOT))
+            && Objects.equals(recorded.getInventoryId(), trimToNull(request.inventoryId()))
+            && sameQuantity(recorded.getPlannedQty(), request.plannedQty())
+            && sameQuantity(recorded.getActualQty(), request.actualQty())
+            && Objects.equals(recorded.getUnit(), request.unit().trim())
+            && (processId == null || processId.equals(recorded.getProcessId()))
+            && (processIoId == null || processIoId.equals(recorded.getProcessIoId()));
+    }
+
+    static boolean sameQuantity(BigDecimal left, BigDecimal right) {
+        return left == null ? right == null : right != null && left.compareTo(right) == 0;
+    }
+
+    static ProductionRunItemResponse toItemResponse(ProductionRunItem item) {
         return new ProductionRunItemResponse(
             item.getProductionRunItemId(),
             item.getProductionRunId(),

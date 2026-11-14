@@ -85,7 +85,20 @@ test('finishing a run names the by-products recorded short of the BOM', async ({
   })
   await page.getByRole('button', { name: 'Finish', exact: true }).click()
   await expect.poll(() => asked).toContain('BRAN · bran 0.5 of 2 kg')
-  expect(asked).toContain('Finish this run?')
+  expect(asked).toContain('Finish this run with 20 made?')
+
+  // Left empty, the field finishes with the 16 loaves it shows, not with no quantity at all.
+  await page.getByLabel('Actual output qty').fill('')
+  await expect(page.getByLabel('Actual output qty')).toHaveAttribute('placeholder', '16')
+  const finishing = page.waitForRequest((request) => request.method() === 'POST'
+    && new URL(request.url()).pathname === '/api/production-runs/run-1/finish')
+  page.once('dialog', async (dialog) => {
+    asked = dialog.message()
+    await dialog.accept()
+  })
+  await page.getByRole('button', { name: 'Finish', exact: true }).click()
+  expect((await finishing).postDataJSON()).toEqual({ actualOutputQty: 16 })
+  expect(asked).toContain('Finish this run with 16 made?')
 
   // Once finished with 16 made, what is expected follows that, and the difference shows instead of Record.
   Object.assign(run, { runStatus: 'finished', actualOutputQty: 16 })

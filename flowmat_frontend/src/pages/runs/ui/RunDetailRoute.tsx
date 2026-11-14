@@ -14,7 +14,7 @@ import { useWarehouseTasksQuery } from '../../../entities/inventory/api/useWareh
 import { useUnitsQuery } from '../../../entities/catalog/api/useUnitsQuery'
 import { useRunQualityChecklistQuery } from '../../../entities/quality/api/useInspectionStandards'
 import { finishQualityWarning } from '../../../entities/quality/model/standardModel'
-import { errorMessage } from '../../../shared/lib/errorMessage'
+import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import type { BomOutputDto, ProductionRunItemDto } from '../../../shared/types/api'
 import { canAllocateAgain, cancelSummary, recordedAgainstPlan, remainingOfPlan } from '../model/runPlan'
 import { inputLotOptions } from '../model/correctionModel'
@@ -44,6 +44,12 @@ const EMPTY_ITEM_FORM = {
   actualQty: '',
   unit: 'ea',
   inventoryId: '',
+}
+
+/** A failure without an answer from the server (or a 5xx) may still have been recorded: resend it unchanged. */
+function unconfirmed(error: unknown): boolean {
+  const status = errorStatus(error)
+  return status === null || status >= 500
 }
 
 export function RunDetailRoute() {
@@ -156,6 +162,8 @@ export function RunDetailRoute() {
 
   async function handleRecord(e: FormEvent) {
     e.preventDefault()
+    // What was typed while this was saving is a new draft: it stays when the save ends.
+    const submitted = itemForm
     try {
       await recordMutation.mutateAsync({
         productionRunId: runId,
@@ -166,7 +174,7 @@ export function RunDetailRoute() {
         unit: itemForm.unit.trim(),
         inventoryId: itemForm.inventoryId || undefined,
       })
-      setItemForm((f) => ({ ...EMPTY_ITEM_FORM, direction: f.direction, unit: f.unit }))
+      setItemForm((f) => (f === submitted ? { ...EMPTY_ITEM_FORM, direction: f.direction, unit: f.unit } : f))
     } catch {
       // Surfaced through the mutation error state below the form (includes rule-engine rejections).
     }
@@ -174,11 +182,14 @@ export function RunDetailRoute() {
 
   function handleFinish(e: FormEvent) {
     e.preventDefault()
-    const question = 'Finish this run? Items can no longer be recorded afterwards.'
+    // An empty field finishes with what the field shows: the run's recorded output of its product, else the plan. The
+    // order's produced quantity and the run's cost per unit count this number.
+    const made = finishOutput(actualOutputQty, run?.targetItemId ?? null, runItems, Number(run?.plannedOutputQty ?? 0))
+    const question = `Finish this run with ${formatQty(made)} made? Items can no longer be recorded afterwards.`
     if (!window.confirm([question, qualityWarning, byProductNote].filter(Boolean).join('\n\n'))) return
     finishMutation.mutate({
       productionRunId: runId,
-      actualOutputQty: actualOutputQty === '' ? undefined : Number(actualOutputQty),
+      actualOutputQty: made,
     })
   }
 
@@ -473,6 +484,7 @@ export function RunDetailRoute() {
                           title="Take the quantity from the LOTs that expire first, one recording per LOT"
                           onClick={() => {
                             setAllocation(null)
+                            const submitted = itemForm
                             allocateMutation.mutate(
                               {
                                 productionRunId: runId,
@@ -487,7 +499,7 @@ export function RunDetailRoute() {
                                     `Recorded from ${recorded.length} LOT${recorded.length === 1 ? '' : 's'}: `
                                       + recorded.map((row) => `${lotNo.get(row.lotId ?? '') ?? row.lotId} ${formatQty(row.actualQty)} ${row.unit}`).join(', '),
                                   )
-                                  setItemForm(EMPTY_ITEM_FORM)
+                                  setItemForm((f) => (f === submitted ? EMPTY_ITEM_FORM : f))
                                 },
                               },
                             )
@@ -502,13 +514,19 @@ export function RunDetailRoute() {
                         </p>
                       )}
                       {allocateMutation.isError && (
-                        <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>
+                        <p role="alert" style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>
                           {errorMessage(allocateMutation.error, 'The LOTs could not be split.')}
                         </p>
                       )}
                       {recordMutation.isError && (
-                        <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>
+                        <p role="alert" style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>
                           {errorMessage(recordMutation.error, 'Failed to record item.')}
+                        </p>
+                      )}
+                      {[recordMutation, allocateMutation].some((mutation) => mutation.isError && unconfirmed(mutation.error)) && (
+                        <p className="inspector-hint" style={{ margin: 0 }}>
+                          The result is unconfirmed. Press the same button again with the same values before changing them:
+                          a recording already made is not made twice.
                         </p>
                       )}
                     </form>
@@ -524,7 +542,7 @@ export function RunDetailRoute() {
                           min="0"
                           step="any"
                           value={actualOutputQty}
-                          placeholder={totals.output > 0 ? String(totals.output) : formatQty(run.plannedOutputQty)}
+                          placeholder={formatQty(finishOutput('', run.targetItemId, runItems, Number(run.plannedOutputQty)))}
                           onChange={(e) => setActualOutputQty(e.target.value)}
                         />
                       </label>

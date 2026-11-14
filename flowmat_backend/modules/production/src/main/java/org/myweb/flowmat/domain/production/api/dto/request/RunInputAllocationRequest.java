@@ -15,6 +15,8 @@ public record RunInputAllocationRequest(
     @NotBlank String itemId,
     @NotNull @DecimalMin(value = "0.0", inclusive = false, message = "quantity must be more than 0.") BigDecimal quantity,
     @NotBlank(message = "unit is required.") String unit,
-    String processId
+    String processId,
+    /** Optional key of the whole split, as for a single recording (docs/domain/production-run-recording.md RR3). */
+    String requestId
 ) {
 }
