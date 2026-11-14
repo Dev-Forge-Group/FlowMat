@@ -62,7 +62,51 @@ npm run dev
 | 브라우저 E2E(가짜 API) | `npm run test:e2e` | 실 API가 필요한 spec 4개는 건너뛴다 |
 | 브라우저 E2E(실 API) | 백엔드·Vite를 띄운 뒤 `REAL_API_E2E=1 BASE_URL=http://localhost:5173 npx playwright test` | 한 worker로 돈다. 로그인 제한(계정당 10분 8회, IP당 12회)에 걸리면 429가 나므로, 전체를 돌릴 때는 백엔드를 `AUTH_LOGIN_ACCOUNT_LIMIT`·`AUTH_LOGIN_IP_LIMIT`를 크게 준 환경변수로 띄운다 |
 
+GitHub Actions는 바뀐 경로에 맞는 검사만 돌린다(2026-11-13, 비공개 저장소의 Actions 사용량 한도 때문). 같은 PR에 다시 push하면 이전 실행은 취소된다.
+
+| 워크플로 | 도는 조건(바뀐 경로) |
+|---|---|
+| `backend.yml` | `flowmat_backend/**`, `modules.yml` |
+| `frontend.yml` | `flowmat_frontend/**`, `modules.yml` |
+| `mock-e2e.yml`(가짜 API 브라우저) | `flowmat_frontend/**` |
+| `browser-e2e.yml`(실 API 브라우저) | `flowmat_backend/**`, `flowmat_frontend/**`, `scripts/**` |
+| `security.yml`의 npm audit | 프런트 `package.json`·`package-lock.json`, 그리고 매주 일요일 |
+| `commit-attribution.yml` | 항상 |
+
+각 워크플로는 자기 파일이 바뀔 때도 돈다. 문서만 바꾼 변경은 작성자 표기 검사만 돈다. 경로와 상관없이 전부 돌리려면 Actions 화면에서 워크플로를 직접 실행한다(`workflow_dispatch`).
+
 모듈 경계 테스트(`ModuleBoundaryTest`)는 2026-10-18부터 동결 목록 없이 돈다. 다른 도메인의 repository를 쓰면 바로 실패한다([ADR-002](architecture/adr/ADR-002-module-dependency.md), [ADR-012](architecture/adr/ADR-012-workflow-access-boundary.md)).
+
+## 사본 두 개를 함께 띄우기
+
+한 PC에서 저장소 사본 둘(Git worktree나 격리 사본)을 동시에 띄울 때 쓴다. 에이전트마다 사본을 따로 주는 경우가 그렇다. worktree는 파일만 나누고 포트와 DB는 나누지 않는다. 기본값 그대로 두 번째 사본을 띄우면 다음 일이 생긴다.
+
+- Compose는 프로젝트 이름을 디렉터리 이름으로 정한다. 어느 사본이든 `flowmat_backend`이므로, 두 번째 사본의 `docker compose up`·`down`이 첫 번째 사본의 DB와 Redis 컨테이너를 건드린다.
+- 두 백엔드가 같은 DB를 쓰면 테스트 데이터가 섞이고, 마이그레이션이 다른 사본의 DB에 적용된다.
+- Playwright는 로컬에서 이미 떠 있는 서버를 다시 쓴다(`reuseExistingServer`). 포트가 같으면 다른 사본의 화면을 검사한다.
+
+두 번째 사본에는 아래 값을 준다. 첫 번째 사본은 기본값 그대로 둔다. 포트 번호는 예시이고 비어 있는 것이면 된다.
+
+| 무엇 | 두 번째 사본의 값 | 어디에 |
+|---|---|---|
+| Compose 프로젝트 | `COMPOSE_PROJECT_NAME=flowmat-b` | `flowmat_backend/.env` |
+| DB·Redis 호스트 포트 | `POSTGRES_HOST_PORT=5433`, `REDIS_HOST_PORT=6380` | `flowmat_backend/.env` |
+| 백엔드가 붙는 DB·Redis | `DB_URL=jdbc:postgresql://localhost:5433/flowmat`, `REDIS_PORT=6380` | `flowmat_backend/.env` |
+| 백엔드 포트 | `SERVER_PORT=8090` | `flowmat_backend/.env` |
+| 프런트 주소 | `FRONTEND_URL`·`APP_OAUTH2_REDIRECT_URI`·`APP_CORS_ALLOWED_ORIGINS`를 두 번째 프런트 주소로 | `flowmat_backend/.env` |
+| 프런트가 부르는 백엔드 | `FLOWMAT_API_TARGET=http://127.0.0.1:8090` | 프런트 셸의 환경변수 |
+| Playwright가 띄우는 서버 포트 | `E2E_PORT=4174` | 프런트 셸의 환경변수 |
+
+```powershell
+# 두 번째 사본의 flowmat_frontend에서
+$env:FLOWMAT_API_TARGET = 'http://127.0.0.1:8090'
+npm run dev -- --port 5174          # 개발 서버
+$env:E2E_PORT = '4174'
+$env:REAL_API_E2E = '1'
+npx playwright test e2e/equipment-changeover.spec.ts   # 자기 백엔드로 실 API 검사
+```
+
+`DB_URL`의 포트를 바꾸지 않으면 두 번째 백엔드가 첫 번째 사본의 DB에 붙으니, `.env`를 고친 뒤 셸에 다시 내보냈는지 확인한다. 백엔드 테스트(`gradlew test`)는 Testcontainers가 빈 포트에 DB를 따로 띄우므로 사본끼리 부딪히지 않는다.
 
 ## 자주 나는 오류
 
@@ -71,7 +115,7 @@ npm run dev
 | `Migration checksum mismatch` | 오류에 나온 버전과 `flyway_schema_history`의 체크섬을 읽기 전용으로 비교한다. 기존 dev DB의 V26 불일치 기록은 위 인계 문서를 확인한다. DB 이력 변경은 담당자 결정 후 진행한다. |
 | `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` 누락 | `.env` 작성 뒤 백엔드 셸에 환경변수를 내보냈는지 확인한다. |
 | Compose에서 `Set POSTGRES_* in .env` | `flowmat_backend/.env` 파일 위치와 세 값을 확인한다. |
-| 5432 또는 6379 포트 점유 | 이미 실행 중인 DB·Redis를 확인한다. 다른 DB를 쓸 경우 `DB_URL`도 맞춘다. |
+| 5432 또는 6379 포트 점유 | 이미 실행 중인 DB·Redis를 확인한다. 다른 DB를 쓸 경우 `DB_URL`도 맞춘다. 다른 사본이 쓰는 중이면 위 "사본 두 개를 함께 띄우기"를 따른다. |
 | 첫 로그인 401 | 준비 상태 직후 데모 초기화가 끝나지 않았을 수 있다. 백엔드 로그의 초기화 완료를 확인하고 재시도한다. |
 
 임시 DB를 사용할 때는 별도 컨테이너와 포트를 만들고 `DB_URL`을 그 포트로 바꾼다. 기존 개발 DB 볼륨을 지우지 않는다.

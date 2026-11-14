@@ -10,6 +10,19 @@ import { newRequestId } from '../../../shared/lib/requestId'
 import { savedAtText } from '../../inventory/model/versionHistoryModel'
 import { attendanceCsv, attendanceLineText, comparisonDayText, exportRange } from '../model/attendanceModel'
 
+interface AttendanceDraft {
+  clockIn: string
+  clockOutAt: string
+  note: string
+}
+
+interface CancellationDraft {
+  attendanceId: string
+  reason: string
+}
+
+const EMPTY_ATTENDANCE_DRAFT: AttendanceDraft = { clockIn: '', clockOutAt: '', note: '' }
+
 /**
  * A worker's attendance, for the worker themselves and the project owner (docs/architecture/adr/ADR-026-attendance.md): clock
  * in and out, or record a stretch afterwards; a mistake is cancelled with a reason. The last 7 days stand beside the worked
@@ -20,11 +33,11 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
   const query = useWorkerAttendanceQuery(projectId, userId, open)
   const comparison = useAttendanceComparisonQuery(projectId, userId, open)
   const { record, clockOut, cancel } = useWorkerAttendanceMutations(projectId, userId)
-  const [clockIn, setClockIn] = useState('')
-  const [clockOutAt, setClockOutAt] = useState('')
-  const [note, setNote] = useState('')
-  const [cancelling, setCancelling] = useState<string | null>(null)
-  const [reason, setReason] = useState('')
+  const [draft, setDraft] = useState<AttendanceDraft>(EMPTY_ATTENDANCE_DRAFT)
+  const { clockIn, clockOutAt, note } = draft
+  const [cancellation, setCancellation] = useState<CancellationDraft | null>(null)
+  const cancelling = cancellation?.attendanceId ?? null
+  const reason = cancellation?.reason ?? ''
   const [problem, setProblem] = useState<string | null>(null)
   // The download period starts as the 7 days shown until changed (AT9).
   const [exportFrom, setExportFrom] = useState<string | null>(null)
@@ -36,6 +49,10 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
     ? comparison.data.days.filter((day) => day.attendedMinutes > 0 || day.laborMinutes > 0) : []
   const failure = record.error ?? clockOut.error ?? cancel.error
 
+  function editDraft(patch: Partial<AttendanceDraft>) {
+    setDraft((current) => ({ ...current, ...patch }))
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault()
     const from = new Date(clockIn)
@@ -45,8 +62,10 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
       return
     }
     setProblem(null)
+    const submitted = draft
     record.mutate({ requestId: newRequestId(), clockIn: from.toISOString(), clockOut: until?.toISOString(), note: note.trim() || undefined },
-      { onSuccess: () => { setClockIn(''); setClockOutAt(''); setNote('') } })
+      // A response only clears its own draft; edits made while waiting form a new one.
+      { onSuccess: () => setDraft((current) => current === submitted ? EMPTY_ATTENDANCE_DRAFT : current) })
   }
 
   async function downloadCsv(event: FormEvent) {
@@ -72,12 +91,15 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
   }
 
   function confirmCancel(attendanceId: string) {
-    if (!reason.trim()) {
+    const submitted = cancellation
+    if (!submitted || submitted.attendanceId !== attendanceId) return
+    if (!submitted.reason.trim()) {
       setProblem('Give a reason when cancelling attendance.')
       return
     }
     setProblem(null)
-    cancel.mutate({ attendanceId, reason: reason.trim() }, { onSuccess: () => { setCancelling(null); setReason('') } })
+    cancel.mutate({ attendanceId, reason: submitted.reason.trim() },
+      { onSuccess: () => setCancellation((current) => current === submitted ? null : current) })
   }
 
   return (
@@ -104,11 +126,14 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
               {attendanceLineText(line)}
               {!line.cancelled && cancelling !== line.attendanceId && <>{' '}
                 <button type="button" aria-label={`Cancel attendance from ${savedAtText(line.clockIn)}`}
-                  onClick={() => { setCancelling(line.attendanceId); setReason('') }}>Cancel</button></>}
+                  onClick={() => setCancellation({ attendanceId: line.attendanceId, reason: '' })}>Cancel</button></>}
               {cancelling === line.attendanceId && <>{' '}
-                <input aria-label="Cancel reason" maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
+                <input aria-label="Cancel reason" maxLength={500} value={reason} onChange={(event) => {
+                  const value = event.target.value
+                  setCancellation((current) => current?.attendanceId === line.attendanceId ? { ...current, reason: value } : current)
+                }} />
                 <button type="button" disabled={cancel.isPending} onClick={() => confirmCancel(line.attendanceId)}>Confirm cancel</button>
-                <button type="button" onClick={() => setCancelling(null)}>Keep</button></>}
+                <button type="button" onClick={() => setCancellation(null)}>Keep</button></>}
             </li>
           ))}
         </ul>
@@ -116,13 +141,13 @@ export function WorkerAttendance({ projectId, userId }: { projectId: string; use
       {data && (
         <form aria-label="Record attendance" onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 4 }}>Clock in
-            <input type="datetime-local" aria-label="Clock in" value={clockIn} onChange={(event) => setClockIn(event.target.value)} />
+            <input type="datetime-local" aria-label="Clock in" value={clockIn} onChange={(event) => editDraft({ clockIn: event.target.value })} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>Clock out
-            <input type="datetime-local" aria-label="Clock out" value={clockOutAt} onChange={(event) => setClockOutAt(event.target.value)} />
+            <input type="datetime-local" aria-label="Clock out" value={clockOutAt} onChange={(event) => editDraft({ clockOutAt: event.target.value })} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>Note
-            <input aria-label="Attendance note" maxLength={200} value={note} onChange={(event) => setNote(event.target.value)} />
+            <input aria-label="Attendance note" maxLength={200} value={note} onChange={(event) => editDraft({ note: event.target.value })} />
           </label>
           <button type="submit" disabled={record.isPending}>Save attendance</button>
         </form>

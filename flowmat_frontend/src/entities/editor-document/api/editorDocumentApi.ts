@@ -3,8 +3,8 @@ import {
   backendDtoToEditorDocument,
   editorDocumentToBackendSaveInput,
   type BackendEditorDocumentDto,
-} from '../../../lib/flowmat-editor/adapters/editorDocumentBackendAdapter'
-import type { EditorDocument } from '../../../lib/flowmat-editor/model/EditorDocument'
+} from '../model/editorDocumentBackendAdapter'
+import type { EditorDocument } from '../../../lib/flowmat-editor'
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import type { ApiEnvelope } from '../../../shared/types/api'

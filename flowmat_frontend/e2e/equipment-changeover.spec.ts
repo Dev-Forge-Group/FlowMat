@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 
@@ -12,6 +12,9 @@ const suffix = Date.now().toString(36).toUpperCase()
 const FIRST_ITEM = `CO-A-${suffix}`
 const NEXT_ITEM = `CO-B-${suffix}`
 const CODE = `EQ-CO-${suffix}`
+// A select's label text includes all of its options, so getByLabel('To') also matched From once the suffix had "TO" in
+// it. The role name leaves the select's own options out.
+const side = (scope: Locator, name: 'From' | 'To') => scope.getByRole('combobox', { name, exact: true })
 
 async function api(request: APIRequestContext) {
   const login = await request.post('/api/auth/login', { data: { userIdOrEmail: 'demo-owner', password: 'demo1234' } })
@@ -65,8 +68,8 @@ test('a changeover from the previous order on the equipment is added to the time
     const changeovers = page.getByRole('group', { name: 'Changeovers' })
     await expect(changeovers).toContainText('No changeover times set')
 
-    await changeovers.getByLabel('From').selectOption({ label: `${FIRST_ITEM} · changeover e2e ${FIRST_ITEM}` })
-    await changeovers.getByLabel('To').selectOption({ label: `${NEXT_ITEM} · changeover e2e ${NEXT_ITEM}` })
+    await side(changeovers, 'From').selectOption({ label: `${FIRST_ITEM} · changeover e2e ${FIRST_ITEM}` })
+    await side(changeovers, 'To').selectOption({ label: `${NEXT_ITEM} · changeover e2e ${NEXT_ITEM}` })
     await changeovers.getByLabel('Minutes').fill('90')
     await changeovers.getByLabel('Note').fill('Line flush')
     await changeovers.getByRole('button', { name: 'Add changeover' }).click()
@@ -74,8 +77,8 @@ test('a changeover from the previous order on the equipment is added to the time
     await expect(rule).toContainText('1 h 30 min')
 
     // The same pair again is refused before it is sent; the time is changed on the row instead.
-    await changeovers.getByLabel('From').selectOption({ label: `${FIRST_ITEM} · changeover e2e ${FIRST_ITEM}` })
-    await changeovers.getByLabel('To').selectOption({ label: `${NEXT_ITEM} · changeover e2e ${NEXT_ITEM}` })
+    await side(changeovers, 'From').selectOption({ label: `${FIRST_ITEM} · changeover e2e ${FIRST_ITEM}` })
+    await side(changeovers, 'To').selectOption({ label: `${NEXT_ITEM} · changeover e2e ${NEXT_ITEM}` })
     await changeovers.getByLabel('Minutes').fill('30')
     await changeovers.getByRole('button', { name: 'Add changeover' }).click()
     await expect(changeovers.getByRole('alert')).toContainText('This pair already has a changeover')
