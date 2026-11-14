@@ -17,7 +17,17 @@ public interface ProductionRunService {
 
     List<ProductionRunItemResponse> listRunItems(String productionRunId);
 
+    /**
+     * Records one item. With a {@code requestId}, sending the same recording again returns the row recorded the first time
+     * and moves nothing, and sending other contents under the key is refused (docs/domain/production-run-recording.md RR1-RR2).
+     */
     ProductionRunItemResponse recordRunItem(String productionRunId, ProductionRunItemRecordRequest request);
+
+    /**
+     * Records row {@code requestPart} (from 1) of a split over LOTs under the split's request key, which the split has already
+     * checked for a resend (RR3). Without a key in the request it records as {@link #recordRunItem} would.
+     */
+    ProductionRunItemResponse recordRunItemPart(String productionRunId, ProductionRunItemRecordRequest request, int requestPart);
 
     ProductionRunResponse finishRun(String productionRunId, ProductionRunFinishRequest request);
 

@@ -10,6 +10,9 @@ public interface ProductionRunItemRepository extends JpaRepository<ProductionRun
 
     List<ProductionRunItem> findAllByProductionRunIdOrderByProductionRunItemIdAsc(String productionRunId);
 
+    /** The rows recorded under one request key of a run, in the order they were recorded (RR1-RR3). */
+    List<ProductionRunItem> findAllByProductionRunIdAndRequestIdOrderByRequestPartAsc(String productionRunId, String requestId);
+
     /** Recordings of one LOT in one direction across runs, e.g. the runs that consumed it. */
     List<ProductionRunItem> findAllByLotIdAndDirection(String lotId, String direction);
 

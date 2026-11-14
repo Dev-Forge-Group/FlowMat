@@ -54,6 +54,12 @@ public class ProductionRunItem {
     private OffsetDateTime cancelledAt;
     private String cancelReason;
 
+    /** The key the sender gave this recording, so a resend after a lost reply records nothing twice (RR1); else null. */
+    @Column(length = 100)
+    private String requestId;
+    /** Which row of the keyed request this is: 0 for a single recording, 0 to n-1 over a split by LOT (RR3); else null. */
+    private Short requestPart;
+
     public boolean isCancelled() {
         return "Y".equals(cancelledYn);
     }

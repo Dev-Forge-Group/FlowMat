@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
@@ -45,6 +46,7 @@ class RunInputAllocationServiceTest {
     @Mock private UnitConverter unitConverter;
     @Mock private StockAllocationRepository stockAllocationRepository;
     @Mock private StockAllocationService stockAllocationService;
+    @Mock private org.myweb.flowmat.domain.production.repository.ProductionRunItemRepository productionRunItemRepository;
     @Mock private ProductionPlanningReferences references;
     @Mock private org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery projectCalendar;
 
@@ -83,7 +85,8 @@ class RunInputAllocationServiceTest {
     void anActualRunCanTakeItsOwnReservedStockInExpiryOrder() {
         assertEquals(2, service.allocate("run", request("8")).size());
         ArgumentCaptor<ProductionRunItemRecordRequest> records = ArgumentCaptor.forClass(ProductionRunItemRecordRequest.class);
-        verify(productionRunService, times(2)).recordRunItem(eq("run"), records.capture());
+        verify(productionRunService).recordRunItemPart(eq("run"), records.capture(), eq(1));
+        verify(productionRunService).recordRunItemPart(eq("run"), records.capture(), eq(2));
         assertEquals("soon_stock", records.getAllValues().get(0).inventoryId());
         assertEquals(0, new BigDecimal("5").compareTo(records.getAllValues().get(0).actualQty()));
         assertEquals("late_stock", records.getAllValues().get(1).inventoryId());
@@ -112,7 +115,7 @@ class RunInputAllocationServiceTest {
     void quantityIsRoundedBeforeCheckingTheUsableStockBoundary() {
         assertEquals(2, service.allocate("run", request("8.00004")).size());
         ArgumentCaptor<ProductionRunItemRecordRequest> records = ArgumentCaptor.forClass(ProductionRunItemRecordRequest.class);
-        verify(productionRunService, times(2)).recordRunItem(eq("run"), records.capture());
+        verify(productionRunService, times(2)).recordRunItemPart(eq("run"), records.capture(), anyInt());
         BigDecimal total = records.getAllValues().stream().map(ProductionRunItemRecordRequest::actualQty)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertEquals(0, new BigDecimal("8").compareTo(total));
@@ -122,7 +125,7 @@ class RunInputAllocationServiceTest {
     void aRoundedRemainderDoesNotCreateAZeroStockRecordingOnAnotherLot() {
         assertEquals(1, service.allocate("run", request("5.00004")).size());
         ArgumentCaptor<ProductionRunItemRecordRequest> record = ArgumentCaptor.forClass(ProductionRunItemRecordRequest.class);
-        verify(productionRunService).recordRunItem(eq("run"), record.capture());
+        verify(productionRunService).recordRunItemPart(eq("run"), record.capture(), anyInt());
         assertEquals("soon_stock", record.getValue().inventoryId());
         assertEquals(0, new BigDecimal("5").compareTo(record.getValue().actualQty()));
     }
@@ -139,7 +142,7 @@ class RunInputAllocationServiceTest {
     void aHalfwayQuantityUsesTheRoundedStockAmount() {
         assertEquals(1, service.allocate("run", request("0.00005")).size());
         ArgumentCaptor<ProductionRunItemRecordRequest> record = ArgumentCaptor.forClass(ProductionRunItemRecordRequest.class);
-        verify(productionRunService).recordRunItem(eq("run"), record.capture());
+        verify(productionRunService).recordRunItemPart(eq("run"), record.capture(), anyInt());
         assertEquals(0, new BigDecimal("0.0001").compareTo(record.getValue().actualQty()));
     }
 
@@ -152,7 +155,7 @@ class RunInputAllocationServiceTest {
     }
 
     private RunInputAllocationRequest request(String quantity) {
-        return new RunInputAllocationRequest("item", new BigDecimal(quantity), "kg", null);
+        return new RunInputAllocationRequest("item", new BigDecimal(quantity), "kg", null, null);
     }
 
     private LotView lot(String id, int expiresInDays) {
