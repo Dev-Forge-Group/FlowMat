@@ -61,6 +61,7 @@
 |---|---|
 | [work-order-readiness.md](work-order-readiness.md) | 작업지시 실행 준비 점검(Readiness) |
 | [work-instruction.md](work-instruction.md) | 작업 지침 revision과 실행 체크리스트 |
+| [production-run-recording.md](production-run-recording.md) | 실행 기록의 재전송: 응답을 잃은 기록을 다시 보내도 한 번만 반영(`requestId`) |
 | [production-run-correction.md](production-run-correction.md) | 종료된 생산 실행의 보정 전표 |
 
 ## 품질
