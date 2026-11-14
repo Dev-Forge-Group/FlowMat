@@ -5,7 +5,7 @@ name: Backend Tests & Build
 # catalog's folder paths, is checked by the frontend's own tests too.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
     paths:
       - 'flowmat_backend/**'
       - 'modules.yml'

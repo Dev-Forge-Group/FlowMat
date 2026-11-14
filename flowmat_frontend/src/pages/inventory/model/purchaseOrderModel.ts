@@ -56,19 +56,26 @@ export function orderForm(order: PurchaseOrderDto): OrderForm {
   }
 }
 
-/** A quantity as typed: a number above 0 with at most four decimals, else null. */
-export function typedQuantity(value: string): number | null {
-  const trimmed = value.trim()
-  if (!/^\d+(\.\d{1,4})?$/.test(trimmed)) return null
-  const number = Number(trimmed)
-  return number > 0 ? number : null
+/** Match numeric(14,4), as validated by the purchasing services, before converting to Number. */
+function typedPurchaseDecimal(value: string): number | undefined {
+  if (!/^\d+(\.\d{1,4})?$/.test(value)) return undefined
+  const whole = value.split('.')[0].replace(/^0+/, '')
+  if (whole.length > 10) return undefined
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
 }
 
-/** A unit price as typed: empty is none (null), else 0 or more with at most four decimals; undefined when it is neither. */
+/** A quantity as typed: above 0, at most ten whole digits and four decimals, else null. */
+export function typedQuantity(value: string): number | null {
+  const number = typedPurchaseDecimal(value.trim())
+  return number !== undefined && number > 0 ? number : null
+}
+
+/** Empty is none (null); else 0 or more with ten whole digits and four decimals at most; undefined when invalid. */
 export function typedPrice(value: string | undefined): number | null | undefined {
   const trimmed = (value ?? '').trim()
   if (!trimmed) return null
-  return /^\d+(\.\d{1,4})?$/.test(trimmed) ? Number(trimmed) : undefined
+  return typedPurchaseDecimal(trimmed)
 }
 
 /** The draft to send, or what is wrong with the form; lines left empty are dropped. */
@@ -90,12 +97,12 @@ export function orderPayload(
   for (const [index, line] of filled.entries()) {
     if (!line.itemId) return { input: null, error: `Choose the item on line ${index + 1}.` }
     const quantity = typedQuantity(line.quantity)
-    if (quantity === null) return { input: null, error: `Line ${index + 1}: enter a quantity above 0 with at most four decimals.` }
+    if (quantity === null) return { input: null, error: `Line ${index + 1}: enter a quantity above 0 with at most four decimals. Use at most 10 digits before the decimal.` }
     if (seen.has(line.itemId)) return { input: null, error: `${itemCode(line.itemId)} is on two lines; combine them.` }
     seen.add(line.itemId)
     const unitPrice = typedPrice(line.unitPrice)
     if (unitPrice === undefined) {
-      return { input: null, error: `Line ${index + 1}: enter a unit price of 0 or more with at most four decimals, or leave it empty.` }
+      return { input: null, error: `Line ${index + 1}: enter a unit price of 0 or more with at most four decimals, or leave it empty. Use at most 10 digits before the decimal.` }
     }
     lines.push({ itemId: line.itemId, quantity, expectedDate: null, note: null, ...(unitPrice !== null ? { unitPrice } : {}) })
   }
@@ -134,7 +141,7 @@ export function receivePayload(
     const line = byId.get(row.lineId)
     if (!line || !row.quantity.trim()) continue
     const quantity = typedQuantity(row.quantity)
-    if (quantity === null) return { input: null, error: `${line.itemCode}: enter a quantity above 0 with at most four decimals.` }
+    if (quantity === null) return { input: null, error: `${line.itemCode}: enter a quantity above 0 with at most four decimals. Use at most 10 digits before the decimal.` }
     if (quantity > line.remainingQuantity) {
       return { input: null, error: `Only ${formatQty(line.remainingQuantity)} of ${line.itemCode} is left to receive.` }
     }
@@ -224,7 +231,7 @@ export function returnPayload(
   const record = choice.records.find((row) => row.inventoryId === form.inventoryId)
   if (!record) return { input: null, error: `Choose the stock of ${choice.itemCode} to send back.` }
   const quantity = typedQuantity(form.quantity)
-  if (quantity === null) return { input: null, error: `${choice.itemCode}: enter a quantity above 0 with at most four decimals.` }
+  if (quantity === null) return { input: null, error: `${choice.itemCode}: enter a quantity above 0 with at most four decimals. Use at most 10 digits before the decimal.` }
   if (quantity > choice.open) return { input: null, error: `Only ${formatQty(choice.open)} of ${choice.itemCode} can go back.` }
   const free = round4(record.quantity - record.reservedQuantity)
   if (quantity > free) return { input: null, error: `Only ${formatQty(free)} of ${choice.itemCode} there is not reserved.` }
@@ -708,7 +715,7 @@ export function approvalStepsPayload(rows: ApprovalStepRow[]):
   const steps: { fromValue: number; approverId: string }[] = []
   for (const [index, row] of rows.entries()) {
     const value = typedPrice(row.fromValue)
-    if (value == null) return { steps: null, error: `Step ${index + 1}: enter the value it starts from, 0 or more with at most four decimals.` }
+    if (value == null) return { steps: null, error: `Step ${index + 1}: enter the value it starts from, 0 or more with at most four decimals. Use at most 10 digits before the decimal.` }
     if (!row.approverId) return { steps: null, error: `Step ${index + 1}: choose who approves.` }
     if (steps.some((one) => one.approverId === row.approverId)) return { steps: null, error: `${row.approverId} is on two steps.` }
     steps.push({ fromValue: value, approverId: row.approverId })

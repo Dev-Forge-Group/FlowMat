@@ -4,7 +4,7 @@ name: Browser E2E with Backend Services
 # changes. The mocked browser checks need only the frontend and are in mock-e2e.yml.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
     paths:
       - 'flowmat_backend/**'
       - 'flowmat_frontend/**'
@@ -269,6 +269,12 @@ jobs:
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts
+
+      - name: Run real purchase and warehouse recovery E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts
 
       - name: Run real equipment schedule E2E
         working-directory: flowmat_frontend

@@ -62,7 +62,7 @@ test('the owner sets approval steps and approves a draft when it is their turn',
   await form.getByRole('button', { name: 'Add step' }).click()
   await expect(form.getByLabel('Step 2 approver').locator('option')).toHaveText(['Choose who approves', 'kim', 'lee'])
   await form.getByRole('button', { name: 'Save steps' }).click()
-  await expect(approval.getByRole('alert')).toHaveText('Step 2: enter the value it starts from, 0 or more with at most four decimals.')
+  await expect(approval.getByRole('alert')).toHaveText('Step 2: enter the value it starts from, 0 or more with at most four decimals. Use at most 10 digits before the decimal.')
   await form.getByLabel('Step 2 from').fill('500')
   await form.getByLabel('Step 2 approver').selectOption('lee')
   await form.getByRole('button', { name: 'Save steps' }).click()

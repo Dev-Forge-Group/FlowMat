@@ -31,7 +31,8 @@ for (const change of ['renamed', 'partial', 'cancelled', 'keyboard', 'conflict',
         return ok(route, task)
       }
       if (request.method() === 'POST' && pathname === '/api/warehouse-tasks/task/complete') {
-        const body = request.postDataJSON() as { expectedToLocation?: string }
+        const body = request.postDataJSON() as { expectedToLocation?: string; expectedQuantity?: number }
+        expect(body.expectedQuantity).toBe(task.quantity)
         confirmations.push(body.expectedToLocation ?? '')
         if (change === 'conflict' && confirmations.length === 1) {
           task.toLocation = 'DST-R'
