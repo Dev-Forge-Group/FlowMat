@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useSaveWorkOrderMutation,
@@ -117,6 +117,9 @@ export function WorkOrdersPanel({
 
   const [editing, setEditing] = useState<WorkOrderDto | null>(null)
   const [form, setForm] = useState<OrderForm>(EMPTY_FORM)
+  // The form as last rendered, so a save that ends can tell whether anything was typed while it waited.
+  const latestForm = useRef(form)
+  latestForm.current = form
   // Whether the user chose the BOM in this form; one they did not choose follows the planned start.
   const [bomPicked, setBomPicked] = useState(false)
   const [readinessFor, setReadinessFor] = useState<string | null>(null)
@@ -238,6 +241,7 @@ export function WorkOrdersPanel({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    const submitted = form
     try {
       await saveMutation.mutateAsync({
         workOrderId: editing?.workOrderId,
@@ -256,7 +260,8 @@ export function WorkOrdersPanel({
           ? form.optionalItemIds.filter((itemId) => optionalChoices.some((choice) => choice.childItemId === itemId))
           : undefined,
       })
-      resetForm()
+      // What was typed while this saved is the next draft: it stays, for the same order when one was being edited.
+      if (latestForm.current === submitted) resetForm()
     } catch {
       // Surfaced through saveMutation.error below the form.
     }

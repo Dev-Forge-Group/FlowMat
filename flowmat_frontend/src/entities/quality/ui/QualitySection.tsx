@@ -201,10 +201,8 @@ export function QualitySection({
           productionRunId={productionRunId}
           standards={standardsQuery.data ?? []}
           pending={recordMutation.isPending}
-          onSubmit={async (body) => {
-            await recordMutation.mutateAsync(body)
-            setOpen(null)
-          }}
+          onSubmit={(body) => recordMutation.mutateAsync(body)}
+          onDone={() => setOpen(null)}
           onCancel={() => openForm(null)}
         />
       )}
