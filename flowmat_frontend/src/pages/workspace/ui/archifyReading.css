@@ -304,6 +304,34 @@
   background: var(--ax-toolbar-hover);
   box-shadow: inset 2px 0 0 var(--ax-frontend-stroke);
 }
+/* A row with its pin beside it; the pinned row keeps archify's pinned-relationship mark. */
+.focus-chip .relationship-lens-entry {
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+  border-radius: 0.35rem;
+}
+.focus-chip .relationship-lens-entry[data-pinned="true"] {
+  background: var(--ax-toolbar-hover);
+  box-shadow: inset 2px 0 0 var(--ax-frontend-stroke);
+}
+.focus-chip .relationship-lens-entry .relationship-lens-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.focus-chip .relationship-lens-pin {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  border-radius: 0.35rem;
+  color: var(--ax-text-faint);
+  font-size: 0.7rem;
+}
+.focus-chip .relationship-lens-pin:hover,
+.focus-chip .relationship-lens-pin:focus-visible {
+  background: var(--ax-toolbar-hover);
+  color: var(--ax-text);
+}
+.focus-chip .relationship-lens-pin[aria-pressed="true"] { color: var(--ax-frontend-stroke); }
 .relationship-lens-direction {
   grid-row: 1 / 3;
   align-self: center;

@@ -29,7 +29,8 @@ export function useCanvasReading(
   const graph = useMemo(() => readingGraph(canvas), [canvas])
   const names = useMemo(() => new Map(canvas.nodes.map((node) => [node.processId, node.name])), [canvas.nodes])
   const known = useMemo(() => new Set(graph.nodeIds), [graph])
-  const state = useMemo(() => parseReadingHash(location.hash, known), [location.hash, known])
+  const knownConnections = useMemo(() => new Set(graph.edges.map((edge) => edge.id)), [graph])
+  const state = useMemo(() => parseReadingHash(location.hash, known, knownConnections), [location.hash, known, knownConnections])
   const nameOf = useCallback((processId: string) => names.get(processId) ?? processId, [names])
   const view = useMemo(() => (state ? readingView(graph, state, nameOf) : null), [graph, state, nameOf])
   // undefined: not picking a route; null: waiting for its start; an id: waiting for its end. Picking belongs to the reading
@@ -71,6 +72,22 @@ export function useCanvasReading(
     cancelRoute()
     show({ kind: 'focus', processId, reach: direction })
   }, [cancelRoute, show])
+
+  /** Pins one connection in its start process's passport, or unpins it when it is the one pinned (archify's relationship). */
+  const pin = useCallback((connectionId: string) => {
+    cancelRoute()
+    if (state?.kind === 'relation' && state.connectionId === connectionId) {
+      const edge = graph.edges.find((candidate) => candidate.id === connectionId)
+      write(edge ? { kind: 'focus', processId: edge.from, reach: null } : null)
+      return
+    }
+    show({ kind: 'relation', connectionId })
+  }, [cancelRoute, graph, show, state, write])
+  const pinned = useMemo(() => {
+    if (state?.kind !== 'relation') return null
+    const edge = graph.edges.find((candidate) => candidate.id === state.connectionId)
+    return edge ? { connectionId: edge.id, from: edge.from, to: edge.to } : null
+  }, [graph, state])
 
   const startRoute = useCallback((from: string | null = null) => {
     setPicking({ from, during: readingKey })
@@ -172,6 +189,9 @@ export function useCanvasReading(
     /** Shows one connection on the canvas for a moment; null puts back what was shown. */
     previewConnection: setPreviewId,
     focus,
+    /** The connection pinned in a passport (`#relation=`), with its two ends, and a way to pin or unpin one. */
+    pinned,
+    pin,
     reveal,
     startRoute,
     cancelRoute,

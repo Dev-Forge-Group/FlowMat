@@ -4,8 +4,20 @@ import {
 } from './readingHash'
 
 const known = new Set(['mix', 'bake', 'p 1/2'])
+const connections = new Set(['c1', 'c 2/3'])
 
 describe('reading hash', () => {
+  it('writes and reads back a pinned connection, and only one the canvas has', () => {
+    for (const connectionId of ['c1', 'c 2/3']) {
+      const state = { kind: 'relation', connectionId } as const
+      expect(parseReadingHash(formatReadingHash(state), known, connections)).toEqual(state)
+    }
+    expect(formatReadingHash({ kind: 'relation', connectionId: 'c 2/3' })).toBe('#relation=c%202%2F3')
+    expect(parseReadingHash('#relation=c1&run=r1', known, connections)).toEqual({ kind: 'relation', connectionId: 'c1' })
+    expect(parseReadingHash('#relation=gone', known, connections)).toBeNull()
+    expect(parseReadingHash('#relation=c1', known)).toBeNull()
+  })
+
   it('writes and reads back focus, reach and route', () => {
     for (const state of [
       { kind: 'focus', processId: 'mix', reach: null },
