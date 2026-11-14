@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export type GuideAction = 'find' | 'route' | 'map' | 'lens' | 'runs' | 'changes' | 'present'
 
@@ -35,15 +35,16 @@ export function DiagramGuide({ processes, connections, onAction, onClose }: {
   onClose(): void
 }) {
   const actionsRef = useRef<HTMLDivElement>(null)
-  const openerRef = useRef<HTMLElement | null>(null)
+  // Who had focus before this opened, read while it first renders: by the time effects run, focus is already inside (or,
+  // with React's StrictMode running effects twice, the second run would read this panel's own button).
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
 
   useEffect(() => {
-    openerRef.current = document.activeElement as HTMLElement | null
     actionsRef.current?.querySelector<HTMLButtonElement>('.diagram-guide-action')?.focus()
   }, [])
 
   function close() {
-    openerRef.current?.focus?.()
+    opener?.focus?.()
     onClose()
   }
 
