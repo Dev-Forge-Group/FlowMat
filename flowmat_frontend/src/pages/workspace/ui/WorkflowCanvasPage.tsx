@@ -37,6 +37,7 @@ import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
 import { ExportMenu, type ExportChoice } from './ExportMenu'
+import { ProcessIndex } from './ProcessIndex'
 import type { ExportOutcome, PngExport, SvgExport } from './CanvasViewport'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
@@ -1000,7 +1001,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   // A production run shown over the canvas (address `run=`): each process's mark from its latest step; view only.
   const canvasProcessIds = useMemo(() => new Set(canvas.nodes.map((node) => node.processId)), [canvas.nodes])
   // archify keeps one reading panel open at a time: the finder, the lens, the guide, or FlowMat's run and revision pickers.
-  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | null>(null)
+  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | 'index' | null>(null)
   const runView = useRunOverlay(canvas.workflow.workflowId, reading.run.id, canvasProcessIds, panel === 'runs')
   const changesView = useRevisionChanges(canvas.workflow.workflowId, reading.changes.id, canvas)
   // archify's view controls: the semantic radar (overview map), the camera stepper and the zoom it shows.
@@ -1936,6 +1937,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             }}
             runsActive={reading.run.id != null} onRuns={() => setPanel((open) => (open === 'runs' ? null : 'runs'))}
             changesActive={reading.changes.id != null}
+            indexOpen={panel === 'index'} onIndex={() => setPanel((open) => (open === 'index' ? null : 'index'))}
             onChanges={() => setPanel((open) => (open === 'changes' ? null : 'changes'))}
             onFind={() => setPanel('finder')} onGuide={() => {
               setMapOpen(false)
@@ -1969,6 +1971,20 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             <SemanticLens kinds={reading.lens.kinds} chosen={reading.lens.chosen}
               status={reading.state?.kind === 'lens' ? reading.view?.text ?? null : null}
               onToggle={reading.lens.toggle} onClear={reading.clear} onClose={() => setPanel(null)} />
+          )}
+          {panel === 'index' && (
+            <ProcessIndex nodes={canvas.nodes} currentId={passportProcessId} previewId={intentShown?.id ?? null}
+              onPreview={(processId) => readingRef.current.intent.show(processId)}
+              onClose={() => setPanel(null)}
+              onChoose={(processId) => {
+                // As the finder does, but the index stays open to go on from one process to the next (archify).
+                editorCommandApiRef.current?.clearSelection()
+                setEditorSelection(EMPTY_EDITOR_SELECTION)
+                selectNode(processId)
+                const naming = reading.picking?.from === null
+                if (!reading.pick(processId)) reading.focus(processId)
+                else if (naming) reading.reveal([processId])
+              }} />
           )}
           {panel === 'finder' && (
             <ProcessFinder

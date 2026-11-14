@@ -284,6 +284,47 @@ test('pointing at or focusing a process previews its neighbours until something 
   await expect(page.locator('.reading-dim')).toHaveCount(0)
 })
 
+test('INDEX lists every process by kind, previews one, reads it and follows what the canvas previews', async ({ page }) => {
+  await openBakery(page)
+  const indexButton = viewControls(page).getByRole('button', { name: 'Open process index' })
+  await indexButton.click()
+  await expect(indexButton).toHaveAttribute('aria-expanded', 'true')
+  const index = page.getByRole('region', { name: 'Process index' })
+  await expect(index.locator('.process-index-head')).toContainText('5 processes')
+  // Grouped by kind in palette order, each kind with its count.
+  await expect(index.getByRole('group')).toHaveCount(4)
+  await expect(index.locator('.process-index-heading')).toHaveText([/Process\s*2/, /Equipment\s*1/, /Storage\s*1/, /Output\s*1/])
+  await expect(index.locator('.process-index-item strong')).toHaveText(['Mix', 'Wash', 'Bake', 'Cool', 'Pack'])
+
+  // Pointing at an entry previews that process with its neighbours, as on the canvas; leaving it ends the preview.
+  const bake = index.locator('[data-index-process="proc-bake"]')
+  await bake.hover()
+  await expect(processNode(page, 'proc-bake')).toHaveClass(/reading-origin/)
+  await expect(processNode(page, 'proc-wash')).toHaveClass(/reading-dim/)
+  await index.locator('.process-index-head').hover()
+  await expect(page.locator('.reading-dim')).toHaveCount(0)
+
+  // Pointing at a process on the canvas marks its entry.
+  await processNode(page, 'proc-cool').hover({ position: { x: 24, y: 18 } })
+  await expect(index.locator('[data-index-process="proc-cool"]')).toHaveAttribute('data-previewing', 'true')
+  await page.mouse.move(4, 4)
+
+  // Choosing an entry reads the process; the index stays open with it marked current.
+  await bake.click()
+  await expect(passport(page, 'Bake')).toBeVisible()
+  expect(hashOf(page)).toBe('#focus=proc-bake')
+  await expect(bake).toHaveAttribute('aria-current', 'true')
+  await expect(index).toBeVisible()
+
+  // The arrows move between entries, and Esc closes the index.
+  await bake.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(index.locator('[data-index-process="proc-cool"]')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(index).toHaveCount(0)
+  await expect(indexButton).toHaveAttribute('aria-expanded', 'false')
+})
+
 test('E opens the export menu: SVG in three themes, a PNG to save and a PNG to copy', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openBakery(page)
