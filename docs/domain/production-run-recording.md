@@ -28,6 +28,8 @@
 
 실행 상세의 **Record**와 **Split over LOTs (FEFO)**는 `createStockCommand`로 요청을 보낸다(재고 출고·이동 화면과 같다). 응답을 받기 전에는 내용이 같은 요청에 같은 열쇠를 다시 쓰고, 응답을 받으면 열쇠를 버린다. 네트워크 오류나 5xx면 결과를 모른다고 알리고, 값을 바꾸기 전에 같은 값으로 다시 누르라고 한다.
 
+기록이 저장되는 동안 양식에 입력한 것은 저장이 끝나도 지워지지 않고 다음 기록의 초안으로 남는다. 보낸 그대로인 양식만 비운다(구매·창고 화면과 같다). `run-record-pending.spec.ts`(모의 API)가 두 동작을 확인한다.
+
 ## 4. 검증
 
 - `RunItemRequestReplayIntegrationTest` 3건(실제 Postgres)

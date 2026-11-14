@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { formatQty } from '../../../shared/lib/formatQty'
 import type {
   DefectCreateRequest,
@@ -255,6 +255,8 @@ interface FormProps<T> {
   pending: boolean
   onSubmit: (body: T) => Promise<unknown>
   onCancel: () => void
+  /** Called once a save ends with the form as it was sent; a form changed while saving stays open with the new draft. */
+  onDone?: () => void
 }
 
 export function InspectionForm({
@@ -264,6 +266,7 @@ export function InspectionForm({
   pending,
   onSubmit,
   onCancel,
+  onDone,
   standards,
 }: FormProps<Omit<QualityInspectionCreateRequest, 'projectId'>> & {
   /** The project's inspection standards; those of the inspected item can be followed (docs/domain/inspection-standard.md). */
@@ -271,6 +274,10 @@ export function InspectionForm({
 }) {
   const [draft, setDraft] = useState<InspectionDraft>({ ...EMPTY_INSPECTION, targetKey: targets[0]?.key ?? '' })
   const [error, setError] = useState<string | null>(null)
+  const [savedNote, setSavedNote] = useState(false)
+  // The draft as last rendered, so a save that ends can tell whether anything was typed while it waited.
+  const latestDraft = useRef(draft)
+  latestDraft.current = draft
   const measured = measuredResult(draft)
   const failed = (measured ?? draft.result) === 'fail'
   const target = targets.find((t) => t.key === draft.targetKey)
@@ -301,11 +308,17 @@ export function InspectionForm({
       return
     }
     setError(null)
+    setSavedNote(false)
+    const submitted = draft
     try {
       await onSubmit(result.body)
     } catch {
       // The caller shows the server's answer.
+      return
     }
+    // What was typed while this saved is the next inspection: keep it open instead of closing over it.
+    if (latestDraft.current === submitted) onDone?.()
+    else setSavedNote(true)
   }
 
   return (
@@ -398,6 +411,11 @@ export function InspectionForm({
       {error && (
         <p role="alert" style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>
           {error}
+        </p>
+      )}
+      {savedNote && (
+        <p role="status" style={{ color: '#047857', fontSize: 12, margin: 0 }}>
+          Saved. What you typed while it saved is kept here as the next inspection.
         </p>
       )}
       <div style={{ display: 'flex', gap: 8 }}>

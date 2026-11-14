@@ -105,6 +105,8 @@ V1의 두 테이블에는 **FK와 CHECK가 없다.** 프로젝트·실행·LOT·
 - 그 LOT의 검사·불량 전체 이력이다. 어느 실행에서 기록했는지는 `run …`으로 보인다.
 - 여기서 기록하는 검사와 불량은 실행 없이 LOT만 대상으로 한다(입고 검사 등).
 
+- **저장이 느릴 때(2026-11-14):** 검사를 저장하는 동안 양식을 고치면, 저장이 끝나도 양식이 닫히지 않는다. 고친 값이 다음 검사로 남고 `Saved. What you typed while it saved is kept here as the next inspection.`이라고 알린다. 보낸 그대로였으면 전처럼 닫힌다(`InspectionForm`의 `onDone`).
+
 목록과 양식은 `entities/quality/ui`(`QualitySection`, `QualityRecords`)에 있어 두 화면이 같이 쓴다. 판정과 요청 조립 규칙은 `entities/quality/model/qualityModel.ts`에 있다.
 
 ## 검증
@@ -120,6 +122,7 @@ V1의 두 테이블에는 **FK와 CHECK가 없다.** 프로젝트·실행·LOT·
   - 권한: 외부인 403, viewer 읽기만, editor 기록·종결
 - e2e `inventory-reports.spec.ts`(REAL_API_E2E): API로 자료를 만든 뒤 Quality 탭(불합격 항목, 불량 종결), Analysis 탭(30 days), Movements → Stock on a date(15 kg), Stock 탭 재발주(30 days, 40 kg)를 실제 화면으로 확인
 - `qualityModel.test.ts` 5건, `qualityOverviewModel.test.ts` 3건(기간 시작, 합격률 표시)
+- e2e `production-forms-pending.spec.ts`(모의 API): 첫 검사가 저장되는 동안 고친 검사(`Weight`, 불합격)가 남고, 두 번째로 저장하면 양식이 닫힌다
 - 실 화면(2026-09-24): 수분 14.2%(10–12) 불합격 + 격리 → 해당 검사에서 불량 2 kg 기록 → 종결. 산출 LOT 재고 4, 격리 상태 유지, 콘솔 오류 0. 이어서 LOTs 탭에서 같은 LOT의 이력(실행 번호 포함)을 확인하고, 실행 없는 외관 검사를 추가
 - 실 화면(2026-09-25, Quality 탭): 무게 검사 불합격 1·합격 1, 불량 1 → 숫자 `2 / 50.0% / 1 / 1 / 1`, 두 표에 한 줄씩. Open defects에서 종결하자 목록에서 빠지고 유형 표의 Open이 0이 됨. 콘솔 오류 0
 

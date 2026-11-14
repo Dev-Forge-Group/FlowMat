@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { getWorkflowNodeDefinition } from '../../../entities/workflow/model/nodeCatalog'
 import type { CanvasNodeViewModel } from '../../../entities/workflow/model/types'
 import { findProcesses } from '../model/graphReading'
@@ -38,7 +38,9 @@ export function ProcessFinder({ nodes, context, linksOf, onPick, onClose }: {
   onClose(): void
 }) {
   const [query, setQuery] = useState('')
-  const openerRef = useRef<HTMLElement | null>(null)
+  // Who had focus before this opened, read while it first renders: by the time effects run, the search box has already taken focus (or,
+  // with React's StrictMode running effects twice, the second run would read this panel's own button).
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const copy = contextCopy(context)
   const badges = context.kind === 'focus' ? null : context.badges
@@ -50,12 +52,8 @@ export function ProcessFinder({ nodes, context, linksOf, onPick, onClose }: {
   }, [badges, nodes])
   const visible = useMemo(() => (query.trim() ? findProcesses(available, query, available.length) : available), [available, query])
 
-  useEffect(() => {
-    openerRef.current = document.activeElement as HTMLElement | null
-  }, [])
-
   function close() {
-    openerRef.current?.focus?.()
+    opener?.focus?.()
     onClose()
   }
 

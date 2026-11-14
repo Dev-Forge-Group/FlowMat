@@ -16,11 +16,12 @@ export function SemanticLens({ kinds, chosen, status, onToggle, onClear, onClose
   onClose(): void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const openerRef = useRef<HTMLElement | null>(null)
+  // Who had focus before this opened, read while it first renders: by the time effects run, focus is already inside (or,
+  // with React's StrictMode running effects twice, the second run would read this panel's own button).
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
   const [copied, setCopied] = useState<'copied' | 'failed' | null>(null)
 
   useEffect(() => {
-    openerRef.current = document.activeElement as HTMLElement | null
     // The first kind that can be pressed, else the close button. One selector list would match in document order, and
     // the close button comes first.
     const panel = panelRef.current
@@ -29,7 +30,7 @@ export function SemanticLens({ kinds, chosen, status, onToggle, onClear, onClose
   }, [])
 
   function close() {
-    openerRef.current?.focus?.()
+    opener?.focus?.()
     onClose()
   }
 

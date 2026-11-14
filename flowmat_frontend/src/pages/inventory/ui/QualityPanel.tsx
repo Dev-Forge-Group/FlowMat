@@ -126,10 +126,8 @@ export function QualityPanel({ projectId, items }: { projectId: string; items: I
             productionRunId={null}
             standards={standardsQuery.data ?? []}
             pending={recordMutation.isPending}
-            onSubmit={async (body) => {
-              await recordMutation.mutateAsync(body)
-              setForm(null)
-            }}
+            onSubmit={(body) => recordMutation.mutateAsync(body)}
+            onDone={() => setForm(null)}
             onCancel={() => openForm(null)}
           />
         )}
