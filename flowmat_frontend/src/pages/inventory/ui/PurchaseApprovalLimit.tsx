@@ -44,7 +44,7 @@ export function PurchaseApprovalLimit({ projectId }: { projectId: string }) {
     event.preventDefault()
     const value = typedPrice(typed ?? '')
     if (value === undefined) {
-      setError('Enter 0 or more with at most four decimals, or leave it empty for no approval.')
+      setError('Enter 0 or more with at most four decimals, or leave it empty for no approval. Use at most 10 digits before the decimal.')
       return
     }
     setError(null)

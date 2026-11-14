@@ -1,0 +1,332 @@
+# FlowMat 모듈 카탈로그
+#
+# 제품을 이루는 모듈과 각자의 책임·위치·의존·계약·데이터 소유·추출 상태를 한곳에 적는다.
+# 설명과 검증의 기준이며 실행 설정이 아니다. 이 파일을 바꿔도 빌드나 배포는 달라지지 않는다.
+#
+# 코드와 어긋나면 백엔드 테스트가 실패한다.
+# - ModuleCatalogTest: 모듈 목록(settings.gradle), depends_on(각 모듈 build.gradle), path·frontend 경로,
+#   contract(publicapi 패키지), status와 candidate_repository.
+# - ModuleCatalogDataTest: 마이그레이션을 모두 적용한 DB에서 테이블마다 소유 모듈이 하나인지,
+#   data.foreign_keys_to가 실제 외래키와 같은지, unowned_tables.
+#
+# 버전은 여기에 적지 않는다. 패키지 버전은 잠금 파일이, 배포 버전은 배포 설정이 기준이다.
+#
+# status
+#   proposed    제안. 코드가 아직 없다
+#   internal    이 저장소 안의 모듈. 원본은 여기다
+#   extracting  추출 중. repository가 원본이고, 여기 남은 사본은 고치지 않는다
+#   independent 독립 운영. 이 저장소에는 버전 고정 의존만 남는다
+#   retired     폐기
+#
+# candidate_repository는 docs/architecture/extraction-candidates.md의 후보 묶음을 따른다. 제안이지 결정이 아니다.
+# status가 internal인 동안 원본은 이 저장소이고, 후보 저장소에 같은 코드를 두지 않는다(살아 있는 사본은 하나).
+
+schema: 1
+product: FlowMat
+repository: Dev-Forge-Group/FlowMat
+
+# state: active(쓰는 중) | empty(이름만 있고 내용 없음, 2026-11-13 확인)
+repositories:
+  Dev-Forge-Group/FlowMat:
+    state: active
+    role: 제품 조립. 프론트·백엔드·DB 마이그레이션·문서·회귀 기준
+  Dev-Forge-Group/flowmat-editor:
+    state: active
+    role: 편집기 라이브러리. GitHub Packages의 npm 패키지로 배포
+  Dev-Forge-Group/flowmat-compute:
+    state: empty
+    role: 후보. 시뮬레이션의 순수 계산, 그래프 분석
+  Dev-Forge-Group/flowmat-ai:
+    state: empty
+    role: 후보. 생산 최적화·추천 같은 FlowMat 전용 AI 기능
+  Dev-Forge-Group/flowmat-erp:
+    state: empty
+    role: 후보. 합의한 ERP 업무 모듈
+  Dev-Forge-Group/flowmat-mes:
+    state: empty
+    role: 후보. 생산 실행·현장 기능 중 합의한 범위
+  Dev-Forge-Group/flowmat-crm:
+    state: empty
+    role: 후보. 범위가 확정된 고객·영업 업무
+  Dev-Forge-Group/devforge-deploy:
+    state: empty
+    role: 후보. 제품별·환경별 배포 조합. FlowMat은 아직 컨테이너 이미지를 만들지 않는다
+
+modules:
+  # ── 플랫폼 ──────────────────────────────────────────────────────────────
+  - id: platform
+    kind: backend-module
+    language: java
+    responsibility: 계정·인증·역할(user)과 보안·설정·예외·ID 같은 공통 코드(global)
+    path: flowmat_backend/modules/platform
+    frontend: [flowmat_frontend/src/entities/auth, flowmat_frontend/src/entities/admin]
+    depends_on: []
+    contract: publicapi
+    data:
+      foreign_keys_to: []
+    status: internal
+
+  - id: project
+    kind: backend-module
+    language: java
+    responsibility: 데이터 격리와 접근권한 집행 경계. 프로젝트·멤버·초대·조직
+    path: flowmat_backend/modules/project
+    frontend: [flowmat_frontend/src/entities/project, flowmat_frontend/src/entities/organization]
+    depends_on: [platform]
+    contract: publicapi
+    data:
+      foreign_keys_to: [platform]
+    status: internal
+
+  - id: notification
+    kind: backend-module
+    language: java
+    responsibility: 알림과 알림 구독
+    path: flowmat_backend/modules/notification
+    frontend: [flowmat_frontend/src/entities/notification]
+    depends_on: [platform, project]
+    contract: publicapi
+    data:
+      foreign_keys_to: [project]
+    status: internal
+
+  - id: payment
+    kind: backend-module
+    language: java
+    responsibility: 요금제·구독·결제의 기본 API
+    path: flowmat_backend/modules/payment
+    depends_on: [platform]
+    contract: none
+    data:
+      foreign_keys_to: []
+    status: internal
+
+  # ── Core: 정의·실행·규칙·연동 ───────────────────────────────────────────
+  - id: workflow
+    kind: backend-module
+    language: java
+    responsibility: 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 도형 편집 문서·실시간 동기화·주석
+    path: flowmat_backend/modules/workflow
+    frontend:
+      - flowmat_frontend/src/entities/workflow
+      - flowmat_frontend/src/entities/editor-document
+      - flowmat_frontend/src/entities/canvas-annotation
+      - flowmat_frontend/src/pages/workspace
+    depends_on: [platform, project, catalog, connector]
+    contract: publicapi
+    data:
+      foreign_keys_to: [connector]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - 업종과 무관한 Core다(domain-map §2). MES 저장소로 옮기면 다른 업종의 확장이 MES에 의존하게 된다.
+
+  - id: flowrun
+    kind: backend-module
+    language: java
+    responsibility: 범용 실행 기록. 실행·단계·시도·이벤트, 그래프 라우팅과 실패 정책
+    path: flowmat_backend/modules/flowrun
+    frontend: [flowmat_frontend/src/pages/runs]
+    depends_on: [platform, project, connector, workflow]
+    contract: publicapi
+    data:
+      # flow_run이 production_run을 가리킨다. 코드 의존(production → flowrun)과 반대 방향이다.
+      foreign_keys_to: [connector, production, project, workflow]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - 업종과 무관한 Core다(domain-map §2). flow_run이 production_run을 외래키로 가리킨다.
+
+  - id: rule
+    kind: backend-module
+    language: java
+    responsibility: 실행 규칙 정의와 평가
+    path: flowmat_backend/modules/rule
+    frontend: [flowmat_frontend/src/entities/rule, flowmat_frontend/src/pages/rules]
+    depends_on: [platform, project]
+    contract: publicapi
+    data:
+      foreign_keys_to: []
+    status: internal
+
+  - id: connector
+    kind: backend-module
+    language: java
+    responsibility: 외부 HTTP 연동 프로필과 그 판
+    path: flowmat_backend/modules/connector
+    frontend: [flowmat_frontend/src/entities/connector]
+    depends_on: [platform, project]
+    contract: publicapi
+    data:
+      foreign_keys_to: [project]
+    status: internal
+
+  # ── 제조 ────────────────────────────────────────────────────────────────
+  - id: catalog
+    kind: backend-module
+    language: java
+    responsibility: 품목, 단위·환산, 설비와 설비 달력·정지·전환, 프로젝트 휴일
+    path: flowmat_backend/modules/catalog
+    frontend: [flowmat_frontend/src/entities/catalog]
+    depends_on: [platform, project]
+    contract: publicapi
+    data:
+      foreign_keys_to: [project]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - MES 묶음의 production·quality가 품목과 설비를 외래키로 가리킨다.
+
+  - id: bom
+    kind: backend-module
+    language: java
+    responsibility: BOM 작성·승인·revision, 전개·역전개·원가 누적
+    path: flowmat_backend/modules/bom
+    frontend: [flowmat_frontend/src/entities/bom]
+    depends_on: [platform, project, notification, catalog]
+    contract: publicapi
+    data:
+      foreign_keys_to: []
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - 다른 모듈과 외래키가 없다. production과 inventory가 publicapi로 읽는다.
+
+  - id: inventory
+    kind: backend-module
+    language: java
+    responsibility: 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보
+    path: flowmat_backend/modules/inventory
+    frontend: [flowmat_frontend/src/entities/inventory, flowmat_frontend/src/pages/inventory]
+    depends_on: [platform, project, notification, catalog, bom, rule]
+    contract: publicapi
+    data:
+      # warehouse_task가 production의 stock_allocation·work_order를 가리킨다. 코드 의존(production → inventory)과
+      # 반대 방향이고, production도 inventory를 가리키므로 두 모듈의 테이블은 서로 묶여 있다.
+      foreign_keys_to: [catalog, production, project]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - DB에서 MES 묶음의 production과 서로 외래키로 묶여 있다(warehouse_task → stock_allocation·work_order, stock_allocation → inventory·lot_master). ERP와 MES를 나누려면 이 외래키부터 없앤다.
+
+  - id: quality
+    kind: backend-module
+    language: java
+    responsibility: 검사·불량, 검사 기준, 부적합·시정 조치
+    path: flowmat_backend/modules/quality
+    frontend: [flowmat_frontend/src/entities/quality]
+    depends_on: [platform, project, notification, catalog, inventory]
+    contract: publicapi
+    data:
+      # nonconformity가 production_run을 가리킨다. 코드 의존(production → quality)과 반대 방향이다.
+      foreign_keys_to: [catalog, inventory, production, project]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - ERP 묶음의 catalog·inventory를 외래키로 가리킨다(inspection_standard·nonconformity → item, nonconformity → lot_master).
+
+  - id: purchasing
+    kind: backend-module
+    language: java
+    responsibility: 공급처, 발주서와 승인, 입고·반품·대변
+    path: flowmat_backend/modules/purchasing
+    frontend: [flowmat_frontend/src/entities/purchasing]
+    depends_on: [platform, project, notification, catalog, inventory, quality]
+    contract: publicapi
+    data:
+      foreign_keys_to: []
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-erp
+    extraction_notes:
+      - 다른 모듈과 외래키가 없다. 다른 모듈의 행은 id 값으로만 가리킨다.
+      - 입고는 inventory의 공개 명령을 같은 프로세스에서 불러 재고에 반영한다(ADR-027). 서비스로 나누려면 입고와 재고 반영의 원자성을 먼저 정한다.
+      - production이 purchasing의 publicapi를 쓴다.
+
+  - id: workforce
+    kind: backend-module
+    language: java
+    responsibility: 작업자 근무표·교대·휴무, 출퇴근, 노무 단가와 할증 규칙
+    path: flowmat_backend/modules/workforce
+    frontend: [flowmat_frontend/src/entities/workforce]
+    depends_on: [platform, project, catalog]
+    contract: publicapi
+    data:
+      foreign_keys_to: [project]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+
+  - id: production
+    kind: backend-module
+    language: java
+    responsibility: 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하
+    path: flowmat_backend/modules/production
+    frontend: [flowmat_frontend/src/entities/production]
+    depends_on: [platform, project, notification, catalog, bom, workflow, flowrun, rule, inventory, quality, purchasing, workforce]
+    contract: publicapi
+    data:
+      foreign_keys_to: [catalog, inventory, project, workflow]
+    status: internal
+    candidate_repository: Dev-Forge-Group/flowmat-mes
+    extraction_notes:
+      - 가장 위에 있는 모듈이다. 다른 업무 모듈 9개와 platform·project·notification을 모두 쓴다.
+      - inventory가 정의한 PickWorkOrders·WorkOrderAllocations와 quality가 정의한 ProductionRunQuery를 구현한다(ADR-036 결정 6). 저장소를 나누면 이 포트를 바꿀 때마다 두 저장소를 함께 릴리스해야 한다.
+      - DB에서 inventory와 서로 외래키로 묶여 있고(stock_allocation → inventory·lot_master, warehouse_task → stock_allocation·work_order), flowrun과 quality가 production_run을 가리킨다. DB를 나누려면 이 외래키부터 없앤다.
+
+  # ── 프론트 라이브러리 ───────────────────────────────────────────────────
+  - id: editor
+    kind: frontend-library
+    language: typescript
+    responsibility: 도형 편집기 코어와 React 어댑터. 제품 API 형식을 모른다
+    path: flowmat_frontend/src/lib/flowmat-editor
+    contract: 패키지 진입점 `.`(코어)과 `./react`
+    status: extracting
+    repository: Dev-Forge-Group/flowmat-editor
+    package: "@dev-forge-group/flowmat-editor"
+    extraction_notes:
+      - 원본은 flowmat-editor 저장소다. 여기 path는 그 릴리스의 사본이고 flowmat_frontend/src/lib/flowmatEditorCopy.test.ts가 내용을 고정한다.
+      - FlowMat이 패키지를 설치하도록 바꾸면 사본을 지우고 status를 independent로 올린다. 패키지 읽기 권한(CI는 GITHUB_TOKEN, 개발자는 read:packages 토큰)이 먼저다.
+
+  # ── 제안: 코드가 아직 없다 ──────────────────────────────────────────────
+  - id: compute
+    kind: backend-module
+    language: 미정
+    responsibility: 시뮬레이션의 순수 계산, 그래프 분석 등 선택한 범위
+    status: proposed
+    candidate_repository: Dev-Forge-Group/flowmat-compute
+    extraction_notes:
+      - 지금 시뮬레이션은 production의 dry-run 경로에서 DB 트랜잭션과 섞여 돈다. 떼어 낼 순수 계산 코드가 아직 없다.
+      - 먼저 이 저장소 안에 JPA 없는 modules/compute로 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 다른 언어나 WASM 실행 대상이 실제로 필요해질 때 저장소로 옮긴다.
+
+  - id: ai
+    kind: service
+    language: python
+    responsibility: 생산 최적화·추천 같은 FlowMat 전용 AI 기능
+    status: proposed
+    candidate_repository: Dev-Forge-Group/flowmat-ai
+    extraction_notes:
+      - 기능 범위가 정해지지 않았다(FM-AI-001~003 미착수).
+
+  - id: crm
+    kind: backend-module
+    language: java
+    responsibility: 고객·영업 업무. 범위 미정
+    status: proposed
+    candidate_repository: Dev-Forge-Group/flowmat-crm
+    extraction_notes:
+      - CRM 코드는 없다. 범위가 정해지면 이 저장소의 새 모듈로 시작한다.
+
+# 엔티티도, 읽고 쓰는 코드도 없는 테이블. V1이 만들었고 2026-11-13 새 개발 DB에서 모두 0행이다.
+# 소유 모듈이 없으므로 쓰려면 먼저 소유 모듈을 정하고 여기서 뺀다.
+unowned_tables:
+  - cad_import_job
+  - payment_discount
+  - project_activity_log
+  - project_comment
+  - project_export
+  - project_file
+  - project_permission
+  - resource_types
+  - resource_usage
+  - resources
+  - simulation_run
+  - simulation_step

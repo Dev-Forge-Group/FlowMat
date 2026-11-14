@@ -7,6 +7,7 @@ import {
   useViewport,
   getBezierPath,
   useUpdateNodeInternals,
+  useStoreApi,
   useOnViewportChange,
   reconnectEdge,
   ViewportPortal,
@@ -51,6 +52,7 @@ import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
 import { workflowSvg } from '../model/workflowSvg'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
+import { reuseUnchangedNodes } from '../model/reuseUnchangedNodes'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { useTheme } from '../../../app/providers/ThemeProvider'
@@ -429,6 +431,32 @@ function InternalsUpdater({ nodeIds }: { nodeIds: string[] }) {
   useEffect(() => {
     if (nodeIds.length > 0) updateNodeInternals(nodeIds)
   }, [nodeIds, updateNodeInternals])
+  return null
+}
+
+/**
+ * Measures the nodes that still have no handle positions a frame after the nodes changed. React Flow draws no
+ * connection to such a node.
+ *
+ * React Flow forgets a node's handle positions when it is given a new node object without `measured`, and it measures
+ * the node again only after it has rendered that node as measured. When the new object arrives between the first
+ * measurement and that render, the node never gets its handles back, so its connections stay missing until something
+ * resizes it. On an ordinary load React Flow has measured every node by the time this looks, and it does nothing.
+ * Must be inside ReactFlow.
+ */
+function HandleBoundsRecovery({ nodes }: { nodes: RfNode[] }) {
+  const store = useStoreApi()
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const stuck: string[] = []
+      for (const node of store.getState().nodeLookup.values()) {
+        if (!node.internals.handleBounds && !node.hidden) stuck.push(node.id)
+      }
+      if (stuck.length > 0) updateNodeInternals(stuck)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [nodes, store, updateNodeInternals])
   return null
 }
 
@@ -835,22 +863,24 @@ export function CanvasViewport({
     serverPositionsRef.current = new Map(nodes.map((node) => [node.id, { ...node.position }]))
     setLocalNodes((prev) => {
       const next = toRfProcessNodes(nodes, selectedNodeId)
-      const updated = next.map((n) => {
+      // What React Flow keeps on a node (its measured size, dragging) comes over from the existing one, and a node that
+      // comes out the same keeps its object, so React Flow's measurement of it stays (reuseUnchangedNodes).
+      const updated = reuseUnchangedNodes(prev, next.map((n) => {
         const existing = prev.find((p) => p.id === n.id)
         const editingByUserId = editingPresence?.get(n.id) ?? null
         const nodeWithEditing: RfNode = { ...n, data: { ...n.data, editingByUserId } }
         if (existing) {
           return {
+            ...existing,
             ...nodeWithEditing,
             selected: existing.selected,
             width: existing.width ?? n.width,
             height: existing.height ?? n.height,
-            dragging: existing.dragging,
             position: canvasNodePosition(n.position, previousServerPositions.get(n.id), existing),
           }
         }
         return nodeWithEditing
-      })
+      }))
       localNodesRef.current = updated
       return updated
     })
@@ -1310,6 +1340,7 @@ export function CanvasViewport({
           remotePreviews={remoteAnnotationPreviews ?? new Map<string, AnnotationPreview>()}
         />
         <InternalsUpdater nodeIds={nodesToUpdateInternals} />
+        <HandleBoundsRecovery nodes={readingNodes} />
         <ViewportPersister storageKey={storageKey} />
         <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} />
         <ZoomReporter onZoomChange={onZoomChange} />
