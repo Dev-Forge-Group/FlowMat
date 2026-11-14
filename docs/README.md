@@ -8,7 +8,7 @@
 
 | 구분 | 위치 | 용도 | 갱신 | 표시 |
 |---|---|---|---|---|
-| **현행** | `status/`, `architecture/`, `domain/`, `editor/`, `local-development.md`, 이 문서 | 작업 기준. 코드와 다르면 문서가 틀린 것이니 같은 변경에서 고친다 | 코드·결정과 함께 갱신 | `domain/`은 맨 위 `상태:` 줄, 나머지는 `현행 문서` 표시나 확인일 |
+| **현행** | `status/`, `architecture/`, `domain/`, `editor/`, `operations/`, `local-development.md`, 이 문서 | 작업 기준. 코드와 다르면 문서가 틀린 것이니 같은 변경에서 고친다 | 코드·결정과 함께 갱신 | `domain/`은 맨 위 `상태:` 줄, 나머지는 `현행 문서` 표시나 확인일 |
 | **참고** | `reference/` | 쓴 날 기준의 근거·조사. 틀렸다고 판정된 것은 아니지만 갱신하지 않는다 | 동결 | 맨 위 `참고 문서(동결)` |
 | **보관** | `archive/` | 레거시. 구현·리팩토링으로 사실과 달라진 내용이 섞여 있다. 작업 근거로 쓰지 않는다 | 동결 | 맨 위 `보관 문서(레거시)` |
 
@@ -30,6 +30,7 @@
 | [architecture/](architecture/README.md) | 결정 인계, ADR, 도메인 지도, 실행 모델 | [README](architecture/README.md) |
 | [domain/](domain/README.md) | 기능별 계약·설계(재고·BOM·LOT·생산·품질·설비·공정 포트·revision·Flow Run). **파일을 옮기거나 이름을 바꾸지 않는다.** 코드 주석이 `docs/domain/*.md` 경로를 가리킨다 | [README](domain/README.md) |
 | [editor/](editor/README.md) | 캔버스·도형 편집 엔진·리본 | [current-state](editor/current-state.md) |
+| [operations/](operations/backup-restore.md) | 백업·복원 리허설, 성능 기준선 | [backup-restore](operations/backup-restore.md), [performance-baseline](operations/performance-baseline.md) |
 | [local-development.md](local-development.md) | 로컬 실행 | |
 
 코드 주석이 가리키는 문서 경로: `docs/domain/*.md`, `docs/architecture/adr/*.md`, `docs/editor/toolbar_ribbon_migration_plan.md`, `docs/local-development.md`. 이 파일들을 옮기면 코드 주석도 같이 고친다.
