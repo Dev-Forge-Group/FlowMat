@@ -27,7 +27,6 @@ import org.myweb.flowmat.domain.inventory.repository.LotMasterRepository;
 import org.myweb.flowmat.domain.inventory.repository.StockAlertRepository;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.global.id.IdGenerator;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,9 +55,8 @@ public class StockAlertService {
     private final org.myweb.flowmat.domain.notification.application.publicapi.NotificationCommand notifications;
     private final org.myweb.flowmat.domain.project.application.publicapi.ProjectMemberQuery projectMemberQuery;
 
-    /** How many days ahead of a LOT's expiry date its stock raises an expiry alert. */
-    @Value("${app.stock-alert.expiry-warning-days:7}")
-    private int expiryWarningDays;
+    /** How many days ahead of a LOT's expiry date its stock raises an expiry alert, among other settings. */
+    private final org.myweb.flowmat.domain.inventory.application.publicapi.StockAlertSettings settings;
 
     /** Brings the row's open alerts in line with its current numbers; {@code inventory} holds the values now. */
     @Transactional
@@ -80,6 +78,7 @@ public class StockAlertService {
         LotMaster lot = inventory.getLotId() == null ? null : lotMasterRepository.findById(inventory.getLotId()).orElse(null);
         LocalDate today = projectCalendar.today(inventory.getProjectId());
         long daysLeft = lot == null || lot.getExpiryDate() == null ? Long.MAX_VALUE : ChronoUnit.DAYS.between(today, lot.getExpiryDate());
+        int expiryWarningDays = settings.expiryWarningDays();
         boolean expiring = active && onHand.signum() > 0 && daysLeft <= expiryWarningDays;
         sync(inventory, StockAlert.EXPIRY, expiring, BigDecimal.valueOf(expiryWarningDays), BigDecimal.valueOf(Math.min(daysLeft, 99_999)),
             daysLeft < 0 ? "critical" : "warning",

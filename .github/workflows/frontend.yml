@@ -1,10 +1,27 @@
 name: Frontend Tests & Lint
 
+# Runs only when the frontend, the module catalog one of its tests reads, or this file changes, because Actions minutes
+# are limited. A backend or docs change does not change these results.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
+    paths:
+      - 'flowmat_frontend/**'
+      - 'modules.yml'
+      - '.github/workflows/frontend.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'flowmat_frontend/**'
+      - 'modules.yml'
+      - '.github/workflows/frontend.yml'
+  # Runs it whatever changed.
+  workflow_dispatch:
+
+# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   test:

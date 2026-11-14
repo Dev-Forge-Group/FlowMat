@@ -1,13 +1,20 @@
-import type { Camera } from '../model/Camera'
-import type { EditorDocument } from '../model/EditorDocument'
-import type { AnchorSide, ElementBinding, EditorElement, LineStyle, ShapeStyle, TextStyle } from '../model/EditorElement'
-import { toElementId } from '../model/ElementId'
+// FlowMat's backend editor-document format and its conversion to the editor model. It lives with FlowMat's API, not in
+// the editor library: the library knows nothing of FlowMat's endpoints, versions or storage.
 import {
   fromSerializedEditorDocument,
+  toElementId,
   toSerializedEditorDocument,
+  type AnchorSide,
+  type Camera,
+  type EditorDocument,
+  type EditorElement,
+  type ElementBinding,
+  type LineStyle,
   type SerializedEditorDocument,
   type SerializedEditorElement,
-} from '../model/EditorDocumentSerializer'
+  type ShapeStyle,
+  type TextStyle,
+} from '../../../lib/flowmat-editor'
 
 export interface BackendEditorDocumentDto {
   schemaVersion: number

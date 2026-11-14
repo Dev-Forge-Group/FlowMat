@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { dirname, resolve } from 'path'
+import process from 'process'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -46,7 +47,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        // A second copy on the same machine points at its own backend (docs/local-development.md).
+        target: process.env.FLOWMAT_API_TARGET ?? 'http://127.0.0.1:8080',
         changeOrigin: true,
         ws: true,
       },
