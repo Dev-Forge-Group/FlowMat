@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 /**
  * The read-only inventory reports through the real UI and API: quality overview, stock analysis, stock on a date and
@@ -7,7 +8,7 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
  * against a database that already holds earlier runs.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const MALT = `RPT-${suffix}`
 const CHECK = `Moisture ${suffix}`
 const DEFECT = `Clumped ${suffix}`

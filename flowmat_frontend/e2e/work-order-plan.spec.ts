@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 // Shifts are read in the planning zone (Asia/Seoul by default) and the dates are typed as local time.
@@ -10,7 +11,7 @@ test.use({ timezoneId: 'Asia/Seoul' })
  * finds exactly that time in the planned window. The order is cancelled and the equipment deleted at the end.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const CODE = `EQ-PLAN-${suffix}`
 const TITLE = `Plan dates ${suffix}`
 

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E || process.env.FLOWMAT_NOTIFICATION_E2E_DISPOSABLE !== '1',
   'Needs the disposable notification project/viewer fixture')
@@ -7,7 +8,7 @@ test.use({ trace: 'off' })
 test('a stock alert tells only the project owner once per opening and opens the real stock screen', async ({ page, request }) => {
   test.setTimeout(60_000)
   const projectId = 'prj_notification_e2e'
-  const suffix = Date.now().toString(36)
+  const suffix = uniqueSuffix()
   const login = async (userId: string) => {
     const reply = await request.post('/api/auth/login', { data: { userIdOrEmail: userId, password: 'demo1234' } })
     expect(reply.ok()).toBe(true)

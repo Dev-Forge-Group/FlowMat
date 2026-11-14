@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 // Downtime is typed as local time and shifts are read in the planning zone (Asia/Seoul by default).
@@ -10,7 +11,7 @@ test.use({ timezoneId: 'Asia/Seoul' })
  * the hours the order needs. The equipment is deleted and the order cancelled at the end.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const CODE = `EQ-E2E-${suffix}`
 const NAME = `schedule e2e ${suffix}`
 const TITLE = `Plan ${suffix}`

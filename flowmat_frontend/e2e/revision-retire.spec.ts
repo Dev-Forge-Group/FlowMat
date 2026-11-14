@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 
@@ -6,7 +7,7 @@ test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
  * Retiring a workflow revision from the Runs screen (docs/domain/workflow-revision.md V4·V5): a revision published here
  * can be retired, after which it is no longer offered for new runs. A project of its own is made and deleted.
  */
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 
 async function api(request: APIRequestContext) {
   const login = await request.post('/api/auth/login', { data: { userIdOrEmail: 'demo-owner', password: 'demo1234' } })

@@ -1,11 +1,12 @@
 import { test, expect, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 /**
  * LOT genealogy through the real UI (docs/domain/inventory-bom-lot-contract.md §6): a run that consumes a material
  * LOT and produces a product LOT links them, and the LOTs tab traces both ways. Enabled with REAL_API_E2E.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = `${Date.now().toString(36)}G`.toUpperCase()
+const suffix = `${uniqueSuffix()}G`
 const RAW = `RAW-${suffix}`
 const DOUGH = `DGH-${suffix}`
 const RAW_LOT = `RL-${suffix}`

@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { uniqueSuffix } from './support/uniqueSuffix'
 
 test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
 
@@ -7,7 +8,7 @@ test.skip(!process.env.REAL_API_E2E, 'Needs the real backend and demo seed')
  * root cause, disposition and actions are done. Codes get a fresh suffix; a closed nonconformity stays as a record.
  */
 const PROJECT = 'prj_demo_main'
-const suffix = Date.now().toString(36).toUpperCase()
+const suffix = uniqueSuffix()
 const ITEM = `NCR-E2E-${suffix}`
 const DEFECT = `Crack ${suffix}`
 const TITLE = `Cracked housings ${suffix}`
