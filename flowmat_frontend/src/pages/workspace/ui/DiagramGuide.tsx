@@ -20,7 +20,7 @@ const ACTIONS: { action: GuideAction; title: string; aria: string; hint: string;
     hint: 'Give the canvas the whole window; the editing panels wait outside.', key: 'F' },
 ]
 
-const SHORTCUTS: [string, string][] = [['?', 'Guide'], ['S', 'Style'], ['0', 'Reset'], ['+', 'Zoom in'], ['-', 'Zoom out'],
+const SHORTCUTS: [string, string][] = [['?', 'Guide'], ['S', 'Style'], ['E', 'Export'], ['0', 'Reset'], ['+', 'Zoom in'], ['-', 'Zoom out'],
   ['Esc', 'Close']]
 
 /**

@@ -26,6 +26,28 @@ describe('workflow svg', () => {
     expect(svg.match(/<circle /g)).toHaveLength(2)
   })
 
+  it('draws the dark picture in dark colours and keeps each line in its own', () => {
+    const lines = [{ id: 'ab', d: 'M150,36 L300,136', stroke: '#94a3b8', dash: null, label: 'Feed', labelAt: { x: 225, y: 86 } }]
+    const light = workflowSvg('Line', [mix, pack], lines)
+    const dark = workflowSvg('Line', [mix, pack], lines, 'dark')
+
+    expect(light).toContain('class="wf-bg" x="-48" y="-48" width="546" height="268" fill="#f4f3f8"')
+    expect(dark).toContain('class="wf-bg" x="-48" y="-48" width="546" height="268" fill="#0b1120"')
+    expect(dark).toContain('fill="#111827" stroke="#334155"')
+    expect(dark).not.toContain('#ffffff')
+    expect(dark).toContain('stroke="#94a3b8" stroke-width="1.5" marker-end')
+    expect(light).not.toContain('<style>')
+    expect(dark).not.toContain('<style>')
+  })
+
+  it('draws auto as the light picture that turns dark where the viewer prefers dark', () => {
+    const auto = workflowSvg('Line', [mix], [], 'auto')
+
+    expect(auto).toContain('fill="#f4f3f8"')
+    expect(auto).toContain('<style>@media (prefers-color-scheme: dark) { .wf-bg { fill: #0b1120 }')
+    expect(auto).toContain('.wf-box { fill: #111827; stroke: #334155 }')
+  })
+
   it('names a process saved without a kind a process', () => {
     expect(workflowSvg('Line', [{ ...mix, kind: null }], [])).toContain('>PROCESS</text>')
   })
