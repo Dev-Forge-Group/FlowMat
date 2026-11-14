@@ -1,75 +1,30 @@
 name: Browser E2E with Backend Services
 
+# The real-backend browser checks run when the backend, the frontend, the scripts and fixtures they use, or this file
+# changes. The mocked browser checks need only the frontend and are in mock-e2e.yml.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
+    paths:
+      - 'flowmat_backend/**'
+      - 'flowmat_frontend/**'
+      - 'scripts/**'
+      - '.github/workflows/browser-e2e.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'flowmat_backend/**'
+      - 'flowmat_frontend/**'
+      - 'scripts/**'
+      - '.github/workflows/browser-e2e.yml'
   workflow_dispatch:
 
+# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
-  browser-mock:
-    name: Mock browser E2E (${{ matrix.shard }}/3)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    env:
-      REAL_API_E2E: ''
-      E2E_WEB_SERVER: preview
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-          cache: npm
-          cache-dependency-path: flowmat_frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: flowmat_frontend
-        run: npm ci
-
-      - name: Build frontend for E2E
-        working-directory: flowmat_frontend
-        run: npm run build
-
-      - name: Install Playwright browser
-        working-directory: flowmat_frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run mocked browser E2E
-        working-directory: flowmat_frontend
-        env:
-          PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-results/mock-${{ matrix.shard }}.json
-        run: npm run test:e2e -- --shard=${{ matrix.shard }}/3 --workers=1 --trace=off --reporter=line,json --output=test-results/mock-${{ matrix.shard }}
-
-      # A failed check's page, as Playwright last saw it, goes into the log too, so a rare failure can be read without
-      # downloading the artifacts.
-      - name: Show failed pages
-        if: failure()
-        working-directory: flowmat_frontend
-        run: |
-          find test-results/mock-${{ matrix.shard }} -name error-context.md 2>/dev/null | while read -r file; do
-            echo "::group::$file"
-            sed -n '1,250p' "$file"
-            echo "::endgroup::"
-          done || true
-
-      - name: Upload mocked Playwright artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-e2e-mock-${{ matrix.shard }}
-          path: |
-            flowmat_frontend/test-results/mock-${{ matrix.shard }}
-            flowmat_frontend/playwright-results/mock-${{ matrix.shard }}.json
-          if-no-files-found: ignore
-
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -314,6 +269,12 @@ jobs:
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts
+
+      - name: Run real purchase and warehouse recovery E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts
 
       - name: Run real equipment schedule E2E
         working-directory: flowmat_frontend
