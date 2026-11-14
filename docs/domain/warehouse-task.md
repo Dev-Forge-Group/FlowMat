@@ -30,6 +30,7 @@ DB 제약: 종류·상태 CHECK, 수량 > 0, `(status = 'open') = (finished_at I
 | W2 | 도착 위치는 필수이고, 행의 현재 위치와 같으면 안 됨(대소문자 무시) | 400 |
 | W3 | 완료 = 재고 이동(`requestId`는 `warehouse-task:<작업 ID>`). 이동이 거절되면(가용 부족, 격리 등) 작업도 열린 채 남음 | 이동 규칙대로 |
 | W4 | 열린 작업만 완료·취소. 취소에는 이유 필요 | 409 / 400 |
+| W16 | 완료에 `expectedQuantity`를 보내면 프로젝트·작업 잠금 뒤 현재 열린 작업 잔량과 숫자로 비교한다. 다르면 이동·작업 분할 없이 거절한다. 부분 완료 폼은 열었을 때의 잔량을 유지하며, 응답 유실 뒤 같은 폼의 재전송에 새 잔량을 자동 적용하지 않는다. | 409 |
 | W5 | 번호 매기기·계획·완료(부분 포함)·취소·배정과 위치 수정·삭제는 같은 프로젝트 advisory lock(`warehouse-task\|<프로젝트>`)을 먼저 잡음. 그 뒤 위치 코드·재고·작업 행을 잠그고 상태를 읽음. 동시 계획의 중복과 위치 변경·완료의 교착, 기다리던 계획의 옛 출발 위치 저장을 막음(2026-10-04) | |
 | W6 | 완료에 수량을 주면 그만큼만 옮김(2026-10-03). 옮긴 부분은 **새 번호의 done 작업**(같은 행·품목·LOT·출발·도착·작업지시, 메모 `Part of WT-0003`, 이동 `requestId`는 새 작업의 것)이 되고, 원래 작업은 남은 수량으로 열린 채 남음. 수량이 없거나 작업 수량과 같으면 지금처럼 전부. 응답은 끝난 작업(부분이면 새 작업) | 0 이하·작업 수량 초과 400 `Move more than 0 and at most 6 for task WT-0003.` |
 | W7 | **작업자 배정**(2026-10-03, V49): 열린 작업에 맡을 사람을 정함. 프로젝트 소유자나 활성 구성원만, 비우면 아무도 안 맡음. 부분 완료(W6)로 나온 작업도 같은 사람. 목록은 맡은 사람으로 거를 수 있음. 알림·자동 배분은 없음 | 400 `kim is not a member of this project.` / 끝난 작업 409 |
@@ -56,7 +57,7 @@ DB 제약: 종류·상태 CHECK, 수량 > 0, `(status = 'open') = (finished_at I
 | `GET /warehouse-tasks?projectId=&status=&workOrderId=&assignedTo=` | 읽기 | 최신순. 응답에 `assignedTo` |
 | `POST /warehouse-tasks` | 쓰기 | `{projectId, taskType?(putaway), inventoryId, quantity, toLocation, note?}` |
 | `POST /warehouse-tasks/pick-list` | 쓰기 | 위 피킹 목록 |
-| `POST /warehouse-tasks/{id}/complete` | 쓰기 | 이동 기록 후 done. 본문 `{quantity?, expectedToLocation?}`(W6·W12) |
+| `POST /warehouse-tasks/{id}/complete` | 쓰기 | 이동 기록 후 done. 본문 `{quantity?, expectedToLocation?, expectedQuantity?}`(W6·W12·W16) |
 | `POST /warehouse-tasks/{id}/cancel` | 쓰기 | `{reason}` |
 | `PUT /warehouse-tasks/{id}/assignee` | 쓰기 | `{assignedTo}`(빈 값·null은 비움, W7) |
 
@@ -94,6 +95,16 @@ DB 제약: 종류·상태 CHECK, 수량 > 0, `(status = 'open') = (finished_at I
 - 2026-10-05 W8·W9·W12: `warehouseTaskModel.test.ts` 선택 검증 4건 추가(해당 파일 15건), `e2e/task-scan-refresh.spec.ts` 가짜 API 6건 추가. 위치 변경·부분 완료·취소·Enter 포커스·입력 잠금·409 후 최신 작업 복구·서버 완료 수량을 확인합니다. 수정 전 브라우저에서 옛 위치·수량·취소 선택 3건, 포커스 1건, 409 복구 1건, 완료 응답 수량 1건을 재현했습니다. `WarehouseTaskScanConfirmationIntegrationTest` 7건은 전체/부분 완료의 옛 위치 거절과 무변경, 재스캔 완료, 코드 정규화·기존 요청 호환, 빈 값·길이 검증, 외부인 거절을 확인합니다(수정 전 4건 실패).
 
 - 최종 검증(2026-10-05, 2ar–2as): 백엔드 전체 1,023건 실패·오류·건너뜀 0, 라인 커버리지 81.02%와 기준 통과. 프런트 전체 421건·타입 검사·린트·빌드, 관련 가짜 API E2E 7건(스캐너 6 + 위치 캐시 1) 통과. 실 API 전체 E2E 재실행 결과와는 구분합니다.
+
+## 완료 응답 유실과 잔량 확인 (W16, 2026-11-10)
+
+부분 완료는 원래 작업을 열린 채 남기므로, 잔량 6에서 2를 옮긴 응답을 잃고 `{quantity: 2}`를 다시 보내면 추가로 2가 이동할 수 있다. UI는 완료 요청에 사용자가 본 작업 잔량 `expectedQuantity`를 포함한다. 부분 완료 폼은 **열었을 때**의 잔량을 고정한다. 요청 중 또는 오류 뒤 목록이 갱신돼도 같은 폼의 재전송은 원래 값을 유지한다.
+
+예를 들어 `{quantity: 2, expectedQuantity: 6}`이 성공한 뒤 같은 요청을 다시 보내면, 현재 잔량 4와 달라 409이며 이동·새 작업·원장은 추가되지 않는다. 사용자는 최신 작업 목록과 완료 이력을 확인하고 **Back → Part…**로 폼을 다시 열어 다음 이동을 시작한다. 전체 완료와 스캐너도 화면에 표시된 잔량을 보내며, 이미 끝난 작업은 기존처럼 409다. 위치 확인 `expectedToLocation`은 별도로 유지한다.
+
+`expectedQuantity`는 선택 입력이며 0.0001~9999999999.9999 범위다. 반올림하지 않고 숫자로 비교하므로 `6`과 `6.00000`은 같다. 본문·필드를 생략하는 기존 API 요청은 호환된다. **기존 클라이언트의 부분 완료를 자동 재시도해도 안전하다는 뜻은 아니다.** 이 검사는 감소하는 작업 잔량을 확인하는 것이며, requestId를 저장해 이전 응답을 재현하는 멱등 API는 아니다. 결과를 모르면 먼저 조회·대사한 뒤 다음 의도를 시작한다. 스키마 변경은 없다.
+
+`WarehouseTaskQuantityConfirmationIntegrationTest`는 응답 유실 후 동일 요청·다른 작업자의 선행 부분 완료·동시 요청·입력 범위·권한·숫자 scale·기존 요청을 실제 PostgreSQL/Redis와 JWT/MockMvc에서 검증한다. `PurchaseWarehouseJourneyIntegrationTest`는 별도 프로젝트에서 승인→부분 입고→putaway→LOT·원장·반품 대사를 연결한다. MockMvc 검증과 브라우저 mock 검증을 실제 네트워크 브라우저 여정과 구별한다.
 
 ## 이후
 

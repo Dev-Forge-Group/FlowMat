@@ -243,24 +243,31 @@ export function PurchaseOrdersPanel({ projectId, items }: { projectId: string; i
   function submitCredit(event: FormEvent) {
     event.preventDefault()
     if (!selected || !crediting) return
-    const payload = creditPayload(crediting)
+    const submitted = crediting
+    const payload = creditPayload(submitted)
     setCreditError(payload.error)
     if (!payload.input) return
-    const target = { purchaseOrderId: selected.purchaseOrderId, returnId: crediting.returnId }
+    const target = { purchaseOrderId: selected.purchaseOrderId, returnId: submitted.returnId }
+    const onSuccess = () => setCrediting((current) => {
+      if (current === submitted) return null
+      // The first credit is now recorded. Keep newer input as a change, which requires its own reason.
+      return !submitted.change && current?.returnId === submitted.returnId ? { ...current, change: true } : current
+    })
     // A kept credit changes with its reason (PO52); the same credit sent again after an unconfirmed answer is kept once.
-    if (crediting.change) {
-      changeCredit.mutate({ ...target, input: { ...payload.input, reason: payload.input.reason ?? '' } }, { onSuccess: () => setCrediting(null) })
-    } else credit.mutate({ ...target, input: payload.input }, { onSuccess: () => setCrediting(null) })
+    if (submitted.change) {
+      changeCredit.mutate({ ...target, input: { ...payload.input, reason: payload.input.reason ?? '' } }, { onSuccess })
+    } else credit.mutate({ ...target, input: payload.input }, { onSuccess })
   }
 
   /** A kept credit that was not given after all is withdrawn, so the return is owed again (PO52). */
   function withdrawCredit() {
     if (!selected || !crediting) return
-    const payload = withdrawPayload(crediting)
+    const submitted = crediting
+    const payload = withdrawPayload(submitted)
     setCreditError(payload.error)
     if (payload.input) {
-      changeCredit.mutate({ purchaseOrderId: selected.purchaseOrderId, returnId: crediting.returnId, input: payload.input },
-        { onSuccess: () => setCrediting(null) })
+      changeCredit.mutate({ purchaseOrderId: selected.purchaseOrderId, returnId: submitted.returnId, input: payload.input },
+        { onSuccess: () => setCrediting((current) => current === submitted ? null : current) })
     }
   }
 

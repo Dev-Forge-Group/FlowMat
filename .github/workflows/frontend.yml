@@ -4,7 +4,7 @@ name: Frontend Tests & Lint
 # are limited. A backend or docs change does not change these results.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
     paths:
       - 'flowmat_frontend/**'
       - 'modules.yml'

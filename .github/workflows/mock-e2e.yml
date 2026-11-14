@@ -4,7 +4,7 @@ name: Mock Browser E2E
 # a job of browser-e2e.yml, which runs for backend changes too.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'release-validation/**' ]
     paths:
       - 'flowmat_frontend/**'
       - '.github/workflows/mock-e2e.yml'
