@@ -62,6 +62,7 @@
   - BOM 할당: 빵 20개 = 밀가루 10 kg, 재고 8 → 8 할당·부족 2. 준비 점검 가용 8·부족 2(자기 할당 반영), 간이 MRP 가용 8·부족 2
 - `ProductionRunServiceImplTest`에 할당 서비스 mock 추가. 전체 백엔드 451건 통과
 - `allocationModel.test.ts` 2건
+- `ProductionQualityJourneyIntegrationTest` 2건(2026-11-14, 실제 Postgres·Redis, 새 프로젝트): 할당 → 피킹 → 실행 투입이 다른 단계(검사·부적합·계보·원가)와 이어진 여정. 할당은 유통기한이 이른 LOT부터 잡고 원장에 수량 0의 `reserve`만 남긴다. 피킹은 예약을 데리고 가며 재시도해도 한 번만 옮긴다. 모자란 작업지시는 부족량을 말하고, 취소하면 잡은 것을 모두 돌려준다. 투입 취소는 R4(`reallocate`)와 R2를 모두 지난다
 - 실 화면 `e2e/stock-allocations.spec.ts`(REAL_API_E2E, CI browser-e2e에 추가, BOM 없음 — 줄 할당 API 사용): 10 kg 행, 작업지시 승인, 6 할당(예약 6) → 작업지시 실행이 4 투입 → Readiness 아래 할당 줄 6/4·open → Release → closed, 행 수량 6·예약 0. 끝나면 실행 마감·작업지시 완료
 
 ## 2026-10-05 확정: 예약 재고 피킹
