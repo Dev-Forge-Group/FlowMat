@@ -10,7 +10,16 @@ import java.util.List;
  *
  * @param dryRun only check and say what would happen
  */
-public record ItemImportRequest(@NotBlank String projectId, boolean dryRun, List<@NotNull(message = "rows must not contain null entries.") Row> rows) {
+public record ItemImportRequest(
+    @NotBlank String projectId,
+    boolean dryRun,
+    List<@NotNull(message = "rows must not contain null entries.") Row> rows,
+    /**
+     * Optional. Rows to leave out, by their number among the data rows from 1: they are neither checked nor saved, and the
+     * other rows are checked as if these were not in the file (docs/domain/item-import.md "줄을 골라 적용").
+     */
+    List<@NotNull(message = "skipRows must not contain null entries.") Integer> skipRows
+) {
 
     /**
      * One line of the file. A blank value leaves an existing item's field as it is; a new item gets the usual defaults.

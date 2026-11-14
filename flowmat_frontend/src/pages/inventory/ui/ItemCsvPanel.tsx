@@ -17,7 +17,8 @@ function download(text: string, name: string) {
 
 /**
  * Items to and from a spreadsheet (docs/domain/item-import.md). Export writes the columns the import reads. Import checks
- * the whole file first and shows what would change; saving happens only when no row is wrong.
+ * the whole file first and shows what would change; saving happens only when no row is wrong. A line can be left out
+ * (the wrong ones in one press), and the file is then checked again without it, so the rest can still be saved.
  */
 export function ItemCsvPanel({ projectId, items, units }: { projectId: string; items: ItemDto[]; units: UnitDto[] }) {
   const importMutation = useImportItemsMutation(projectId)
@@ -27,6 +28,8 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
   const [readError, setReadError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [saving, setSaving] = useState(false)
+  /** Rows left out of the import, by their number from 1. */
+  const [leftOut, setLeftOut] = useState<number[]>([])
   const selectionGeneration = useRef(0)
   const unitCodes = new Map(units.map((unit) => [unit.unitId, unit.unitCode]))
 
@@ -37,6 +40,7 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
     setCheck(null)
     setDone(null)
     setFile(null)
+    setLeftOut([])
     setReadError(null)
     setChecking(Boolean(chosen))
     if (!chosen) return
@@ -66,15 +70,42 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
     }
   }
 
+  /** Checks the same file again with these rows left out; the earlier check stays until the new one answers. */
+  async function leaveOut(rows: number[]) {
+    if (!file || checking || saving) return
+    const generation = ++selectionGeneration.current
+    const next = [...new Set(rows)].sort((a, b) => a - b)
+    const previous = leftOut
+    // The tick moves at once; what each line would do follows when the check answers.
+    setLeftOut(next)
+    setChecking(true)
+    setReadError(null)
+    try {
+      const result = await importMutation.mutateAsync({ rows: file.rows, dryRun: true, skipRows: next })
+      if (generation === selectionGeneration.current) setCheck(result)
+    } catch (error) {
+      if (generation === selectionGeneration.current) {
+        // The shown check is still the one for the earlier choice.
+        setLeftOut(previous)
+        setReadError(errorMessage(error, 'The file could not be checked.'))
+      }
+    } finally {
+      if (generation === selectionGeneration.current) setChecking(false)
+    }
+  }
+
   async function save() {
     if (!file || !check || check.errors > 0 || check.created + check.updated === 0 || checking || saving) return
     setSaving(true)
     setReadError(null)
     try {
-      const result = await importMutation.mutateAsync({ rows: file.rows, dryRun: false })
+      const result = await importMutation.mutateAsync({ rows: file.rows, dryRun: false, skipRows: leftOut })
       setDone(result)
       setCheck(result.applied ? null : result)
-      if (result.applied) setFile(null)
+      if (result.applied) {
+        setFile(null)
+        setLeftOut([])
+      }
     } catch (error) {
       setReadError(errorMessage(error, 'The item changes could not be confirmed.'))
     } finally {
@@ -84,6 +115,9 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
 
   const changes = check ? check.created + check.updated : 0
   const listed = check ? check.rows.filter((row) => row.action !== 'unchanged') : []
+  const wrong = check ? check.rows.filter((row) => row.action === 'error').map((row) => row.row) : []
+  // Leaving out every line is refused by the server, so the last line that is still in cannot be taken out.
+  const lastIn = file ? file.rows.length - leftOut.length <= 1 : true
 
   return (
     <section aria-busy={checking || saving} aria-label="Items spreadsheet" style={{ display: 'grid', gap: 8, marginBottom: 12, fontSize: 13 }}>
@@ -109,7 +143,8 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
       {checking && <p role="status" style={{ margin: 0 }}>Reading and checking item file...</p>}
       {done?.applied && (
         <p role="status" style={{ color: '#047857', margin: 0 }}>
-          Saved: {done.created} added, {done.updated} updated, {done.unchanged} unchanged.
+          Saved: {done.created} added, {done.updated} updated, {done.unchanged} unchanged
+          {done.skipped > 0 ? `, ${done.skipped} left out` : ''}.
         </p>
       )}
       {file && check && (
@@ -117,19 +152,32 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
           <p style={{ margin: '0 0 6px' }}>
             <strong>{file.name}</strong>: {check.created} to add, {check.updated} to update, {check.unchanged} unchanged
             {check.errors > 0 && <strong style={{ color: '#dc2626' }}>, {check.errors} with problems</strong>}
+            {check.skipped > 0 && <span>, {check.skipped} left out</span>}
             {file.ignored.length > 0 && <span style={{ opacity: 0.7 }}> · ignored columns: {file.ignored.join(', ')}</span>}
           </p>
           {listed.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <tbody>
                 {listed.map((row) => (
-                  <tr key={row.row} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <tr key={row.row} style={{ borderBottom: '1px solid var(--border)', opacity: row.action === 'skipped' ? 0.6 : 1 }}>
+                    <td style={{ ...cell, width: 1 }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Import line ${row.row + 1}`}
+                        title="Untick to leave this line out of the import"
+                        checked={!leftOut.includes(row.row)}
+                        disabled={checking || saving || (!leftOut.includes(row.row) && lastIn)}
+                        onChange={(e) => void leaveOut(e.target.checked
+                          ? leftOut.filter((one) => one !== row.row)
+                          : [...leftOut, row.row])}
+                      />
+                    </td>
                     <td style={{ ...cell, opacity: 0.6, whiteSpace: 'nowrap' }}>line {row.row + 1}</td>
                     <td style={cell}>
                       <code>{row.itemCode ?? '-'}</code>
                     </td>
                     <td style={{ ...cell, color: row.action === 'error' ? '#dc2626' : undefined, fontWeight: row.action === 'error' ? 600 : 400 }}>
-                      {row.action === 'create' ? 'add' : row.action}
+                      {row.action === 'create' ? 'add' : row.action === 'skipped' ? 'left out' : row.action}
                     </td>
                     <td style={cell}>{row.message ?? ''}</td>
                   </tr>
@@ -142,7 +190,15 @@ export function ItemCsvPanel({ projectId, items, units }: { projectId: string; i
               {changes === 0 ? 'Nothing to save' : `Save ${changes} change${changes === 1 ? '' : 's'}`}
             </button>
 
-            {check.errors > 0 && <span className="inspector-hint">Fix the lines with problems and choose the file again.</span>}
+            {check.errors > 0 && (
+              <>
+                <button type="button" disabled={checking || saving || wrong.length >= (file.rows.length - leftOut.length)}
+                  onClick={() => void leaveOut([...leftOut, ...wrong])}>
+                  Leave out the {wrong.length} line{wrong.length === 1 ? '' : 's'} with problems
+                </button>
+                <span className="inspector-hint">Or fix them and choose the file again.</span>
+              </>
+            )}
           </div>
         </div>
       )}
