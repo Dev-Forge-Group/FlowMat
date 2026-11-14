@@ -2,9 +2,10 @@ import { presetLabel, type CanvasPreset } from './StylePresetMenu'
 
 /**
  * archify's diagram view controls (adapted from archify template.source.html and viewer.css, Apache-2.0): one dock at
- * the canvas's bottom right with the reading modes (ROUTE, MAP, LENS, and FlowMat's RUNS and CHANGES), the finder, the
- * guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from 175%) and the zoom, and
- * archify's toolbar controls: the visual style, export, motion (LIVE or STILL) and the presentation stage.
+ * the canvas's bottom right with the reading modes (ROUTE, MAP, LENS, and FlowMat's RUNS and CHANGES), the process index
+ * (INDEX), the finder, the guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from
+ * 175%) and the zoom, and archify's toolbar controls: the visual style, export, motion (LIVE or STILL) and the
+ * presentation stage.
  */
 function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
   if (zoom < 1) return 'MAP'
@@ -12,7 +13,8 @@ function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
 }
 
 export function DiagramNav({
-  routeActive, onRoute, mapOpen, onMap, lensActive, onLens, runsActive, onRuns, changesActive, onChanges, onFind, onGuide,
+  routeActive, onRoute, mapOpen, onMap, lensActive, onLens, runsActive, onRuns, changesActive, onChanges, indexOpen, onIndex,
+  onFind, onGuide,
   zoom, onZoomOut, onReset, onZoomIn, preset, styleOpen, onStyle, exportOpen, onExport, motion, presenting, onPresent,
 }: {
   routeActive: boolean
@@ -25,6 +27,8 @@ export function DiagramNav({
   onRuns(): void
   changesActive: boolean
   onChanges(): void
+  indexOpen: boolean
+  onIndex(): void
   onFind(): void
   onGuide(): void
   zoom: number
@@ -55,6 +59,8 @@ export function DiagramNav({
         aria-label="Show a production run" title="Show a run over the canvas" onClick={onRuns}>RUNS</button>
       <button type="button" className="diagram-nav-mode" data-mode="changes" aria-pressed={changesActive}
         aria-label="Compare with a revision" title="Compare the draft with a published revision" onClick={onChanges}>CHANGES</button>
+      <button type="button" className="diagram-nav-mode" data-mode="index" aria-expanded={indexOpen}
+        aria-label="Open process index" title="Process index" onClick={onIndex}>INDEX</button>
       <button type="button" className="diagram-nav-find" aria-label="Find a node" title="Find a node (/)" onClick={onFind}>
         <span className="diagram-nav-icon find" aria-hidden="true" />
       </button>
