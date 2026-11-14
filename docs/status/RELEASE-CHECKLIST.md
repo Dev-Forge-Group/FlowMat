@@ -33,7 +33,7 @@
 | # | 검사 | 방법 | 통과 기준 |
 |---|---|---|---|
 | 1 | 백업·복원 | 두 실 API 여정을 돌린 DB에서 `scripts/ops/restore-rehearsal.sh`([절차](../operations/backup-restore.md)) | 지문이 같음, 마이그레이션 적용 0, API로 읽은 여정 재고가 DB와 같음 |
-| 2 | 업그레이드 | 개발 DB(5434)의 복제본에 후보의 jar를 띄운다(월간 계획 3주차 2번) | 새 마이그레이션이 모두 적용되고 실패 0, 기존 표의 행 수가 같음, 다시 띄우면 "up to date" |
+| 2 | 업그레이드 | 올리려는 DB의 덤프로 `scripts/ops/upgrade-rehearsal.sh`([절차](../operations/backup-restore.md) §5) | 새 마이그레이션이 모두 적용되고 실패 0, 있던 표의 행이 줄지 않고 프로젝트 합계가 같음, 다시 띄우면 "up to date" |
 | 3 | 운영 프로필 설정 | `prod` 프로필 기동 검사는 자동 검사 1의 `ProductionConfigValidatorTest`, `ProductionConfigurationTest`, `ProdMigrationIsolationTest`가 한다. 스테이징이 있으면 `staging-prod-migration-smoke.yml`을 돌린다 | 약한 비밀값·localhost 주소로는 기동이 멈춤. 데모 자료가 운영 DB에 들어가지 않음 |
 | 4 | 적용 설정 개정 | 후보를 띄운 로그의 `Applied runtime settings revision …` 한 줄(`AppliedSettings`) | 개정 값과 설정 목록을 릴리스 기록에 적는다. 인스턴스가 여럿이면 값이 같다 |
 | 5 | 성능 | `node scripts/perf/baseline.mjs`([기준선](../operations/performance-baseline.md)) | 전개·MRP 중앙값이 기록 표의 마지막 줄보다 2배 넘게 느려지지 않음. 느려졌으면 SQL 문 수를 센다 |

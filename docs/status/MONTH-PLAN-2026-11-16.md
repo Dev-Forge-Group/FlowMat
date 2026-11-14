@@ -63,7 +63,7 @@
 | # | 일 | 끝난 기준 |
 |---|---|---|
 | 1 | ~~백업·복원 리허설~~ | **끝(11-14).** [backup-restore.md](../operations/backup-restore.md)와 `scripts/ops/restore-rehearsal.sh`. 두 여정을 돌린 로컬 DB(V134)를 덤프해 빈 `postgres:16`에 복원했다. 지문(표 136개 행 수, 여정 표 15개 내용, 프로젝트 17개 합계)이 같다. 앱은 마이그레이션 134개를 검증하고 0개를 적용했다. API로 읽은 여정 재고가 DB와 같다. 첨부 파일은 DB 밖이라 따로 복사해야 한다 |
-| 2 | 업그레이드 리허설 | 개발 DB 복제본에 V133과 그 뒤 마이그레이션을 적용해 통과한다. 그다음에 개발 DB(5434)에 적용한다 |
+| 2 | 업그레이드 리허설 | (11-14) 절차와 `scripts/ops/upgrade-rehearsal.sh`를 만들었다([backup-restore.md](../operations/backup-restore.md) §5). 데모 자료의 V132 DB로 돌려 V132 → V134 통과(표 135개의 행과 합계 그대로, 다시 띄우면 적용 0). **남은 것:** 개발 DB(5434)는 사용자 PC에 있어 여기서 닿지 않는다. 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db scripts/ops/upgrade-rehearsal.sh`가 통과하면 같은 jar로 5434에 적용한다 |
 | 3 | ~~릴리스 점검표~~ | **끝(11-14).** [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) 한 장. 자동 검사 6가지(전체 테스트, 모의·실 API 브라우저, 작성자 표기, 의존성 감사), 두 여정, 손으로 돌리는 5가지(복원, 업그레이드, 운영 프로필, 적용 설정 개정, 성능)와 후보별 기록 표. 쓰다가 실 API 스펙 두 개(`production-quality-live`, `workflow-validation`)가 `browser-e2e.yml`에 빠져 있어 CI에서 돌지 않던 것을 찾아 넣었다 |
 | 4 | ~~성능 기준선~~ | **끝(11-14).** [performance-baseline.md](../operations/performance-baseline.md), `scripts/perf/baseline.mjs`. 중앙값은 4단계 131품목 BOM 전개 629ms(SQL 750개), 작업지시 40건 간이 MRP 1,599ms(SQL 2,193개), 공정 60개 시뮬레이션 실행 시작 17ms다. 느린 두 곳은 계산이 아니라 줄마다 질의하는 N+1이다. 그래서 flowmat-compute를 따로 만들거나 Rust로 옮길 근거는 없다. 같은 날 읽기를 묶어 전개 43ms(SQL 40개), MRP 59ms(SQL 65개)가 됐고 응답은 전과 같다 |
 | 5 | 미사용 테이블 12개 | 지울지 결정한다. 지운다면 삭제 마이그레이션이 복제본 리허설을 통과한다 |
