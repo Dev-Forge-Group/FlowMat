@@ -64,8 +64,8 @@
 |---|---|---|
 | 1 | ~~백업·복원 리허설~~ | **끝(11-14).** [backup-restore.md](../operations/backup-restore.md)와 `scripts/ops/restore-rehearsal.sh`. 두 여정을 돌린 로컬 DB(V134)를 덤프해 빈 `postgres:16`에 복원했다. 지문(표 136개 행 수, 여정 표 15개 내용, 프로젝트 17개 합계)이 같다. 앱은 마이그레이션 134개를 검증하고 0개를 적용했다. API로 읽은 여정 재고가 DB와 같다. 첨부 파일은 DB 밖이라 따로 복사해야 한다 |
 | 2 | 업그레이드 리허설 | 개발 DB 복제본에 V133과 그 뒤 마이그레이션을 적용해 통과한다. 그다음에 개발 DB(5434)에 적용한다 |
-| 3 | 릴리스 점검표 | `docs/status/`에 릴리스 후보의 통과 기준이 한 장으로 있다: 전체 테스트, 두 여정, 복원, 운영 프로필 설정 검증, 적용 설정 개정, 의존성 감사와 OWASP 점검 |
-| 4 | ~~성능 기준선~~ | **끝(11-14).** [performance-baseline.md](../operations/performance-baseline.md), `scripts/perf/baseline.mjs`. 중앙값은 4단계 131품목 BOM 전개 629ms(SQL 750개), 작업지시 40건 간이 MRP 1,599ms(SQL 2,193개), 공정 60개 시뮬레이션 실행 시작 17ms다. 느린 두 곳은 계산이 아니라 줄마다 질의하는 N+1이다. 그래서 flowmat-compute를 따로 만들거나 Rust로 옮길 근거는 없고, 다음 일은 읽기를 묶는 것이다 |
+| 3 | ~~릴리스 점검표~~ | **끝(11-14).** [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) 한 장. 자동 검사 6가지(전체 테스트, 모의·실 API 브라우저, 작성자 표기, 의존성 감사), 두 여정, 손으로 돌리는 5가지(복원, 업그레이드, 운영 프로필, 적용 설정 개정, 성능)와 후보별 기록 표. 쓰다가 실 API 스펙 두 개(`production-quality-live`, `workflow-validation`)가 `browser-e2e.yml`에 빠져 있어 CI에서 돌지 않던 것을 찾아 넣었다 |
+| 4 | ~~성능 기준선~~ | **끝(11-14).** [performance-baseline.md](../operations/performance-baseline.md), `scripts/perf/baseline.mjs`. 중앙값은 4단계 131품목 BOM 전개 629ms(SQL 750개), 작업지시 40건 간이 MRP 1,599ms(SQL 2,193개), 공정 60개 시뮬레이션 실행 시작 17ms다. 느린 두 곳은 계산이 아니라 줄마다 질의하는 N+1이다. 그래서 flowmat-compute를 따로 만들거나 Rust로 옮길 근거는 없다. 같은 날 읽기를 묶어 전개 43ms(SQL 40개), MRP 59ms(SQL 65개)가 됐고 응답은 전과 같다 |
 | 5 | 미사용 테이블 12개 | 지울지 결정한다. 지운다면 삭제 마이그레이션이 복제본 리허설을 통과한다 |
 
 ## 4주차 (12-07 ~ 12-11): 편집기 전환과 릴리스 후보 고정
@@ -94,6 +94,7 @@
 - 무거운 서비스는 계산보다 DB 읽기가 크다. `EquipmentScheduleService` 1,009줄에 저장소 참조 50곳, `WorkerCalendarService` 1,058줄에 63곳, 시뮬레이션이 있는 `ProductionRunServiceImpl` 935줄에 23곳, `BomServiceImpl` 690줄에 26곳이다. Rust로 옮겨도 DB 왕복은 줄지 않는다. 느리다고 잰 곳도 아직 없다.
 - DB 없이 도는 계산은 지금 약 1,200줄이다: `FlowRunGraph`(400줄), `FlowRuleExpressionEvaluator`(343), `ConditionExpression`(271), `JsonMappingEngine`(174). 모두 테스트가 있다. BOM 전개·MRP·일정은 JPA 읽기와 섞여 있어 `modules/compute`로 먼저 떼어 내야 한다.
 - 수량과 금액은 `BigDecimal`과 정해진 반올림을 쓴다. Rust 구현은 같은 결과를 내는지 같은 입력으로 비교해야 한다.
+- **(11-14 측정 뒤) BOM 전개와 MRP는 떼어 내지 않는다.** [성능 기준선](../operations/performance-baseline.md)에서 두 계산이 느린 까닭은 줄마다 하는 질의였고, 읽기를 묶자 629ms → 43ms, 1,599ms → 59ms가 됐다. 남은 계산은 Rust로 옮겨도 줄일 것이 없다. `modules/compute` 분리와 Rust 비교는 아래 조건식 언어처럼 DB를 읽지 않는 계산에만 한다.
 - **첫 대상은 조건식 언어**(`ConditionExpression`과 규칙 평가)다. 순수 계산이고 테스트가 있다. WASM으로도 빌드하면 편집기가 서버와 같은 코드로 입력 중에 조건을 검사할 수 있다(지금은 저장할 때 서버만 검사한다). 다음은 `FlowRunGraph`의 경로 계산, 그다음이 떼어 낸 BOM 전개다.
 
 네 줄기를 4주에 다 넣으면 빠듯하다. 밀릴 때 지키는 순서는 밑작업 → 두 여정과 릴리스 후보 → archify → compute와 Rust → optimized_setup이다.

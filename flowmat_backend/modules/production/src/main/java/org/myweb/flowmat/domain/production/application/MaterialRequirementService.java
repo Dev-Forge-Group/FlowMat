@@ -88,6 +88,11 @@ public class MaterialRequirementService {
         List<String> problems = new ArrayList<>();
         int counted = 0;
         Map<String, List<String>> picks = optionalItems.of(open.stream().map(WorkOrder::getWorkOrderId).toList());
+        // Every order's BOM and each sub-assembly's below share their reads: many orders plan the same few BOMs
+        // (docs/operations/performance-baseline.md).
+        BomQuery.RequirementsBatch batch = bomQuery.requirementsBatch(projectId);
+        batch.prefetch(open.stream().map(WorkOrder::getBomId).distinct().toList());
+        java.time.ZoneId zone = open.stream().anyMatch(order -> order.getPlannedStartAt() != null) ? projectCalendar.zone(projectId) : null;
         for (WorkOrder order : open) {
             BigDecimal remaining = order.getTargetQuantity().subtract(produced.getOrDefault(order.getWorkOrderId(), BigDecimal.ZERO));
             if (remaining.signum() <= 0) {
@@ -96,8 +101,8 @@ public class MaterialRequirementService {
             BomRequirement requirement;
             try {
                 // Phantom lines go through the revision of the order's planned day (multi-level-bom.md P3).
-                requirement = bomQuery.requirementsForRun(order.getBomId(), projectId, order.getTargetItemId(), remaining,
-                    order.getPlannedStartAt() == null ? null : projectCalendar.date(projectId, order.getPlannedStartAt().toInstant()),
+                requirement = batch.forRun(order.getBomId(), order.getTargetItemId(), remaining,
+                    order.getPlannedStartAt() == null ? null : order.getPlannedStartAt().toInstant().atZone(zone).toLocalDate(),
                     picks.getOrDefault(order.getWorkOrderId(), List.of()));
             } catch (BusinessException exception) {
                 problems.add(order.getWorkOrderTitle() + ": " + exception.getMessage());
@@ -136,7 +141,7 @@ public class MaterialRequirementService {
         Map<String, BigDecimal> onOrder = purchaseSupply.onOrder(projectId);
         // Undated, so the revisions effective on the project's today (docs/domain/multi-level-bom.md M3).
         Map<String, String> approved = bomStructure.approvedBomIdByItem(projectId, projectCalendar.today(projectId));
-        explodeSubAssemblies(projectId, approved, supply, onOrder, allocated, required, units, needs, problems);
+        explodeSubAssemblies(projectId, batch, approved, supply, onOrder, allocated, required, units, needs, problems);
 
         Map<String, BigDecimal> usable = new HashMap<>(usableStock.byItem(projectId, required.keySet()));
         allocated.forEach((itemId, quantity) -> usable.merge(itemId, quantity, BigDecimal::add));
@@ -175,6 +180,7 @@ public class MaterialRequirementService {
      */
     private void explodeSubAssemblies(
         String projectId,
+        BomQuery.RequirementsBatch batch,
         Map<String, String> approved,
         Map<String, BigDecimal> supply,
         Map<String, BigDecimal> onOrder,
@@ -187,7 +193,21 @@ public class MaterialRequirementService {
         if (approved.isEmpty()) {
             return;
         }
-        Map<String, Integer> levels = BomStructureQuery.lowLevelCodes(bomStructure.approvedChildren(projectId));
+        Map<String, List<String>> children = bomStructure.approvedChildren(projectId);
+        Map<String, Integer> levels = BomStructureQuery.lowLevelCodes(children);
+        // Every sub-assembly the needs can reach, read together: its stock, its code and its BOM. One reached another way
+        // (a phantom of another day's revision) is read when it comes up.
+        Set<String> reachable = new HashSet<>();
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>(required.keySet());
+        while (!queue.isEmpty()) {
+            String itemId = queue.poll();
+            if (approved.containsKey(itemId) && reachable.add(itemId)) {
+                queue.addAll(children.getOrDefault(itemId, List.of()));
+            }
+        }
+        Map<String, BigDecimal> stock = reachable.isEmpty() ? Map.of() : usableStock.byItem(projectId, reachable);
+        Map<String, CatalogItemView> known = catalogQuery.findActiveItems(reachable);
+        batch.prefetch(reachable.stream().map(approved::get).toList());
         Set<String> done = new HashSet<>();
         while (true) {
             String next = required.keySet().stream()
@@ -199,17 +219,19 @@ public class MaterialRequirementService {
                 return;
             }
             done.add(next);
-            BigDecimal free = usableStock.byItem(projectId, Set.of(next)).getOrDefault(next, BigDecimal.ZERO)
+            BigDecimal free = (reachable.contains(next) ? stock : usableStock.byItem(projectId, Set.of(next)))
+                .getOrDefault(next, BigDecimal.ZERO)
                 .add(allocated.getOrDefault(next, BigDecimal.ZERO));
             BigDecimal toMake = required.get(next).subtract(free).subtract(supply.getOrDefault(next, BigDecimal.ZERO))
                 .subtract(onOrder.getOrDefault(next, BigDecimal.ZERO));
             if (toMake.signum() <= 0) {
                 continue;
             }
-            String code = catalogQuery.findActiveItem(next).map(CatalogItemView::itemCode).orElse(next);
+            String code = (reachable.contains(next) ? java.util.Optional.ofNullable(known.get(next)) : catalogQuery.findActiveItem(next))
+                .map(CatalogItemView::itemCode).orElse(next);
             BomRequirement below;
             try {
-                below = bomQuery.requirementsForRun(approved.get(next), projectId, next, toMake);
+                below = batch.forRun(approved.get(next), next, toMake, null, List.of());
             } catch (BusinessException exception) {
                 problems.add(code + ": " + exception.getMessage());
                 continue;

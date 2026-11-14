@@ -276,6 +276,18 @@ jobs:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts
 
+      - name: Run real production and quality journey E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/production-quality-live.spec.ts
+
+      - name: Run real workflow validation E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/workflow-validation.spec.ts
+
       - name: Run real equipment schedule E2E
         working-directory: flowmat_frontend
         env:

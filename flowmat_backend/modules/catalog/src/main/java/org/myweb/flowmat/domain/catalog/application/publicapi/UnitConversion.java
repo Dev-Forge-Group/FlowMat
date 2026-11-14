@@ -16,6 +16,21 @@ public interface UnitConversion {
      */
     Conversion toItemUnit(BigDecimal quantity, String recordedUnitCode, String itemUnitId);
 
+    /**
+     * The unit master as it is now, read once, converting exactly as {@link #toItemUnit} does without reading it again.
+     * For one calculation that converts many lines (a BOM's requirements); the master can change between calculations, so
+     * a table is not kept beyond one (docs/operations/performance-baseline.md).
+     */
+    default Table table() {
+        return this::toItemUnit;
+    }
+
+    /** Conversions against one reading of the unit master. */
+    @FunctionalInterface
+    interface Table {
+        Conversion toItemUnit(BigDecimal quantity, String recordedUnitCode, String itemUnitId);
+    }
+
     record Conversion(BigDecimal quantity, String fromUnitCode, String toUnitCode, boolean converted) {
     }
 }

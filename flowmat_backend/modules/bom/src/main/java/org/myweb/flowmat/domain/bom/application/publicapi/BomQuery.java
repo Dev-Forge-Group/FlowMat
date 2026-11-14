@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * BOM revisions and their material requirements for other bounded contexts, which use this instead of the BOM service
@@ -40,4 +41,27 @@ public interface BomQuery {
      */
     BomRequirement requirementsForRun(String bomId, String projectId, String targetItemId, BigDecimal productionQuantity,
                                       LocalDate phantomDay, Collection<String> optionalItemIds);
+
+    /**
+     * Several requirement calculations of one project that share what they read: the unit master, and each BOM, its lines
+     * and its items, are read once between them instead of once per calculation (docs/operations/performance-baseline.md).
+     * For one request that plans many BOMs, such as an explosion or the material requirements of every open order; a
+     * batch is not kept beyond that request, so it sees the BOMs and the catalog as they were when it read them.
+     */
+    RequirementsBatch requirementsBatch(String projectId);
+
+    /** One request's requirement calculations; see {@link #requirementsBatch}. */
+    interface RequirementsBatch {
+
+        /** As {@link BomQuery#requirementsForRun(String, String, String, BigDecimal, LocalDate, Collection)}, with the same refusals. */
+        BomRequirement forRun(String bomId, String targetItemId, BigDecimal productionQuantity, LocalDate phantomDay,
+                              Collection<String> optionalItemIds);
+
+        /**
+         * Reads these BOMs, their lines and the lines' items in a few queries however many they are, so calculating them
+         * afterwards reads nothing more. Returns each BOM's line items, so a caller can go on to the BOMs of the level
+         * below. Unknown ids are answered with no items. Calculations are the same with or without it.
+         */
+        Map<String, List<String>> prefetch(Collection<String> bomIds);
+    }
 }

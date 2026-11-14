@@ -2,6 +2,11 @@ package org.myweb.flowmat.domain.catalog.application;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.domain.entity.UnitMaster;
 import org.myweb.flowmat.domain.catalog.repository.UnitMasterRepository;
@@ -29,15 +34,34 @@ public class UnitConverter implements UnitConversion {
 
     @Override
     public Conversion toItemUnit(BigDecimal quantity, String recordedUnitCode, String itemUnitId) {
+        return convert(quantity, recordedUnitCode, itemUnitId, unitMasterRepository::findById, unitMasterRepository::findByUnitCodeIgnoreCase);
+    }
+
+    @Override
+    public Table table() {
+        Map<String, UnitMaster> byId = new HashMap<>();
+        Map<String, UnitMaster> byCode = new HashMap<>();
+        for (UnitMaster unit : unitMasterRepository.findAll()) {
+            byId.put(unit.getUnitId(), unit);
+            if (unit.getUnitCode() != null) {
+                byCode.putIfAbsent(unit.getUnitCode().toLowerCase(Locale.ROOT), unit);
+            }
+        }
+        return (quantity, recordedUnitCode, itemUnitId) -> convert(quantity, recordedUnitCode, itemUnitId,
+            id -> Optional.ofNullable(byId.get(id)), code -> Optional.ofNullable(byCode.get(code.toLowerCase(Locale.ROOT))));
+    }
+
+    private static Conversion convert(BigDecimal quantity, String recordedUnitCode, String itemUnitId,
+                                      Function<String, Optional<UnitMaster>> unitById, Function<String, Optional<UnitMaster>> unitByCode) {
         String recorded = recordedUnitCode == null ? "" : recordedUnitCode.trim();
         if (itemUnitId == null || itemUnitId.isBlank()) {
             return new Conversion(quantity, recorded, recorded, false);
         }
-        UnitMaster itemUnit = unitMasterRepository.findById(itemUnitId).orElse(null);
+        UnitMaster itemUnit = unitById.apply(itemUnitId).orElse(null);
         if (itemUnit == null) {
             return new Conversion(quantity, recorded, recorded, false);
         }
-        UnitMaster from = unitMasterRepository.findByUnitCodeIgnoreCase(recorded)
+        UnitMaster from = unitByCode.apply(recorded)
             .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                 "Unknown unit '" + recorded + "'. Use a unit from the unit master (this item is measured in "
                     + itemUnit.getUnitCode() + ")."));

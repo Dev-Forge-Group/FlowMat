@@ -383,7 +383,7 @@ public class BomServiceImpl implements BomService {
         BomHeader header = findBom(bomId);
         projectAccessService.requireProjectReadAccess(header.getProjectId());
         return requirements(header, productionQuantity, projectCalendar.today(header.getProjectId()), new java.util.HashSet<>(),
-            java.util.Set.of());
+            java.util.Set.of(), new Reads());
     }
 
     @Override
@@ -416,8 +416,39 @@ public class BomServiceImpl implements BomService {
         java.time.LocalDate phantomDay,
         java.util.Collection<String> optionalItemIds
     ) {
-        BomHeader header = bomHeaderRepository.findByBomIdAndDeletedYn(bomId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "BOM does not exist."));
+        return requirementsForRun(new Reads(), bomId, projectId, targetItemId, productionQuantity, phantomDay, optionalItemIds);
+    }
+
+    @Override
+    public RequirementsBatch requirementsBatch(String projectId) {
+        Reads reads = new Reads();
+        return new RequirementsBatch() {
+            @Override
+            public BomRequirement forRun(String bomId, String targetItemId, BigDecimal productionQuantity,
+                                         java.time.LocalDate phantomDay, java.util.Collection<String> optionalItemIds) {
+                return requirementsForRun(reads, bomId, projectId, targetItemId, productionQuantity, phantomDay, optionalItemIds);
+            }
+
+            @Override
+            public Map<String, List<String>> prefetch(java.util.Collection<String> bomIds) {
+                return reads.prefetch(bomIds);
+            }
+        };
+    }
+
+    private BomRequirement requirementsForRun(
+        Reads reads,
+        String bomId,
+        String projectId,
+        String targetItemId,
+        BigDecimal productionQuantity,
+        java.time.LocalDate phantomDay,
+        java.util.Collection<String> optionalItemIds
+    ) {
+        BomHeader header = reads.header(bomId);
+        if (header == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "BOM does not exist.");
+        }
         if (!header.getProjectId().equals(projectId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The BOM belongs to another project.");
         }
@@ -429,9 +460,9 @@ public class BomServiceImpl implements BomService {
         if (targetItemId != null && !targetItemId.equals(header.getTargetItemId())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "The BOM produces a different item than this run.");
         }
-        java.time.LocalDate day = phantomDay != null ? phantomDay : projectCalendar.today(projectId);
+        java.time.LocalDate day = phantomDay != null ? phantomDay : reads.today(projectId);
         return requirements(header, productionQuantity, day, new java.util.HashSet<>(),
-            optionalItemIds == null ? java.util.Set.of() : java.util.Set.copyOf(optionalItemIds));
+            optionalItemIds == null ? java.util.Set.of() : java.util.Set.copyOf(optionalItemIds), reads);
     }
 
     /**
@@ -441,10 +472,13 @@ public class BomServiceImpl implements BomService {
      * optional line is planned only when {@code picked} holds its item (ADR-033).
      */
     private BomRequirement requirements(BomHeader header, BigDecimal productionQuantity, java.time.LocalDate phantomDay,
-                                                java.util.Set<String> phantoms, java.util.Set<String> picked) {
+                                                java.util.Set<String> phantoms, java.util.Set<String> picked, Reads reads) {
         requirePositive(productionQuantity, "Production quantity");
-        CatalogItemView target = findProjectItem(header.getTargetItemId(), header.getProjectId());
-        BigDecimal base = unitConverter.toItemUnit(header.getBaseQuantity(), header.getBaseUnit(), target.unitId()).quantity();
+        List<BomLine> bomLines = reads.lines(header.getBomId());
+        reads.load(java.util.stream.Stream.concat(java.util.stream.Stream.of(header.getTargetItemId()),
+            bomLines.stream().map(BomLine::getChildItemId)).toList());
+        CatalogItemView target = reads.item(header.getTargetItemId(), header.getProjectId());
+        BigDecimal base = reads.units.toItemUnit(header.getBaseQuantity(), header.getBaseUnit(), target.unitId()).quantity();
         requirePositive(base, "Base quantity");
         BigDecimal factor = productionQuantity.divide(base, FACTOR_SCALE, RoundingMode.HALF_UP);
 
@@ -453,7 +487,6 @@ public class BomServiceImpl implements BomService {
         List<BomRequirement.Line> optionals = new ArrayList<>();
         BigDecimal materialCost = BigDecimal.ZERO;
         boolean costComplete = true;
-        List<BomLine> bomLines = lines(header.getBomId());
         // A substitute stands in for its main line, so the plan and its cost use the main line only (ADR-032 decision 5).
         Map<String, BomLine> mainOf = BomTree.mainLines(bomLines);
         Map<String, List<BomLine>> substitutesOf = new java.util.HashMap<>();
@@ -464,12 +497,12 @@ public class BomServiceImpl implements BomService {
             if (mainOf.containsKey(line.getBomLineId())) {
                 continue;
             }
-            CatalogItemView child = findProjectItem(line.getChildItemId(), header.getProjectId());
+            CatalogItemView child = reads.item(line.getChildItemId(), header.getProjectId());
             boolean material = BomTree.isMaterial(line.getLineType());
             // A material plans its scrap on top (ADR-031); what a batch gives off is never scaled up.
             BigDecimal planned = material ? line.getQuantity().multiply(BomTree.scrapFactor(line)) : line.getQuantity();
             BigDecimal required = factor.multiply(planned).setScale(8, RoundingMode.HALF_UP).stripTrailingZeros();
-            UnitConversion.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), child.unitId());
+            UnitConversion.Conversion conversion = reads.units.toItemUnit(required, line.getUnit(), child.unitId());
             if (!material) {
                 // By-products and waste come out of the batch; nothing is consumed or costed for them.
                 outputs.add(new BomRequirement.Output(line.getBomLineId(), child.itemId(), line.getLineType(),
@@ -477,7 +510,7 @@ public class BomServiceImpl implements BomService {
                     conversion.quantity().setScale(STOCK_SCALE, RoundingMode.HALF_UP)));
                 continue;
             }
-            BigDecimal rate = unitConverter.toItemUnit(BigDecimal.ONE, line.getUnit(), child.unitId()).quantity();
+            BigDecimal rate = reads.units.toItemUnit(BigDecimal.ONE, line.getUnit(), child.unitId()).quantity();
             BigDecimal itemQuantity = conversion.quantity().setScale(STOCK_SCALE, RoundingMode.HALF_UP);
             // Unit cost is per the item's own unit, so it multiplies the quantity already converted to that unit.
             BigDecimal unitCost = child.unitCost() != null && child.unitCost().signum() > 0 ? child.unitCost() : null;
@@ -490,7 +523,7 @@ public class BomServiceImpl implements BomService {
                 continue;
             }
             if ("Y".equals(line.getPhantomYn())) {
-                BomRequirement expanded = phantom(header, child, itemQuantity, phantomDay, phantoms, picked);
+                BomRequirement expanded = phantom(header, child, itemQuantity, phantomDay, phantoms, picked, reads);
                 for (BomRequirement.Line inner : expanded.lines()) {
                     result.add(new BomRequirement.Line(inner.bomLineId(), inner.childItemId(), inner.lineQuantity(),
                         inner.lineUnit(), inner.requiredQuantity(), inner.itemUnit(), inner.requiredItemQuantity(),
@@ -527,7 +560,7 @@ public class BomServiceImpl implements BomService {
                 null,
                 scrapRate,
                 substitutes(substitutesOf.getOrDefault(line.getBomLineId(), List.of()), factor, conversion.quantity(),
-                    header.getProjectId())
+                    header.getProjectId(), reads)
             ));
         }
         return new BomRequirement(
@@ -540,13 +573,13 @@ public class BomServiceImpl implements BomService {
      * (ADR-032 decisions 2 and 5). {@code mainQuantity}: the main line's need in its item's unit, before rounding.
      */
     private List<BomRequirement.Substitute> substitutes(List<BomLine> lines, BigDecimal factor, BigDecimal mainQuantity,
-                                                                 String projectId) {
+                                                                 String projectId, Reads reads) {
         List<BomRequirement.Substitute> result = new ArrayList<>();
         for (BomLine line : lines) {
-            CatalogItemView item = findProjectItem(line.getChildItemId(), projectId);
+            CatalogItemView item = reads.item(line.getChildItemId(), projectId);
             BigDecimal required = factor.multiply(line.getQuantity().multiply(BomTree.scrapFactor(line)))
                 .setScale(8, RoundingMode.HALF_UP).stripTrailingZeros();
-            UnitConversion.Conversion conversion = unitConverter.toItemUnit(required, line.getUnit(), item.unitId());
+            UnitConversion.Conversion conversion = reads.units.toItemUnit(required, line.getUnit(), item.unitId());
             BigDecimal itemQuantity = conversion.quantity().setScale(STOCK_SCALE, RoundingMode.HALF_UP);
             BigDecimal unitCost = item.unitCost() != null && item.unitCost().signum() > 0 ? item.unitCost() : null;
             BigDecimal lineCost = unitCost == null ? null : itemQuantity.multiply(unitCost).setScale(STOCK_SCALE, RoundingMode.HALF_UP);
@@ -561,19 +594,19 @@ public class BomServiceImpl implements BomService {
 
     /** The phantom item's BOM revision effective on the day, for the quantity of it the line needs (P2-P3). */
     private BomRequirement phantom(BomHeader parent, CatalogItemView item, BigDecimal quantity, java.time.LocalDate day,
-                                           java.util.Set<String> phantoms, java.util.Set<String> picked) {
+                                           java.util.Set<String> phantoms, java.util.Set<String> picked, Reads reads) {
         if (phantoms.contains(item.itemId()) || phantoms.size() >= BomTree.MAX_LEVELS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Phantom " + item.itemCode() + " goes through itself or more than "
                 + BomTree.MAX_LEVELS + " levels.");
         }
-        BomHeader own = BomTree.approvedByItem(bomHeaderRepository, parent.getProjectId(), day).get(item.itemId());
+        BomHeader own = reads.approved(parent.getProjectId(), day).get(item.itemId());
         if (own == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Phantom " + item.itemCode() + " has no approved BOM effective on "
                 + day + ".");
         }
         java.util.Set<String> deeper = new java.util.HashSet<>(phantoms);
         deeper.add(item.itemId());
-        return requirements(own, quantity, day, deeper, picked);
+        return requirements(own, quantity, day, deeper, picked, reads);
     }
 
     private BomHeader findEditableBom(String bomId) {
@@ -592,6 +625,90 @@ public class BomServiceImpl implements BomService {
     private BomHeader findBom(String bomId) {
         return bomHeaderRepository.findByBomIdAndDeletedYn(bomId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    /**
+     * What one requirements calculation, or one batch of them, has read: the unit master once, and each BOM, its lines and
+     * its items once, instead of an item and two unit reads for every line of every calculation
+     * (docs/operations/performance-baseline.md). Kept for one request only, so it sees the BOMs and the catalog as they
+     * were when it read them.
+     */
+    private final class Reads {
+        private final UnitConversion.Table units = unitConverter.table();
+        private final Map<String, CatalogItemView> items = new java.util.HashMap<>();
+        /** By BOM id; null for an id that has no BOM (or a deleted one), so it is not looked for again. */
+        private final Map<String, BomHeader> headers = new java.util.HashMap<>();
+        private final Map<String, List<BomLine>> lines = new java.util.HashMap<>();
+        private final Map<String, java.time.LocalDate> today = new java.util.HashMap<>();
+        private final Map<String, Map<String, BomHeader>> approved = new java.util.HashMap<>();
+
+        private BomHeader header(String bomId) {
+            if (!headers.containsKey(bomId)) {
+                headers.put(bomId, bomHeaderRepository.findByBomIdAndDeletedYn(bomId, NOT_DELETED).orElse(null));
+            }
+            return headers.get(bomId);
+        }
+
+        private List<BomLine> lines(String bomId) {
+            return lines.computeIfAbsent(bomId, BomServiceImpl.this::lines);
+        }
+
+        private java.time.LocalDate today(String projectId) {
+            return today.computeIfAbsent(projectId, projectCalendar::today);
+        }
+
+        /** The project's approved revision of each item effective on the day, for phantoms (P2-P3). */
+        private Map<String, BomHeader> approved(String projectId, java.time.LocalDate day) {
+            return approved.computeIfAbsent(projectId + "|" + day, key -> BomTree.approvedByItem(bomHeaderRepository, projectId, day));
+        }
+
+        /** Headers, lines and line items of the BOMs not read yet, in one query each; returns every asked BOM's line items. */
+        private Map<String, List<String>> prefetch(java.util.Collection<String> bomIds) {
+            List<String> ids = bomIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+            List<String> missing = ids.stream().filter(id -> !lines.containsKey(id)).toList();
+            if (!missing.isEmpty()) {
+                List<String> unread = missing.stream().filter(id -> !headers.containsKey(id)).toList();
+                if (!unread.isEmpty()) {
+                    Map<String, BomHeader> found = bomHeaderRepository.findAllById(unread).stream()
+                        .filter(header -> NOT_DELETED.equals(header.getDeletedYn()))
+                        .collect(Collectors.toMap(BomHeader::getBomId, Function.identity()));
+                    unread.forEach(id -> headers.put(id, found.get(id)));
+                }
+                Map<String, List<BomLine>> byBom = new java.util.HashMap<>();
+                for (BomLine line : bomLineRepository.findAllByBomIdInOrderByBomIdAscSortOrderAscBomLineIdAsc(missing)) {
+                    byBom.computeIfAbsent(line.getBomId(), id -> new ArrayList<>()).add(line);
+                }
+                missing.forEach(id -> lines.put(id, byBom.getOrDefault(id, List.of())));
+                load(missing.stream().flatMap(id -> java.util.stream.Stream.concat(
+                    java.util.stream.Stream.ofNullable(headers.get(id)).map(BomHeader::getTargetItemId),
+                    lines.get(id).stream().map(BomLine::getChildItemId))).toList());
+            }
+            Map<String, List<String>> children = new java.util.LinkedHashMap<>();
+            ids.forEach(id -> children.put(id, lines.get(id).stream().map(BomLine::getChildItemId).toList()));
+            return children;
+        }
+
+        private void load(java.util.Collection<String> itemIds) {
+            List<String> missing = itemIds.stream().map(id -> id == null ? "" : id.trim())
+                .filter(id -> !id.isEmpty() && !items.containsKey(id)).distinct().toList();
+            if (!missing.isEmpty()) {
+                items.putAll(catalogQuery.findActiveItems(missing));
+            }
+        }
+
+        /** As {@link #findProjectItem}: an item that is not active is refused, and so is one of another project. */
+        private CatalogItemView item(String itemId, String projectId) {
+            String id = itemId == null ? "" : itemId.trim();
+            load(List.of(id));
+            CatalogItemView item = items.get(id);
+            if (item == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Item " + itemId + " does not exist.");
+            }
+            if (!projectId.equals(item.projectId())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Item " + item.itemCode() + " belongs to another project.");
+            }
+            return item;
+        }
     }
 
     private CatalogItemView findProjectItem(String itemId, String projectId) {
