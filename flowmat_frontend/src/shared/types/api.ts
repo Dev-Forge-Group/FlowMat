@@ -540,7 +540,9 @@ export interface StockImportResultDto {
   received: number
   newLots: number
   errors: number
-  rows: { row: number; itemCode: string | null; action: 'create' | 'receive' | 'error'; message: string | null }[]
+  /** Rows the request left out (skipRows); they are neither checked nor received. */
+  skipped: number
+  rows: { row: number; itemCode: string | null; action: 'create' | 'receive' | 'error' | 'skipped'; message: string | null }[]
 }
 
 /** Each item's stock over a period (GET /stock-movement-summary); quantities in the item's unit. */

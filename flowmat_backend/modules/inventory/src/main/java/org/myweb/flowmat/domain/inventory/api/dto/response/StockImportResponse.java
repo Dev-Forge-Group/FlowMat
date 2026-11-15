@@ -5,10 +5,11 @@ import java.util.List;
 /**
  * What a stock import did or would do (docs/domain/stock-import.md).
  *
- * @param applied true when the stock was received: not a dry run and no row had an error
+ * @param applied true when the stock was received: not a dry run and no row that was not left out had an error
  * @param created rows that make a new stock record
  * @param received rows that receive into a record already at that place
  * @param newLots LOTs the file registers
+ * @param skipped rows the request left out; their action is "skipped"
  */
 public record StockImportResponse(
     boolean dryRun,
@@ -17,6 +18,7 @@ public record StockImportResponse(
     int received,
     int newLots,
     int errors,
+    int skipped,
     List<RowResult> rows
 ) {
 

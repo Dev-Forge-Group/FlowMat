@@ -101,7 +101,7 @@
   - 재고 있는 품목의 LOT 변경 → 오류. 이름 변경 dry run → updated 1이지만 저장 안 됨
   - 빈 파일 400, 외부인 403
 - `ItemImportIntegrationTest.rowsLeftOutAreNotCheckedAndTheRestIsSavedTogether`(I13): 4줄 파일(새 품목, 없는 단위, 단가 수정, 같은 코드 두 번째)은 통째로는 오류 2. 없는 단위만 빼면 오류 1로 여전히 저장 안 됨. 첫 줄을 빼면 같은 코드의 넷째 줄이 정상이 됨. 틀린 두 줄을 빼면 생성 1·수정 1·`skipped` 2로 저장되고 뺀 줄은 들어가지 않음. 다시 보내면 unchanged 2. 없는 줄 번호·0·모든 줄 빼기는 400
-- e2e `item-import-rows.spec.ts`(모의 API): 틀린 두 줄을 한 번에 빼고 다시 검사, 멀쩡한 줄 빼기와 되돌리기, 마지막 줄은 못 뺌, 저장 요청이 마지막 검사와 같은 `skipRows`를 보냄
+- e2e `import-rows.spec.ts`(모의 API): 틀린 두 줄을 한 번에 빼고 다시 검사, 멀쩡한 줄 빼기와 되돌리기, 마지막 줄은 못 뺌, 저장 요청이 마지막 검사와 같은 `skipRows`를 보냄
 - `itemCsvModel.test.ts` 4건: 따옴표·줄바꿈·BOM 파싱, 열 이름·별칭 매핑과 무시한 열, 필수 열 없음·빈 파일, 내보내기 → 다시 읽기(상세 열, 쉼표·줄바꿈 든 설명 포함)
 - `ItemDetailsIntegrationTest.theImportMergesDetailsAndGuardsBarcodes`: 규격만 적은 줄은 규격만 바뀌고 그룹·바코드 유지, 다른 품목의 바코드와 파일 안 중복 바코드는 줄 오류, 다시 올리면 unchanged
 

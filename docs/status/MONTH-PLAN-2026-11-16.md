@@ -86,7 +86,7 @@
 |---|---|---|---|
 | **archify 온전 이식** | 없음. 프런트만 바뀌므로 업무 검증과 나란히 한다. 대조표는 [archify 뷰어 기능 대조](../editor/archify-parity.md)이고, 11-14에 연결 고정 링크(`#relation=`)부터 시작했다 | 2주차: archify 뷰어의 기능 전체와 FlowMat을 대조한 표. 2~4주차: 빠진 것을 이식 | 대조표의 모든 줄이 "있음" 또는 "가져오지 않음(이유)"이고, 이식한 것마다 브라우저 테스트가 있다 |
 | **Rust 마이그레이션** | 3주차의 성능 기준선과 입출력 스냅숏. 계산이 DB 트랜잭션과 섞여 있어 그대로는 옮길 수 없다 | 3~4주차: JPA 없는 `modules/compute`로 순수 계산을 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 4주차: 계산 하나를 Rust로 구현해 같은 입력으로 비교 | Rust 구현이 스냅숏 입력 전부에서 Java와 같은 결과를 내고, 시간·메모리 비교가 기록돼 있다. 실제 전환은 다음 달 |
-| **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | ~~3주차: 기능 목록과 FlowMat 대응표~~ **끝(11-14)**: [SETTINGTOOL-FEATURE-MAP.md](SETTINGTOOL-FEATURE-MAP.md). 겹치는 것은 업무가 아니라 도구가 일하는 방식이다. 첫 기능 "가져오기에서 줄을 골라 적용"은 품목 가져오기에 들어갔다(11-14, [item-import](../domain/item-import.md) I13). 재고·BOM 가져오기가 남았고, 외부 적용 뒤 검증 보고와 도면 배치는 다음 달 후보다 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
+| **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | ~~3주차: 기능 목록과 FlowMat 대응표~~ **끝(11-14)**: [SETTINGTOOL-FEATURE-MAP.md](SETTINGTOOL-FEATURE-MAP.md). 겹치는 것은 업무가 아니라 도구가 일하는 방식이다. 첫 기능 "가져오기에서 줄을 골라 적용"은 품목과 재고 가져오기에 들어갔다(11-14, [item-import](../domain/item-import.md) I13, [stock-import](../domain/stock-import.md) S12). BOM 자재 가져오기가 남았고, 외부 적용 뒤 검증 보고와 도면 배치는 다음 달 후보다 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
 
 **Rust의 범위(2026-11-14, 코드를 보고 정함): 계산만 옮긴다. 백엔드 전체는 옮기지 않는다.**
 

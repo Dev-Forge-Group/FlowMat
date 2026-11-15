@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
 /**
- * Leaving lines out of an item import (docs/domain/item-import.md "줄을 골라 적용"), against a mocked API: a file with a
+ * Leaving lines out of an item or a stock import (docs/domain/item-import.md I13, stock-import.md), against a mocked API: a file with a
  * wrong line can be saved without it, the file is checked again whenever the choice changes, and what is saved is
  * exactly what the last check showed.
  */
@@ -75,5 +75,65 @@ test('lines with problems are left out in one press and the rest is saved', asyn
   expect(sent).toHaveLength(5)
   expect(sent[4]).toMatchObject({ dryRun: false, skipRows: [2, 4] })
   expect(sent[4].rows.map((row) => row.itemCode)).toEqual(['OATS', 'BAD-1', 'RYE', 'BAD-2'])
+  await expect(check).toHaveCount(0)
+})
+
+test('stock lines with problems are left out in one press and the rest is received', async ({ page }) => {
+  const projectId = 'prj-stock-import-rows'
+  interface StockInput { dryRun: boolean; note?: string; rows: { itemCode: string; quantity?: string }[]; skipRows?: number[] }
+  const sent: StockInput[] = []
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request()
+    const { pathname } = new URL(request.url())
+    if (await answerAuth(route, pathname)) return
+    if (request.method() === 'POST' && pathname === '/api/inventories/import') {
+      const body = request.postDataJSON() as StockInput
+      sent.push(body)
+      const skip = new Set(body.skipRows ?? [])
+      // Like the server: a left-out row is not checked; NOPE rows are wrong; the rest make new records.
+      const rows = body.rows.map((row, index) => skip.has(index + 1)
+        ? { row: index + 1, itemCode: row.itemCode, action: 'skipped', message: null }
+        : row.itemCode.startsWith('NOPE')
+          ? { row: index + 1, itemCode: row.itemCode, action: 'error', message: `No item has code ${row.itemCode}` }
+          : { row: index + 1, itemCode: row.itemCode, action: 'create', message: null })
+      const errors = rows.filter((row) => row.action === 'error').length
+      return ok(route, { dryRun: body.dryRun, applied: !body.dryRun && errors === 0,
+        created: rows.filter((row) => row.action === 'create').length, received: 0, newLots: 0, errors, skipped: skip.size, rows })
+    }
+    if (request.method() !== 'GET') return route.fulfill({ status: 400, body: 'Unexpected write' })
+    if (pathname === '/api/projects') return ok(route, [{ projectId, projectName: 'Stock rows', ownerId: 'demo-owner' }])
+    if (pathname === `/api/projects/${projectId}`) return ok(route, { projectId, projectName: 'Stock rows', ownerId: 'demo-owner' })
+    if (pathname === '/api/material-requirements') return ok(route, { projectId, orders: 0, lines: [], problems: [] })
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  await page.goto(`/projects/${projectId}/inventory?tab=stock`)
+  const panel = page.getByRole('group', { name: 'Receive stock from a spreadsheet', exact: true })
+  await panel.locator('summary').click()
+  await panel.getByLabel('Import stock file').setInputFiles({ name: 'stock.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('item_code,location,quantity\nOATS,A-1,5\nNOPE-1,A-1,1\nRYE,A-2,3\n') })
+  const check = panel.getByLabel('Stock import check', { exact: true })
+
+  await expect(check).toContainText('2 new records, 0 into existing ones, 1 with problems')
+  await expect(check.getByRole('button', { name: 'Receive 2 lines', exact: true })).toBeDisabled()
+
+  await check.getByRole('button', { name: 'Leave out the 1 line with problems', exact: true }).click()
+  await expect(check).toContainText('2 new records, 0 into existing ones, 1 left out')
+  expect(sent[1]).toMatchObject({ dryRun: true, skipRows: [2] })
+  await expect(check.getByRole('row', { name: /line 3/ })).toContainText('left out')
+  await expect(check.getByLabel('Import line 3', { exact: true })).not.toBeChecked()
+
+  // A left-out line can be put back, and the file is checked again as a whole.
+  await check.getByLabel('Import line 3', { exact: true }).check()
+  await expect(check).toContainText('1 with problems')
+  expect(sent[2].skipRows).toBeUndefined()
+  await check.getByLabel('Import line 3', { exact: true }).uncheck()
+  await expect(check).toContainText('1 left out')
+
+  await panel.getByLabel('Import note').fill('opening balance')
+  await check.getByRole('button', { name: 'Receive 2 lines', exact: true }).click()
+  await expect(panel.getByRole('status')).toHaveText('Received: 2 new records, 0 into existing ones, 1 line left out.')
+  expect(sent.at(-1)).toMatchObject({ dryRun: false, note: 'opening balance', skipRows: [2] })
+  expect(sent.at(-1)?.rows.map((row) => row.itemCode)).toEqual(['OATS', 'NOPE-1', 'RYE'])
   await expect(check).toHaveCount(0)
 })
