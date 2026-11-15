@@ -315,18 +315,6 @@ modules:
     extraction_notes:
       - CRM 코드는 없다. 범위가 정해지면 이 저장소의 새 모듈로 시작한다.
 
-# 엔티티도, 읽고 쓰는 코드도 없는 테이블. V1이 만들었고 2026-11-13 새 개발 DB에서 모두 0행이다.
-# 소유 모듈이 없으므로 쓰려면 먼저 소유 모듈을 정하고 여기서 뺀다.
-unowned_tables:
-  - cad_import_job
-  - payment_discount
-  - project_activity_log
-  - project_comment
-  - project_export
-  - project_file
-  - project_permission
-  - resource_types
-  - resource_usage
-  - resources
-  - simulation_run
-  - simulation_step
+# 엔티티도, 읽고 쓰는 코드도 없는 테이블. V1이 만든 12개가 여기 있었고 V135(2026-11-14)가 지웠다.
+# 새 테이블은 소유 모듈의 엔티티가 매핑해야 한다. 여기 적는 것은 그럴 수 없는 까닭이 있을 때뿐이다.
+unowned_tables: []
