@@ -336,7 +336,11 @@ test('E opens the export menu: SVG in three themes, a PNG to save and a PNG to c
   await page.keyboard.press('Escape')
   await page.keyboard.press('e')
   const menu = page.getByRole('menu', { name: 'Export diagram' })
-  await expect(menu.getByRole('menuitem')).toHaveText([/^PNG to clipboard/, /^PNG/, /^SVG · Light/, /^SVG · Dark/, /^SVG · Auto/])
+  await expect(menu.getByRole('menuitem')).toHaveText([/^PNG to clipboard/, /^PNG/, /^SVG · Light/, /^SVG · Dark/, /^SVG · Auto/,
+    /^Route share card/, /^Reach share card/])
+  // Nothing is being read, so neither card can be made: they are passed over by the arrow keys.
+  await expect(menu.getByRole('menuitem', { name: /^Route share card/ })).toBeDisabled()
+  await expect(menu.getByRole('menuitem', { name: /^Reach share card/ })).toBeDisabled()
   await expect(menu.getByRole('menuitem').first()).toBeFocused()
   await expect(exportButton).toHaveAttribute('aria-expanded', 'true')
   await page.keyboard.press('ArrowUp')
@@ -381,6 +385,57 @@ test('E opens the export menu: SVG in three themes, a PNG to save and a PNG to c
   await viewControls(page).getByRole('button', { name: /Choose visual style$/ }).click()
   await expect(menu).toHaveCount(0)
   await expect(page.getByRole('menu', { name: 'Visual style' })).toBeVisible()
+})
+
+/** Width and height of a PNG, from its header. */
+function pngSize(bytes: Buffer): { width: number; height: number } {
+  expect(bytes.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+test('a route and a reach each export a share card, and only while they are being read', async ({ page }) => {
+  await openBakery(page, '#route=proc-mix~proc-pack')
+  const status = page.locator('.export-status')
+  const exportButton = viewControls(page).getByRole('button', { name: 'Export diagram' })
+  const menu = page.getByRole('menu', { name: 'Export diagram' })
+  const routeCard = menu.getByRole('menuitem', { name: /^Route share card/ })
+  const reachCard = menu.getByRole('menuitem', { name: /^Reach share card/ })
+  await expect(processNode(page, 'proc-pack')).toHaveClass(/reading-on/, { timeout: 15_000 })
+
+  // A route is being read: its card can be made, the reach card says what it needs.
+  await exportButton.click()
+  await expect(routeCard).toBeEnabled()
+  await expect(routeCard).toContainText('The path being read, on one card')
+  await expect(reachCard).toBeDisabled()
+  await expect(reachCard).toContainText('Trace upstream or downstream of a process first')
+  // The arrow keys reach the route card and pass over the reach card.
+  await page.keyboard.press('ArrowUp')
+  await expect(routeCard).toBeFocused()
+  const routeDownload = page.waitForEvent('download')
+  await page.keyboard.press('Enter')
+  const route = await routeDownload
+  expect(route.suggestedFilename()).toBe('Bakery line-route-share-card.png')
+  // The card is drawn at twice its 1200 by 630, so it stays sharp where it is pasted.
+  expect(pngSize(await readFile(await route.path()))).toEqual({ width: 2400, height: 1260 })
+  await expect(status).toHaveText('Downloaded route share card')
+  await expect(menu).toHaveCount(0)
+  // Exporting leaves the reading as it was.
+  expect(hashOf(page)).toBe('#route=proc-mix~proc-pack')
+  await expect(processNode(page, 'proc-pack')).toHaveClass(/reading-on/)
+
+  // A downstream trace: the reach card, named for its direction.
+  await page.goto('/projects/prj-e2e/workflows/wf-view#focus=proc-bake&reach=downstream')
+  await page.reload()
+  await expect(processNode(page, 'proc-cool')).toHaveClass(/reading-on/, { timeout: 15_000 })
+  await exportButton.click()
+  await expect(routeCard).toBeDisabled()
+  await expect(reachCard).toBeEnabled()
+  const reachDownload = page.waitForEvent('download')
+  await reachCard.click()
+  const reach = await reachDownload
+  expect(reach.suggestedFilename()).toBe('Bakery line-downstream-reach-share-card.png')
+  expect(pngSize(await readFile(await reach.path()))).toEqual({ width: 2400, height: 1260 })
+  await expect(status).toHaveText('Downloaded reach share card')
 })
 
 test('the style menu tries archify\'s four looks on the canvas for this visit, and S cycles them', async ({ page }) => {

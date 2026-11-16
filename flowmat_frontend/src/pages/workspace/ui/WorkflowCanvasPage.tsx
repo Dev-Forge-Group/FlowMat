@@ -38,7 +38,8 @@ import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
 import { ExportMenu, type ExportChoice } from './ExportMenu'
 import { ProcessIndex } from './ProcessIndex'
-import type { ExportOutcome, PngExport, SvgExport } from './CanvasViewport'
+import type { ExportOutcome, PngExport, ShareCardExport, SvgExport } from './CanvasViewport'
+import { shareCardText } from '../model/shareCard'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
 import { useRevisionChanges } from '../model/useRevisionChanges'
@@ -983,6 +984,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const selectAllRef = useRef<() => void>(() => {})
   const exportPngRef = useRef<PngExport>(async () => ({ kind: 'empty' }))
   const exportSvgRef = useRef<SvgExport>(async () => ({ kind: 'empty' }))
+  const exportShareCardRef = useRef<ShareCardExport>(async () => ({ kind: 'empty' }))
   // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
   const revealRef = useRef<(processIds: string[]) => void>(() => {})
   const handleRevealReady = useCallback((fn: (processIds: string[]) => void) => { revealRef.current = fn }, [])
@@ -1024,9 +1026,32 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     const timer = window.setTimeout(() => setExportStatus(null), 4000)
     return () => window.clearTimeout(timer)
   }, [exportStatus])
+  // archify's share cards: one for the route being read, one for an upstream or downstream trace; none for other readings.
+  const shareCard = useMemo(
+    () => shareCardText(reading.view, (processId) => canvas.nodeMap[processId]?.name ?? processId),
+    [reading.view, canvas.nodeMap],
+  )
+  const shareCardRef = useRef({ text: shareCard, view: reading.view })
+  shareCardRef.current = { text: shareCard, view: reading.view }
   // Called inside the press that chose it, so the clipboard accepts the picture.
   const runExport = useCallback((choice: ExportChoice) => {
     const name = canvas.workflow.workflowName
+    if (choice.kind === 'share-card') {
+      const { text, view } = shareCardRef.current
+      if (!text || text.variant !== choice.variant || !view?.highlight) {
+        setExportStatus(choice.variant === 'route' ? 'Read a route first, then export its card'
+          : 'Trace upstream or downstream of a process first, then export its card')
+        return
+      }
+      void exportShareCardRef.current(name, { text, nodeIds: view.highlight.nodeIds, edgeIds: view.highlight.edgeIds,
+        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' }).then((result: ExportOutcome) => {
+        setExportStatus(result.kind === 'done' ? `Downloaded ${choice.variant} share card`
+          : result.kind === 'empty' ? 'Nothing to export: add a process first'
+            : result.kind === 'unsupported' ? 'This browser cannot draw the share card'
+              : `Export failed: ${result.message}`)
+      })
+      return
+    }
     const done = choice.kind === 'png-clipboard' ? 'Copied PNG to clipboard'
       : choice.kind === 'png' ? 'Downloaded PNG'
         : `Downloaded SVG · ${choice.theme[0].toUpperCase()}${choice.theme.slice(1)}`
@@ -1855,6 +1880,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onSelectAllReady={(fn) => { selectAllRef.current = fn }}
               onExportReady={(fn) => { exportPngRef.current = fn }}
               onSvgExportReady={(fn) => { exportSvgRef.current = fn }}
+              onShareCardExportReady={(fn) => { exportShareCardRef.current = fn }}
               onDeleteReady={(api) => { deleteApiRef.current = api }}
               onPresence={handlePresence}
               onGraphChange={handleGraphChange}
@@ -1956,7 +1982,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             motion={{ still: motion.still, reduced: motion.reduced, onToggle: motion.toggle }}
             presenting={presenting} onPresent={togglePresenting} />
           {styleOpen && <StylePresetMenu preset={preset} onChoose={setPreset} onClose={closeStyle} />}
-          {exportOpen && <ExportMenu onChoose={runExport} onClose={closeExport} />}
+          {exportOpen && <ExportMenu shareCard={shareCard?.variant ?? null} onChoose={runExport} onClose={closeExport} />}
           <span className="export-status" role="status" aria-live="polite">{exportStatus}</span>
           {panel === 'runs' && (
             <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
