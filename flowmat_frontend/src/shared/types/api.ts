@@ -490,7 +490,9 @@ export interface ItemImportResultDto {
   updated: number
   unchanged: number
   errors: number
-  rows: { row: number; itemCode: string | null; action: 'create' | 'update' | 'unchanged' | 'error'; message: string | null }[]
+  /** Rows the request left out (skipRows); they are neither checked nor saved. */
+  skipped: number
+  rows: { row: number; itemCode: string | null; action: 'create' | 'update' | 'unchanged' | 'error' | 'skipped'; message: string | null }[]
 }
 
 /** One material line of a draft BOM import (POST /boms/{id}/lines/import); values are text as in the file. */
@@ -538,7 +540,9 @@ export interface StockImportResultDto {
   received: number
   newLots: number
   errors: number
-  rows: { row: number; itemCode: string | null; action: 'create' | 'receive' | 'error'; message: string | null }[]
+  /** Rows the request left out (skipRows); they are neither checked nor received. */
+  skipped: number
+  rows: { row: number; itemCode: string | null; action: 'create' | 'receive' | 'error' | 'skipped'; message: string | null }[]
 }
 
 /** Each item's stock over a period (GET /stock-movement-summary); quantities in the item's unit. */

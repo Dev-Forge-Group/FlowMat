@@ -45,8 +45,9 @@
 ```
 
 - 값은 모두 **문자열**입니다. 숫자가 틀려도 요청 전체가 400이 되지 않고 그 줄의 문제로 보고됩니다.
-- 응답: `created`, `updated`, `unchanged`, `errors`, `applied`, 줄별 `rows[]`(`row`는 데이터 줄 번호 1부터, `action`은 create·update·unchanged·error, `message`는 바뀌는 항목이나 문제).
+- 응답: `created`, `updated`, `unchanged`, `errors`, `skipped`, `applied`, 줄별 `rows[]`(`row`는 데이터 줄 번호 1부터, `action`은 create·update·unchanged·error·skipped, `message`는 바뀌는 항목이나 문제).
 - 한 번에 1000줄까지. 빈 파일은 400.
+- `skipRows`(선택, 2026-11-14): 빼고 가져올 줄 번호의 목록(`row`와 같은 번호, 1부터). 규칙 I13.
 
 ## 규칙
 
@@ -63,6 +64,7 @@
 | I8 | 품목 삭제는 가져오기로 하지 않음 | 삭제는 사용 중 검사가 필요한 별도 동작 |
 | I10 | 상세 열도 빈 칸이면 그대로(I3). 상세는 통째로 저장되므로 빈 칸은 저장된 값으로 채워 보냄. 바코드가 파일에 두 번 나오거나 다른 품목이 이미 쓰면 그 줄이 오류. 바코드를 한 품목에서 다른 품목으로 옮기려면 두 번에 나눠(먼저 화면에서 지우고) 가져옴 | 품목 화면과 같은 바코드 규칙을 저장 전에 줄 오류로 보이려고. 옮기기는 드물어서 보수적으로 막음 |
 | I11 | 품목 CSV는 같은 필드의 열을 하나만 허용. unit_cost·cost, barcode·ean, item_code·code처럼 별칭과 대소문자 중복도 파일 오류 | 단가·바코드·매칭 품목이 마지막 값으로 조용히 바뀌는 것을 방지 |
+| I13 | **줄을 골라 적용(2026-11-14).** `skipRows`에 든 줄은 검사하지도 저장하지도 않는다. 나머지 줄은 그 줄이 파일에 없었던 것처럼 검사한다(뺀 줄과 겹치던 코드·바코드는 남은 줄의 것이 된다). I1은 그대로다: 남은 줄에 문제가 하나라도 있으면 아무것도 저장하지 않고, 저장은 한 트랜잭션이다. 파일에 없는 줄 번호와 모든 줄을 뺀 요청은 400 | 몇 줄이 틀린 파일도 나머지는 들일 수 있게. settingTool의 Site Data Sync가 줄마다 적용 여부를 고르게 하는 방식이다([대조](../status/SETTINGTOOL-FEATURE-MAP.md)) |
 | I12 | 품목 CSV의 파일 선택·취소는 이전 읽기·검사 결과와 오류를 무효화. 검사 중 Cancel 가능, 읽기 실패 안내, 실제 저장 중 파일·취소 잠금 | 다른 파일의 검사 결과와 표시 이름이 섞이거나 저장 중 새 선택이 지워지지 않음 |
 
 ## 화면
@@ -71,7 +73,7 @@
 - **Export CSV:** 지금 품목 전체를 위 형식으로 받습니다.
 - **Import CSV:** 파일을 고르면 바로 검사(dry run)하고 "N to add, N to update, N unchanged, N with problems"와 줄별 표(파일 줄 번호, 코드, 동작, 바뀌는 항목 또는 문제)를 보여 줍니다.
 - 문제가 없을 때만 **Save N changes**가 켜집니다. 저장하면 "Saved: …"를 보여 주고 목록을 새로 고칩니다.
-- 문제가 있으면 파일을 고쳐 다시 고릅니다.
+- 문제가 있으면 파일을 고쳐 다시 고르거나, **Leave out the N lines with problems**로 그 줄들을 빼고 나머지를 저장합니다(I13). 줄마다 체크 상자가 있어 멀쩡한 줄도 뺄 수 있고 뺀 줄을 다시 넣을 수 있습니다. 고를 때마다 파일을 다시 검사하고, 뺀 줄은 `left out`으로 보입니다. 마지막 남은 줄은 뺄 수 없습니다. 저장하면 "Saved: … , N left out."을 보여 줍니다.
 
 ## BOM 자재 (초안 BOM)
 
@@ -98,6 +100,8 @@
   - 같은 파일 다시 → unchanged 2
   - 재고 있는 품목의 LOT 변경 → 오류. 이름 변경 dry run → updated 1이지만 저장 안 됨
   - 빈 파일 400, 외부인 403
+- `ItemImportIntegrationTest.rowsLeftOutAreNotCheckedAndTheRestIsSavedTogether`(I13): 4줄 파일(새 품목, 없는 단위, 단가 수정, 같은 코드 두 번째)은 통째로는 오류 2. 없는 단위만 빼면 오류 1로 여전히 저장 안 됨. 첫 줄을 빼면 같은 코드의 넷째 줄이 정상이 됨. 틀린 두 줄을 빼면 생성 1·수정 1·`skipped` 2로 저장되고 뺀 줄은 들어가지 않음. 다시 보내면 unchanged 2. 없는 줄 번호·0·모든 줄 빼기는 400
+- e2e `import-rows.spec.ts`(모의 API): 틀린 두 줄을 한 번에 빼고 다시 검사, 멀쩡한 줄 빼기와 되돌리기, 마지막 줄은 못 뺌, 저장 요청이 마지막 검사와 같은 `skipRows`를 보냄
 - `itemCsvModel.test.ts` 4건: 따옴표·줄바꿈·BOM 파싱, 열 이름·별칭 매핑과 무시한 열, 필수 열 없음·빈 파일, 내보내기 → 다시 읽기(상세 열, 쉼표·줄바꿈 든 설명 포함)
 - `ItemDetailsIntegrationTest.theImportMergesDetailsAndGuardsBarcodes`: 규격만 적은 줄은 규격만 바뀌고 그룹·바코드 유지, 다른 품목의 바코드와 파일 안 중복 바코드는 줄 오류, 다시 올리면 unchanged
 

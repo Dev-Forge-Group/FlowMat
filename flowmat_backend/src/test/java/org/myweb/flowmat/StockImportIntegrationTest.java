@@ -121,10 +121,76 @@ class StockImportIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isForbidden());
     }
 
+    @Test
+    void rowsLeftOutAreNotCheckedAndTheRestIsReceivedTogether() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String oats = "SK-OATS-" + tag;
+        String oatsId = item(oats, false);
+        String shelf = "SK-A-" + tag;
+        List<Map<String, String>> file = List.of(
+            row("itemCode", oats, "location", shelf, "quantity", "5"),
+            row("itemCode", "NOPE-" + tag, "quantity", "1"),
+            row("itemCode", oats, "location", shelf, "quantity", "2"));
+
+        // As a whole the file is refused: an unknown item, and the same place twice.
+        importRows(false, file, null)
+            .andExpect(jsonPath("$.data.applied").value(false))
+            .andExpect(jsonPath("$.data.errors").value(2))
+            .andExpect(jsonPath("$.data.skipped").value(0))
+            .andExpect(jsonPath("$.data.rows[2].message").value(containsString("more than once")));
+        // Leaving out only the unknown item still leaves the repeated place, so nothing is received.
+        importRows(false, file, List.of(2))
+            .andExpect(jsonPath("$.data.applied").value(false))
+            .andExpect(jsonPath("$.data.errors").value(1))
+            .andExpect(jsonPath("$.data.rows[1].action").value("skipped"));
+        assertThat(stockOf(oatsId, shelf)).isEqualTo(0.0);
+        // A left-out row is not checked: without the first oats line, the second is the only one at that place.
+        importRows(true, file, List.of(1, 2))
+            .andExpect(jsonPath("$.data.errors").value(0))
+            .andExpect(jsonPath("$.data.rows[0].action").value("skipped"))
+            .andExpect(jsonPath("$.data.rows[2].action").value("create"));
+
+        // Without the two wrong lines the rest is received, and only that.
+        importRows(false, file, List.of(2, 3))
+            .andExpect(jsonPath("$.data.applied").value(true))
+            .andExpect(jsonPath("$.data.created").value(1))
+            .andExpect(jsonPath("$.data.received").value(0))
+            .andExpect(jsonPath("$.data.errors").value(0))
+            .andExpect(jsonPath("$.data.skipped").value(2));
+        assertThat(stockOf(oatsId, shelf)).isEqualTo(5.0);
+
+        // Rows that are not in the file, and a file left out whole, are refused.
+        importRows(true, file, List.of(4)).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value(containsString("rows 1 to 3")));
+        importRows(true, file, List.of(0)).andExpect(status().isBadRequest());
+        importRows(true, file, List.of(1, 2, 3)).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value(containsString("Every row is left out")));
+        assertThat(stockOf(oatsId, shelf)).isEqualTo(5.0);
+    }
+
     // ---- helpers ----
 
     private ResultActions importRows(boolean dryRun, List<Map<String, String>> rows) throws Exception {
-        return call(post("/inventories/import"), json(Map.of("projectId", DEMO_PROJECT, "dryRun", dryRun, "rows", rows)));
+        return importRows(dryRun, rows, null);
+    }
+
+    private ResultActions importRows(boolean dryRun, List<Map<String, String>> rows, List<Integer> skipRows) throws Exception {
+        Map<String, Object> body = new java.util.LinkedHashMap<>(Map.of("projectId", DEMO_PROJECT, "dryRun", dryRun, "rows", rows));
+        if (skipRows != null) {
+            body.put("skipRows", skipRows);
+        }
+        return call(post("/inventories/import"), json(body));
+    }
+
+    /** The item's quantity on hand at a place, over all its records there. */
+    private double stockOf(String itemId, String location) throws Exception {
+        double quantity = 0;
+        for (JsonNode record : data(call(get("/inventories").param("projectId", DEMO_PROJECT)))) {
+            if (itemId.equals(record.path("itemId").asText()) && location.equals(record.path("location").asText())) {
+                quantity += record.path("quantity").asDouble();
+            }
+        }
+        return quantity;
     }
 
     private String item(String code, boolean lotTracked) throws Exception {

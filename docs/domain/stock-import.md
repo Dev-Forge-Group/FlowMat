@@ -31,7 +31,9 @@
 { "projectId": "...", "dryRun": true, "note": "opening balance", "rows": [{ "itemCode": "SUG-1", "location": "WH-A", "lotNo": "L-1", "quantity": "4", "expiryDate": "2027-01-31" }] }
 ```
 
-응답: `created`(새 재고 행), `received`(이미 있는 행에 입고), `newLots`, `errors`, `applied`, 줄별 `rows[]`(`action`: create·receive·error).
+응답: `created`(새 재고 행), `received`(이미 있는 행에 입고), `newLots`, `errors`, `skipped`, `applied`, 줄별 `rows[]`(`action`: create·receive·error·skipped).
+
+`skipRows`(선택, 2026-11-14): 빼고 받을 줄 번호의 목록(데이터 줄 번호, 1부터). 규칙 S12.
 
 ## 규칙
 
@@ -48,16 +50,20 @@
 | S9 | 파일을 바꾸거나 Cancel하면 이전 파일 읽기·dry run 응답은 화면에 적용하지 않음. 검사 중 취소 가능, 읽기 실패 안내, 실제 Receive 중 파일·메모·취소 잠금 | 다른 파일의 검사 결과로 입고하거나 저장 중 새 입력이 사라지는 것을 방지 |
 | S10 | 실제 Receive의 연결 오류·HTTP 500 이상은 저장 미확인. 재제출·파일·메모를 잠그고 이력 확인 안내. Cancel은 화면만 비우고 거래를 취소하지 않음. 업무 400·409는 수정·재시도 허용 | 이 API는 클라이언트 requestId를 받지 않아 같은 파일 재제출도 새 입고. 저장되지 않았다고 단정하거나 안전한 재생을 제공하지 않음 |
 | S11 | 같은 필드의 CSV 열은 하나만 허용. quantity·qty, packs·bags, location·place 같은 별칭과 대소문자 중복도 거절 | 뒤쪽 수량·위치가 앞쪽 값을 덮어써 다른 재고로 입고하는 것을 방지 |
+| S12 | **줄을 골라 적용(2026-11-14).** `skipRows`에 든 줄은 검사하지도 받지도 않는다. 나머지 줄은 그 줄이 파일에 없었던 것처럼 검사한다(뺀 줄과 겹치던 품목·위치·LOT, 뺀 줄이 등록하려던 새 LOT는 남은 줄의 것이 된다). S1은 그대로다: 남은 줄에 문제가 하나라도 있으면 아무것도 받지 않고, 저장은 한 트랜잭션이다. 파일에 없는 줄 번호와 모든 줄을 뺀 요청은 400 | 몇 줄이 틀린 파일도 나머지는 받을 수 있게. [품목 가져오기](item-import.md) I13과 같은 규칙이다 |
 
 ## 화면
 
 재고 → Stock 탭 위 **Receive stock from a spreadsheet**(접힘)
 - 파일을 고르면 바로 검사해 "N new records, N into existing ones, N new LOTs, N with problems"와 줄별 표를 보여 줍니다.
 - 문제가 없으면 **Receive N lines**로 받습니다. note 칸에 적은 말이 기존 행 입고의 메모가 됩니다.
+- 문제가 있으면 **Leave out the N lines with problems**로 그 줄들을 빼고 나머지를 받을 수 있습니다(S12). 줄마다 체크 상자가 있어 멀쩡한 줄도 빼거나 뺀 줄을 다시 넣을 수 있고, 고를 때마다 파일을 다시 검사합니다. 마지막 남은 줄은 뺄 수 없습니다. 받으면 "Received: … , N lines left out."을 보여 줍니다.
 - 받은 뒤 재고·LOT·원장 목록이 새로 고쳐집니다.
 
 ## 검증
 
+- `StockImportIntegrationTest.rowsLeftOutAreNotCheckedAndTheRestIsReceivedTogether`(S12): 3줄 파일(새 재고 5, 없는 품목, 같은 위치 2)은 통째로는 오류 2. 없는 품목만 빼면 오류 1로 여전히 받지 않음. 첫 줄을 빼면 셋째 줄이 정상이 됨. 틀린 두 줄을 빼면 새 행 1·`skipped` 2로 받고 그 위치의 재고는 5. 없는 줄 번호·0·모든 줄 빼기는 400
+- e2e `import-rows.spec.ts`(모의 API): 틀린 줄을 한 번에 빼고 다시 검사, 뺀 줄 되돌리기, 받는 요청이 마지막 검사와 같은 `skipRows`와 메모를 보냄
 - `StockImportIntegrationTest` 1건(실제 Postgres)
   - 11줄(좋은 4줄 + LOT 없음, LOT 관리 안 하는 품목에 LOT, 없는 코드, 수량 0이며 중복, 기존 LOT에 다른 유효기한, 다른 품목의 LOT, 날짜 형식) → 오류 7, 아무것도 안 받음(기존 행 10 그대로, 새 LOT 없음)
   - 좋은 4줄 → 기존 행에 입고 1(10 → 15, 원장 `receipt`/`stock_import`), 새 행 3, 새 LOT 1(유효기한 2027-01-31, 두 위치 합 6)

@@ -36,7 +36,8 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.ItemStatusRule;
 /**
  * Creates and updates items from a spreadsheet, matched by item code (docs/domain/item-import.md). Every row is checked
  * first; when any row is wrong, or it is a dry run, nothing is saved. Otherwise all rows go through the ordinary item
- * create and update in one transaction, so their rules hold here too.
+ * create and update in one transaction, so their rules hold here too. Rows the request leaves out are neither checked nor
+ * saved, so a file with a few wrong rows can still be imported without them.
  */
 @Service
 @RequiredArgsConstructor
@@ -73,10 +74,22 @@ public class ItemImportService {
         if (rows.size() > MAX_ROWS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Import at most " + MAX_ROWS + " items at a time.");
         }
+        Set<Integer> leftOut = request.skipRows() == null ? Set.of() : new HashSet<>(request.skipRows());
+        for (int row : leftOut) {
+            if (row < 1 || row > rows.size()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "skipRows names row " + row + "; the file has rows 1 to " + rows.size() + ".");
+            }
+        }
+        if (leftOut.size() == rows.size()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Every row is left out; there is nothing to import.");
+        }
 
         List<Item> loaded = itemRepository.findAllByProjectIdAndDeletedYnOrderByCreatedAtAsc(projectId, NOT_DELETED);
         if (!request.dryRun()) {
-            Set<String> requestedCodes = rows.stream().map(row -> trimToNull(row.itemCode())).collect(Collectors.toSet());
+            Set<String> requestedCodes = java.util.stream.IntStream.range(0, rows.size())
+                .filter(index -> !leftOut.contains(index + 1))
+                .mapToObj(index -> trimToNull(rows.get(index).itemCode())).collect(Collectors.toSet());
             // Refresh before filling blank cells, in a stable lock order for overlapping imports.
             loaded.stream()
                 .filter(item -> requestedCodes.contains(item.getItemCode()))
@@ -105,6 +118,11 @@ public class ItemImportService {
         for (int index = 0; index < rows.size(); index++) {
             ItemImportRequest.Row row = rows.get(index);
             String code = trimToNull(row.itemCode());
+            if (leftOut.contains(index + 1)) {
+                // Not checked at all: a code or barcode it repeats is then free for the row that keeps it.
+                results.add(new ItemImportResponse.RowResult(index + 1, code, "skipped", null));
+                continue;
+            }
             List<String> problems = new ArrayList<>();
             List<String> changes = new ArrayList<>();
             Plan plan = check(projectId, row, code, existing, units, seen, barcodes, fileBarcodes, problems, changes);
@@ -135,7 +153,7 @@ public class ItemImportService {
                 }
             }
         }
-        return new ItemImportResponse(request.dryRun(), apply, created, updated, unchanged, errors, results);
+        return new ItemImportResponse(request.dryRun(), apply, created, updated, unchanged, errors, leftOut.size(), results);
     }
 
     private Plan check(

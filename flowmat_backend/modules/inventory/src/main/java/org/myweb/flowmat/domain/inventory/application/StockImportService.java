@@ -42,7 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
  * either receives into the record already at that item, place and LOT, or makes a new record; a LOT number the project
  * does not know yet is registered first. Every row is checked before anything is saved; when any row is wrong, or it is
  * a dry run, nothing is. Saving goes through the ordinary LOT registration, stock record creation and stock command, so
- * every receipt is in the ledger.
+ * every receipt is in the ledger. Rows the request leaves out are neither checked nor received, so a file with a few wrong
+ * rows can still be received without them.
  */
 @Service
 @RequiredArgsConstructor
@@ -78,6 +79,16 @@ public class StockImportService implements StockReceiptCommand {
         if (rows.size() > MAX_ROWS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Import at most " + MAX_ROWS + " rows at a time.");
         }
+        Set<Integer> leftOut = request.skipRows() == null ? Set.of() : new HashSet<>(request.skipRows());
+        for (int row : leftOut) {
+            if (row < 1 || row > rows.size()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "skipRows names row " + row + "; the file has rows 1 to " + rows.size() + ".");
+            }
+        }
+        if (leftOut.size() == rows.size()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Every row is left out; there is nothing to import.");
+        }
 
         Map<String, List<CatalogItemView>> items = catalogQuery.findProjectItems(projectId).stream()
             .collect(Collectors.groupingBy(CatalogItemView::itemCode));
@@ -97,6 +108,11 @@ public class StockImportService implements StockReceiptCommand {
         for (int index = 0; index < rows.size(); index++) {
             StockImportRequest.Row row = rows.get(index);
             String code = trimToNull(row.itemCode());
+            if (leftOut.contains(index + 1)) {
+                // Not checked at all: a place or a new LOT it named is then free for the rows that stay.
+                results.add(new StockImportResponse.RowResult(index + 1, code, "skipped", null));
+                continue;
+            }
             List<String> problems = new ArrayList<>();
             Plan plan = check(projectId, row, code, items, lots, newLots, places, locations, problems);
             if (!problems.isEmpty()) {
@@ -119,7 +135,7 @@ public class StockImportService implements StockReceiptCommand {
         if (apply) {
             save(projectId, plans, trimToNull(request.note()));
         }
-        return new StockImportResponse(request.dryRun(), apply, created, received, newLots.size(), errors, results);
+        return new StockImportResponse(request.dryRun(), apply, created, received, newLots.size(), errors, leftOut.size(), results);
     }
 
     @Override

@@ -102,11 +102,81 @@ class ItemImportIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isForbidden());
     }
 
+    @Test
+    void rowsLeftOutAreNotCheckedAndTheRestIsSavedTogether() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String oats = "SKP-A-" + tag;
+        String rye = "SKP-B-" + tag;
+        call(post("/items"), json(Map.of("projectId", DEMO_PROJECT, "itemCode", rye, "itemName", "Rye", "unitId", "unit_kg")))
+            .andExpect(status().isOk());
+        List<Map<String, String>> file = List.of(
+            row("itemCode", oats, "itemName", "Oats", "unitCode", "kg"),
+            row("itemCode", "SKP-C-" + tag, "itemName", "Cane", "unitCode", "parsec"),
+            row("itemCode", rye, "unitCost", "3"),
+            row("itemCode", oats, "itemName", "Oats, the other line", "unitCode", "kg"));
+
+        // As a whole the file is refused: a unit that does not exist, and a code twice.
+        importRows(false, file, null)
+            .andExpect(jsonPath("$.data.applied").value(false))
+            .andExpect(jsonPath("$.data.errors").value(2))
+            .andExpect(jsonPath("$.data.skipped").value(0))
+            .andExpect(jsonPath("$.data.rows[3].message").value(containsString("more than once")));
+        items().andExpect(jsonPath("$.data[*].itemCode").value(not(hasItem(oats))));
+
+        // Leaving out only the wrong unit still leaves the repeated code, so nothing is saved.
+        importRows(false, file, List.of(2))
+            .andExpect(jsonPath("$.data.applied").value(false))
+            .andExpect(jsonPath("$.data.errors").value(1))
+            .andExpect(jsonPath("$.data.skipped").value(1))
+            .andExpect(jsonPath("$.data.rows[1].action").value("skipped"));
+        items().andExpect(jsonPath("$.data[*].itemCode").value(not(hasItem(oats))));
+
+        // A left-out row is not checked: without the first oats line, the second one is the only one and is fine.
+        importRows(true, file, List.of(1, 2))
+            .andExpect(jsonPath("$.data.errors").value(0))
+            .andExpect(jsonPath("$.data.rows[0].action").value("skipped"))
+            .andExpect(jsonPath("$.data.rows[3].action").value("create"));
+
+        // Without the two wrong lines the rest is saved in one go, and the lines left out are not.
+        importRows(false, file, List.of(2, 4))
+            .andExpect(jsonPath("$.data.applied").value(true))
+            .andExpect(jsonPath("$.data.created").value(1))
+            .andExpect(jsonPath("$.data.updated").value(1))
+            .andExpect(jsonPath("$.data.errors").value(0))
+            .andExpect(jsonPath("$.data.skipped").value(2))
+            .andExpect(jsonPath("$.data.rows[1].action").value("skipped"))
+            .andExpect(jsonPath("$.data.rows[3].action").value("skipped"));
+        items()
+            .andExpect(jsonPath("$.data[?(@.itemCode == '" + oats + "')].itemName").value(hasItem("Oats")))
+            .andExpect(jsonPath("$.data[?(@.itemCode == '" + rye + "')].unitCost").value(hasItem(3.0)))
+            .andExpect(jsonPath("$.data[*].itemCode").value(not(hasItem("SKP-C-" + tag))));
+        // The same request again changes nothing.
+        importRows(false, file, List.of(2, 4))
+            .andExpect(jsonPath("$.data.created").value(0))
+            .andExpect(jsonPath("$.data.updated").value(0))
+            .andExpect(jsonPath("$.data.unchanged").value(2));
+
+        // Rows that are not in the file, and a file left out whole, are refused.
+        importRows(true, file, List.of(5)).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value(containsString("rows 1 to 4")));
+        importRows(true, file, List.of(0)).andExpect(status().isBadRequest());
+        importRows(true, file, List.of(1, 2, 3, 4)).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value(containsString("Every row is left out")));
+    }
+
     // ---- helpers ----
 
     @SafeVarargs
     private ResultActions importRows(boolean dryRun, Map<String, String>... rows) throws Exception {
         return call(post("/items/import"), json(Map.of("projectId", DEMO_PROJECT, "dryRun", dryRun, "rows", List.of(rows))));
+    }
+
+    private ResultActions importRows(boolean dryRun, List<Map<String, String>> rows, List<Integer> skipRows) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>(Map.of("projectId", DEMO_PROJECT, "dryRun", dryRun, "rows", rows));
+        if (skipRows != null) {
+            body.put("skipRows", skipRows);
+        }
+        return call(post("/items/import"), json(body));
     }
 
     private ResultActions items() throws Exception {
