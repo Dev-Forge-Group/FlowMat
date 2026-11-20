@@ -337,12 +337,14 @@ test('E opens the export menu: SVG in three themes, a PNG to save and a PNG to c
   await page.keyboard.press('e')
   const menu = page.getByRole('menu', { name: 'Export diagram' })
   await expect(menu.getByRole('menuitem')).toHaveText([/^PNG to clipboard/, /^PNG/, /^SVG · Light/, /^SVG · Dark/, /^SVG · Auto/,
-    /^Route share card/, /^Reach share card/])
+    /^Route share card/, /^Reach share card/, /^WebM · 6 seconds/])
   // Nothing is being read, so neither card can be made: they are passed over by the arrow keys.
   await expect(menu.getByRole('menuitem', { name: /^Route share card/ })).toBeDisabled()
   await expect(menu.getByRole('menuitem', { name: /^Reach share card/ })).toBeDisabled()
   await expect(menu.getByRole('menuitem').first()).toBeFocused()
   await expect(exportButton).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('ArrowUp')
+  await expect(menu.getByRole('menuitem', { name: /^WebM · 6 seconds/ })).toBeFocused()
   await page.keyboard.press('ArrowUp')
   await expect(menu.getByRole('menuitem', { name: /^SVG · Auto/ })).toBeFocused()
   await page.keyboard.press('Escape')
@@ -410,6 +412,8 @@ test('a route and a reach each export a share card, and only while they are bein
   await expect(reachCard).toContainText('Trace upstream or downstream of a process first')
   // The arrow keys reach the route card and pass over the reach card.
   await page.keyboard.press('ArrowUp')
+  await expect(menu.getByRole('menuitem', { name: /^WebM · 6 seconds/ })).toBeFocused()
+  await page.keyboard.press('ArrowUp')
   await expect(routeCard).toBeFocused()
   const routeDownload = page.waitForEvent('download')
   await page.keyboard.press('Enter')
@@ -436,6 +440,42 @@ test('a route and a reach each export a share card, and only while they are bein
   expect(reach.suggestedFilename()).toBe('Bakery line-downstream-reach-share-card.png')
   expect(pngSize(await readFile(await reach.path()))).toEqual({ width: 2400, height: 1260 })
   await expect(status).toHaveText('Downloaded reach share card')
+})
+
+test('the motion export records six seconds of the flow as a WebM', async ({ page }) => {
+  await openBakery(page)
+  const status = page.locator('.export-status')
+  const exportButton = viewControls(page).getByRole('button', { name: 'Export diagram' })
+  const menu = page.getByRole('menu', { name: 'Export diagram' })
+  await exportButton.click()
+  const motion = menu.getByRole('menuitem', { name: /^WebM · 6 seconds/ })
+  await expect(motion).toContainText('A signal runs along each connection in flow order')
+
+  // The clip is recorded in real time; the note stays while it records.
+  const download = page.waitForEvent('download', { timeout: 20_000 })
+  const started = Date.now()
+  await motion.click()
+  await expect(status).toHaveText('Recording 6 seconds of motion…')
+  await page.waitForTimeout(4_500)
+  await expect(status).toHaveText('Recording 6 seconds of motion…')
+  const clip = await download
+  expect(Date.now() - started).toBeGreaterThan(5_500)
+  expect(clip.suggestedFilename()).toBe('Bakery line.webm')
+  const bytes = await readFile(await clip.path())
+  // A WebM file starts with the EBML header and names its document type.
+  expect(bytes.subarray(0, 4)).toEqual(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+  expect(bytes.subarray(0, 64).toString('latin1')).toContain('webm')
+  expect(bytes.length).toBeGreaterThan(10_000)
+  await expect(status).toHaveText('Downloaded WebM')
+})
+
+test('the motion export is passed over where the browser cannot record video', async ({ page }) => {
+  await page.addInitScript(() => { Reflect.deleteProperty(window, 'MediaRecorder') })
+  await openBakery(page)
+  await viewControls(page).getByRole('button', { name: 'Export diagram' }).click()
+  const motion = page.getByRole('menu', { name: 'Export diagram' }).getByRole('menuitem', { name: /^WebM · 6 seconds/ })
+  await expect(motion).toBeDisabled()
+  await expect(motion).toContainText('This browser cannot record video')
 })
 
 test('the style menu tries archify\'s four looks on the canvas for this visit, and S cycles them', async ({ page }) => {
