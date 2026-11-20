@@ -1,0 +1,63 @@
+name: Compute (Rust)
+
+# The Rust implementation of the condition language in compute/condition-expression. Runs when the crate or its shared
+# fixtures change; the backend workflow checks the Java side of the same fixtures.
+on:
+  push:
+    branches: [ main, develop, 'release-validation/**' ]
+    paths:
+      - 'compute/**'
+      - '.github/workflows/compute.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'compute/**'
+      - '.github/workflows/compute.yml'
+  # Runs it whatever changed.
+  workflow_dispatch:
+
+# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  condition-expression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compute/condition-expression
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # rustup is on the runner; with no arguments it installs the version, components and target that
+    # rust-toolchain.toml names.
+    - name: Rust toolchain
+      run: rustup toolchain install
+
+    - name: Format
+      run: cargo fmt --check
+
+    - name: Lint
+      run: cargo clippy --locked --all-targets -- -D warnings
+
+    - name: Lint the WebAssembly build
+      run: cargo clippy --locked --lib --target wasm32-unknown-unknown -- -D warnings
+
+    - name: Test against the shared fixtures
+      run: cargo test --locked
+
+    - name: Build for WebAssembly
+      run: cargo build --locked --release --lib --target wasm32-unknown-unknown
+
+    - name: Use Node.js 22
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+
+    - name: Check the fixtures through the WebAssembly build
+      run: node wasm/check-fixtures.mjs

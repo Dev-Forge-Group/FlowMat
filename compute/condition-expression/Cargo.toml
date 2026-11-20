@@ -1,0 +1,21 @@
+[package]
+name = "flowmat-condition"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "FlowMat's condition language: the same results, errors and positions as the backend's Java ConditionExpression"
+publish = false
+
+[lib]
+# rlib for the tests and the benchmark, cdylib for the WebAssembly build.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# arbitrary_precision keeps a number's text, so a snapshot's 12345678901234567890.123 stays exact as it does in Java.
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

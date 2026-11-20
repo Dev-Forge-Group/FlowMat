@@ -118,6 +118,13 @@ tasks.named('test') {
 	// to the catalog or to a module's dependencies alone would leave the test task up to date.
 	inputs.file(file('../modules.yml')).withPropertyName('moduleCatalog')
 	inputs.files(file('settings.gradle'), fileTree('modules') { include '*/build.gradle' }).withPropertyName('moduleBuildFiles')
+	// The condition language's fixtures, shared with the Rust implementation in compute/condition-expression.
+	inputs.dir(file('../compute/condition-expression/fixtures')).withPropertyName('conditionFixtures')
+	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison.
+	['condition.fixtures.update', 'condition.bench'].each { name ->
+		def value = providers.systemProperty(name).orNull
+		if (value != null) systemProperty name, value
+	}
 	finalizedBy tasks.named('jacocoTestReport')
 }
 

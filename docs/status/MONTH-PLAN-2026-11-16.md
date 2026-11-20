@@ -85,7 +85,7 @@
 | 줄기 | 먼저 필요한 것 | 이번 달 범위 | 끝난 기준 |
 |---|---|---|---|
 | **archify 온전 이식** | 없음. 프런트만 바뀌므로 업무 검증과 나란히 한다. 대조표는 [archify 뷰어 기능 대조](../editor/archify-parity.md)이고, 11-14에 연결 고정 링크(`#relation=`)부터 시작했다 | 2주차: archify 뷰어의 기능 전체와 FlowMat을 대조한 표. 2~4주차: 빠진 것을 이식 | 대조표의 모든 줄이 "있음" 또는 "가져오지 않음(이유)"이고, 이식한 것마다 브라우저 테스트가 있다 |
-| **Rust 마이그레이션** | 3주차의 성능 기준선과 입출력 스냅숏. 계산이 DB 트랜잭션과 섞여 있어 그대로는 옮길 수 없다 | 3~4주차: JPA 없는 `modules/compute`로 순수 계산을 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 4주차: 계산 하나를 Rust로 구현해 같은 입력으로 비교 | Rust 구현이 스냅숏 입력 전부에서 Java와 같은 결과를 내고, 시간·메모리 비교가 기록돼 있다. 실제 전환은 다음 달 |
+| **Rust 마이그레이션** | 3주차의 성능 기준선과 입출력 스냅숏. 계산이 DB 트랜잭션과 섞여 있어 그대로는 옮길 수 없다 | 3~4주차: JPA 없는 `modules/compute`로 순수 계산을 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 4주차: 계산 하나를 Rust로 구현해 같은 입력으로 비교. **끝(11-20):** 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 Rust로 구현했다. `ConditionExpression`은 이미 JPA 없는 순수 클래스라 `modules/compute`로 떼지 않았다. 고정 입력 1,641개(결과 28,161개, 오류 441개)에서 Java와 답·오류 문구·위치가 같고, WebAssembly 빌드도 같다. Rust가 시간 0.6배, 할당 0.7배지만 마이크로초 단위다([성능 기준선 §5](../operations/performance-baseline.md)) | Rust 구현이 스냅숏 입력 전부에서 Java와 같은 결과를 내고, 시간·메모리 비교가 기록돼 있다. 실제 전환은 다음 달 |
 | **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | ~~3주차: 기능 목록과 FlowMat 대응표~~ **끝(11-14)**: [SETTINGTOOL-FEATURE-MAP.md](SETTINGTOOL-FEATURE-MAP.md). 겹치는 것은 업무가 아니라 도구가 일하는 방식이다. 첫 기능 "가져오기에서 줄을 골라 적용"은 품목과 재고 가져오기에 들어갔다(11-14, [item-import](../domain/item-import.md) I13, [stock-import](../domain/stock-import.md) S12). BOM 자재 가져오기가 남았고, 외부 적용 뒤 검증 보고와 도면 배치는 다음 달 후보다 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
 
 **Rust의 범위(2026-11-14, 코드를 보고 정함): 계산만 옮긴다. 백엔드 전체는 옮기지 않는다.**
@@ -96,6 +96,7 @@
 - 수량과 금액은 `BigDecimal`과 정해진 반올림을 쓴다. Rust 구현은 같은 결과를 내는지 같은 입력으로 비교해야 한다.
 - **(11-14 측정 뒤) BOM 전개와 MRP는 떼어 내지 않는다.** [성능 기준선](../operations/performance-baseline.md)에서 두 계산이 느린 까닭은 줄마다 하는 질의였고, 읽기를 묶자 629ms → 43ms, 1,599ms → 59ms가 됐다. 남은 계산은 Rust로 옮겨도 줄일 것이 없다. `modules/compute` 분리와 Rust 비교는 아래 조건식 언어처럼 DB를 읽지 않는 계산에만 한다.
 - **첫 대상은 조건식 언어**(`ConditionExpression`과 규칙 평가)다. 순수 계산이고 테스트가 있다. WASM으로도 빌드하면 편집기가 서버와 같은 코드로 입력 중에 조건을 검사할 수 있다(지금은 저장할 때 서버만 검사한다). 다음은 `FlowRunGraph`의 경로 계산, 그다음이 떼어 낸 BOM 전개다.
+- **(11-20 비교 뒤) 서버는 Java로 둔다.** 조건식 하나의 컴파일이 Java 2.5µs, Rust 1.6µs, 평가가 70ns와 45ns다. 아낄 수 있는 시간이 DB 왕복 하나보다 몇 자릿수 작다. Rust 구현의 쓸모는 WebAssembly로 편집기에서 서버와 같은 검사를 하는 것이고, 그 연결이 다음 달 후보다.
 
 네 줄기를 4주에 다 넣으면 빠듯하다. 밀릴 때 지키는 순서는 밑작업 → 두 여정과 릴리스 후보 → archify → compute와 Rust → optimized_setup이다.
 

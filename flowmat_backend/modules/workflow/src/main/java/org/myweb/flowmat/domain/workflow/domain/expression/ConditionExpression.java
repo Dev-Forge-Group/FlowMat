@@ -140,7 +140,8 @@ public final class ConditionExpression {
                 tokens.add(new Token("COMPARE", operator, start + 1));
                 continue;
             }
-            throw invalid(start + 1, "unexpected character '" + ch + "'");
+            // The whole character, also one that takes two chars: half of it is not something a person can read.
+            throw invalid(start + 1, "unexpected character '" + Character.toString(source.codePointAt(start)) + "'");
         }
         tokens.add(new Token("EOF", "", source.length() + 1));
         return tokens;
