@@ -1561,6 +1561,8 @@
 .process-index-item[data-kind="exclusive"] { --index-color: var(--ax-security-stroke); }
 
 /* archify's export menu shares the style menu's panel; its outputs come in sections. */
+/* The menu rises from the view controls; on a short canvas it scrolls rather than run up under the ribbon. */
+.export-menu { max-height: calc(100% - 5.15rem); overflow-y: auto; overscroll-behavior: contain; }
 .export-menu-section { display: grid; gap: 0.125rem; }
 .export-menu-section + .export-menu-section { margin-top: 0.2rem; padding-top: 0.25rem; border-top: 1px solid var(--ax-panel-border); }
 .export-menu-section-title {

@@ -4,7 +4,15 @@ import type { SvgTheme } from '../model/workflowSvg'
 
 /** What the menu can make: a PNG to save or to copy, an SVG in one of archify's three themes, or a card of a reading. */
 export type ExportChoice = { kind: 'png' } | { kind: 'png-clipboard' } | { kind: 'svg'; theme: SvgTheme }
-  | { kind: 'share-card'; variant: ShareCardVariant }
+  | { kind: 'share-card'; variant: ShareCardVariant } | { kind: 'webm' }
+
+/** Whether the motion clip can be made: there must be a line for a signal to run along, and a browser that records. */
+export type MotionAvailability = 'ready' | 'no-connections' | 'unsupported'
+
+const MOTION_UNLESS: Record<Exclude<MotionAvailability, 'ready'>, string> = {
+  'no-connections': 'Connect two processes first',
+  unsupported: 'This browser cannot record video',
+}
 
 interface Item { choice: ExportChoice; label: string; hint: string; unless?: string }
 
@@ -28,6 +36,10 @@ const SECTIONS: { title: string; items: Item[] }[] = [
         unless: 'Trace upstream or downstream of a process first' },
     ],
   },
+  {
+    title: 'Motion',
+    items: [{ choice: { kind: 'webm' }, label: 'WebM · 6 seconds', hint: 'A signal runs along each connection in flow order' }],
+  },
 ]
 
 /**
@@ -35,10 +47,12 @@ const SECTIONS: { title: string; items: Item[] }[] = [
  * without selection, reading, run or change marks. It opens from the view controls or with E. The arrow keys move between
  * the outputs; Esc or a click elsewhere closes it and gives the export button the focus back. A share card is offered
  * only while its reading is on the canvas: a route for the route card, an upstream or downstream trace for the reach card.
+ * The motion clip is offered when the workflow has a connection and the browser can record a canvas.
  */
-export function ExportMenu({ shareCard, onChoose, onClose }: {
+export function ExportMenu({ shareCard, motion = 'ready', onChoose, onClose }: {
   /** Which share card the current reading can make, if any. */
   shareCard: ShareCardVariant | null
+  motion?: MotionAvailability
   onChoose(choice: ExportChoice): void
   onClose(): void
 }) {
@@ -87,17 +101,20 @@ export function ExportMenu({ shareCard, onChoose, onClose }: {
         <div key={section.title} className="export-menu-section" role="group" aria-label={section.title}>
           <span className="export-menu-section-title" aria-hidden="true">{section.title}</span>
           {section.items.map((item) => {
-            const unavailable = item.choice.kind === 'share-card' && item.choice.variant !== shareCard
+            const unless = item.choice.kind === 'share-card'
+              ? (item.choice.variant !== shareCard ? item.unless : undefined)
+              : item.choice.kind === 'webm' && motion !== 'ready' ? MOTION_UNLESS[motion] : undefined
+            const unavailable = unless !== undefined
             return (
               <button key={item.label} type="button" role="menuitem" className="preset-option export-option"
-                disabled={unavailable} title={unavailable ? item.unless : undefined}
+                disabled={unavailable} title={unless}
                 onClick={() => {
                   onClose()
                   backToTrigger()
                   onChoose(item.choice)
                 }}>
                 <span className="preset-option-copy">
-                  <strong>{item.label}</strong><small>{unavailable ? item.unless : item.hint}</small>
+                  <strong>{item.label}</strong><small>{unless ?? item.hint}</small>
                 </span>
               </button>
             )

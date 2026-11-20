@@ -36,9 +36,10 @@ import { DiagramGuide } from './DiagramGuide'
 import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
-import { ExportMenu, type ExportChoice } from './ExportMenu'
+import { ExportMenu, type ExportChoice, type MotionAvailability } from './ExportMenu'
 import { ProcessIndex } from './ProcessIndex'
-import type { ExportOutcome, PngExport, ShareCardExport, SvgExport } from './CanvasViewport'
+import type { ExportOutcome, MotionExport, PngExport, ShareCardExport, SvgExport } from './CanvasViewport'
+import { motionMimeType } from '../model/workflowMotion'
 import { shareCardText } from '../model/shareCard'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
@@ -985,6 +986,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const exportPngRef = useRef<PngExport>(async () => ({ kind: 'empty' }))
   const exportSvgRef = useRef<SvgExport>(async () => ({ kind: 'empty' }))
   const exportShareCardRef = useRef<ShareCardExport>(async () => ({ kind: 'empty' }))
+  const exportMotionRef = useRef<MotionExport>(async () => ({ kind: 'empty' }))
   // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
   const revealRef = useRef<(processIds: string[]) => void>(() => {})
   const handleRevealReady = useCallback((fn: (processIds: string[]) => void) => { revealRef.current = fn }, [])
@@ -1021,8 +1023,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const [exportOpen, setExportOpen] = useState(false)
   const closeExport = useCallback(() => setExportOpen(false), [])
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+  // A motion clip takes its six seconds to record; its note stays until the clip is saved.
+  const recordingRef = useRef(false)
   useEffect(() => {
-    if (!exportStatus) return
+    if (!exportStatus || recordingRef.current) return
     const timer = window.setTimeout(() => setExportStatus(null), 4000)
     return () => window.clearTimeout(timer)
   }, [exportStatus])
@@ -1033,9 +1037,30 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   )
   const shareCardRef = useRef({ text: shareCard, view: reading.view })
   shareCardRef.current = { text: shareCard, view: reading.view }
+  const motionAvailability: MotionAvailability = useMemo(
+    () => (canvas.edges.length === 0 ? 'no-connections' : motionMimeType() ? 'ready' : 'unsupported'),
+    [canvas.edges.length],
+  )
   // Called inside the press that chose it, so the clipboard accepts the picture.
   const runExport = useCallback((choice: ExportChoice) => {
     const name = canvas.workflow.workflowName
+    if (choice.kind === 'webm') {
+      if (recordingRef.current) {
+        setExportStatus('Already recording a motion clip')
+        return
+      }
+      recordingRef.current = true
+      setExportStatus('Recording 6 seconds of motion…')
+      void exportMotionRef.current(name, document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+        .then((result: ExportOutcome) => {
+          recordingRef.current = false
+          setExportStatus(result.kind === 'done' ? 'Downloaded WebM'
+            : result.kind === 'empty' ? 'Nothing to record: connect two processes first'
+              : result.kind === 'unsupported' ? 'This browser cannot record video'
+                : `Export failed: ${result.message}`)
+        })
+      return
+    }
     if (choice.kind === 'share-card') {
       const { text, view } = shareCardRef.current
       if (!text || text.variant !== choice.variant || !view?.highlight) {
@@ -1881,6 +1906,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onExportReady={(fn) => { exportPngRef.current = fn }}
               onSvgExportReady={(fn) => { exportSvgRef.current = fn }}
               onShareCardExportReady={(fn) => { exportShareCardRef.current = fn }}
+              onMotionExportReady={(fn) => { exportMotionRef.current = fn }}
               onDeleteReady={(api) => { deleteApiRef.current = api }}
               onPresence={handlePresence}
               onGraphChange={handleGraphChange}
@@ -1982,7 +2008,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             motion={{ still: motion.still, reduced: motion.reduced, onToggle: motion.toggle }}
             presenting={presenting} onPresent={togglePresenting} />
           {styleOpen && <StylePresetMenu preset={preset} onChoose={setPreset} onClose={closeStyle} />}
-          {exportOpen && <ExportMenu shareCard={shareCard?.variant ?? null} onChoose={runExport} onClose={closeExport} />}
+          {exportOpen && <ExportMenu shareCard={shareCard?.variant ?? null} motion={motionAvailability} onChoose={runExport}
+            onClose={closeExport} />}
           <span className="export-status" role="status" aria-live="polite">{exportStatus}</span>
           {panel === 'runs' && (
             <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}

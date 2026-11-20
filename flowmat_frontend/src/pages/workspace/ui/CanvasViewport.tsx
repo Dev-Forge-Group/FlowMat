@@ -51,6 +51,8 @@ import { CanvasNode } from './CanvasNode'
 import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
 import { workflowSvg, workflowSvgParts, type SvgConnection, type SvgProcess, type SvgTheme } from '../model/workflowSvg'
 import { SHARE_CARD, shareCardSvg, type ShareCardText } from '../model/shareCard'
+import { motionMimeType, motionScene, type MotionEdgeInput } from '../model/workflowMotion'
+import { recordMotion } from './recordMotion'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
 import { reuseUnchangedNodes } from '../model/reuseUnchangedNodes'
@@ -311,14 +313,17 @@ export interface ShareCardRequest {
   theme: 'light' | 'dark'
 }
 export type ShareCardExport = (filename: string, card: ShareCardRequest) => Promise<ExportOutcome>
+/** archify's six-second motion WebM of the workflow (workflowMotion.ts). */
+export type MotionExport = (filename: string, theme: 'light' | 'dark') => Promise<ExportOutcome>
 
 /** The card twice as large as it is drawn, so it stays sharp where it is pasted. */
 const SHARE_CARD_SCALE = 2
 
-function ExportController({ onReady, onSvgReady, onShareCardReady }: {
+function ExportController({ onReady, onSvgReady, onShareCardReady, onMotionReady }: {
   onReady?: (fn: PngExport) => void
   onSvgReady?: (fn: SvgExport) => void
   onShareCardReady?: (fn: ShareCardExport) => void
+  onMotionReady?: (fn: MotionExport) => void
 }) {
   const { getNodes, getEdges } = useReactFlow()
   const getNodesRef = useRef(getNodes)
@@ -405,6 +410,44 @@ function ExportController({ onReady, onSvgReady, onShareCardReady }: {
       }
     })
   }, [onShareCardReady, drawn])
+
+  // The motion clip: the still vector picture with a signal running along each line in flow order, recorded as a WebM.
+  useEffect(() => {
+    onMotionReady?.(async (filename: string, theme: 'light' | 'dark') => {
+      const mimeType = motionMimeType()
+      if (!mimeType) return { kind: 'unsupported' }
+      const workflow = drawn()
+      if (!workflow) return { kind: 'empty' }
+      // Each line sampled along the path the canvas drew, every dozen canvas pixels or so.
+      const lines = (getEdgesRef.current() as unknown as RfEdge[]).flatMap((edge): MotionEdgeInput[] => {
+        const path = document.querySelector<SVGPathElement>(
+          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
+        const length = path && typeof path.getTotalLength === 'function' ? path.getTotalLength() : 0
+        if (!path || !(length > 0)) return []
+        const count = Math.max(12, Math.min(72, Math.ceil(length / 12)))
+        const points = Array.from({ length: count + 1 }, (_, index) => {
+          const point = path.getPointAtLength((length * index) / count)
+          return { x: point.x, y: point.y }
+        })
+        return [{ id: edge.id, source: edge.source, target: edge.target, points }]
+      })
+      const scene = motionScene(workflow.processes, lines)
+      if (scene.edges.length === 0) return { kind: 'empty' }
+      const view = workflowSvgParts(workflow.processes, workflow.connections, theme)
+      try {
+        const blob = await recordMotion(workflowSvg(filename, workflow.processes, workflow.connections, theme), view, scene, mimeType)
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${filename}.webm`
+        a.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 0)
+        return { kind: 'done' }
+      } catch (error) {
+        return { kind: 'failed', message: error instanceof Error ? error.message : 'The clip could not be recorded.' }
+      }
+    })
+  }, [onMotionReady, drawn])
 
   useEffect(() => {
     onReady?.(async (filename: string, target: PngTarget = 'download') => {
@@ -592,6 +635,7 @@ interface Props {
   /** A way to download the workflow as a vector picture (workflowSvg.ts). */
   onSvgExportReady?(fn: SvgExport): void
   onShareCardExportReady?(fn: ShareCardExport): void
+  onMotionExportReady?(fn: MotionExport): void
   onEdgeReconnect?(oldEdgeId: string, newConnection: ConnectCompletePayload): void
   onPresence?(msg: PresenceMessage): void
   onGraphChange?(msg: GraphChangeMessage): void
@@ -741,6 +785,7 @@ export function CanvasViewport({
   onExportReady,
   onSvgExportReady,
   onShareCardExportReady,
+  onMotionExportReady,
   onEdgeReconnect,
   onPresence,
   onGraphChange,
@@ -1435,7 +1480,8 @@ export function CanvasViewport({
         <InternalsUpdater nodeIds={nodesToUpdateInternals} />
         <HandleBoundsRecovery nodes={readingNodes} />
         <ViewportPersister storageKey={storageKey} />
-        <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} onShareCardReady={onShareCardExportReady} />
+        <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} onShareCardReady={onShareCardExportReady}
+          onMotionReady={onMotionExportReady} />
         <ZoomReporter onZoomChange={onZoomChange} />
         {/* Blueprint draws a drafting grid and Editorial a clean page; the others keep the dots. */}
         {preset === 'blueprint'
