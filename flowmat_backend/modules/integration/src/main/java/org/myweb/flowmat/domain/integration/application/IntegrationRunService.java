@@ -66,13 +66,14 @@ public class IntegrationRunService {
     private final ConnectorMappingQuery mappings;
     private final ItemImportCommand items;
     private final StockImportCommand stock;
+    private final StockPush push;
     private final IdGenerator ids;
     private final ObjectMapper json;
     private final TransactionTemplate transaction;
 
     public IntegrationRunService(IntegrationJobService jobService, IntegrationJobRepository jobs, IntegrationRunRepository runs,
                                  ProjectAccess access, ProjectCalendarQuery calendar, ConnectorProfileQuery profiles, ConnectorHttpGateway gateway,
-                                 ConnectorMappingQuery mappings, ItemImportCommand items, StockImportCommand stock, IdGenerator ids,
+                                 ConnectorMappingQuery mappings, ItemImportCommand items, StockImportCommand stock, StockPush push, IdGenerator ids,
                                  ObjectMapper json, PlatformTransactionManager transactions) {
         this.jobService = jobService;
         this.jobs = jobs;
@@ -84,6 +85,7 @@ public class IntegrationRunService {
         this.mappings = mappings;
         this.items = items;
         this.stock = stock;
+        this.push = push;
         this.ids = ids;
         this.json = json;
         this.transaction = new TransactionTemplate(transactions);
@@ -94,7 +96,7 @@ public class IntegrationRunService {
     public IntegrationRunResponse preview(String projectId, String jobId) {
         access.requireProjectOwnerAccess(projectId);
         IntegrationJob job = jobService.require(projectId, jobId);
-        Result result = pull(job, false);
+        Result result = run(job, false);
         return new IntegrationRunResponse(null, jobId, "preview", null, result.status(), access.requireCurrentUserId(), null, null,
             result.total(), result.applied(), result.leftOut(), result.message(), result.items());
     }
@@ -211,7 +213,7 @@ public class IntegrationRunService {
         try {
             IntegrationJob job = jobService.require(projectId, taken.getJobId());
             if (scheduled) requireRunAs(projectId, taken.getRunBy());
-            result = pull(job, true);
+            result = run(job, true);
         } catch (RuntimeException exception) {
             result = Result.failed(exception instanceof BusinessException business ? business.getMessage()
                 : "The run stopped on an unexpected error.");
@@ -254,6 +256,11 @@ public class IntegrationRunService {
                     + outcome.message(), 300));
             }
         });
+    }
+
+    /** A push, or a pull, as the job's kind says. */
+    private Result run(IntegrationJob job, boolean apply) {
+        return "push_stock".equals(job.getKind()) ? push.run(job, readMapping(job), apply) : pull(job, apply);
     }
 
     /**

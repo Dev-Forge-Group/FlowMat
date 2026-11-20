@@ -21,6 +21,19 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
 
     List<Inventory> findAllByLotIdAndDeletedYn(String lotId, String deletedYn);
 
+    interface ItemOnHand {
+        String getItemId();
+        BigDecimal getQuantity();
+    }
+
+    /** What the project's stock records hold per item, every place, lot and status together. */
+    @Query("""
+        select i.itemId as itemId, coalesce(sum(i.quantity), 0) as quantity
+          from Inventory i where i.projectId = :projectId and i.deletedYn = 'N'
+         group by i.itemId
+        """)
+    List<ItemOnHand> onHandByItem(@Param("projectId") String projectId);
+
     interface LotStockTotals {
         BigDecimal getQuantityOnHand();
         BigDecimal getQuantityReserved();
