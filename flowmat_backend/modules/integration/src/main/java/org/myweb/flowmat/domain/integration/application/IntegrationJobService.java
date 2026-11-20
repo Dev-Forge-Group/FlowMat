@@ -3,6 +3,9 @@ package org.myweb.flowmat.domain.integration.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -12,6 +15,7 @@ import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorMapping
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorProfileOperation;
 import org.myweb.flowmat.domain.connector.application.publicapi.ConnectorProfileQuery;
 import org.myweb.flowmat.domain.integration.api.dto.request.IntegrationJobRequest;
+import org.myweb.flowmat.domain.integration.api.dto.request.IntegrationScheduleRequest;
 import org.myweb.flowmat.domain.integration.api.dto.response.IntegrationJobResponse;
 import org.myweb.flowmat.domain.integration.api.dto.response.IntegrationRunResponse;
 import org.myweb.flowmat.domain.integration.domain.entity.IntegrationJob;
@@ -19,6 +23,7 @@ import org.myweb.flowmat.domain.integration.repository.IntegrationJobRepository;
 import org.myweb.flowmat.domain.integration.repository.IntegrationRunRepository;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockImportCommand;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
+import org.myweb.flowmat.domain.project.application.publicapi.ProjectCalendarQuery;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 import org.myweb.flowmat.global.id.IdGenerator;
@@ -35,12 +40,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class IntegrationJobService {
 
-    static final Set<String> KINDS = Set.of("pull_items", "pull_stock");
+    static final Set<String> KINDS = Set.of("pull_items", "pull_stock", "push_stock");
+    /**
+     * Kinds that may run on a schedule. A stock pull receives what it reads, so reading the same list again would
+     * receive it again; it runs by hand until the import can tell a receipt it already took (ADR-038 decision 6). A
+     * push sends quantities as they are, not changes, so sending again does no harm.
+     */
+    static final Set<String> SCHEDULED_KINDS = Set.of("pull_items", "push_stock");
+    /** What a push reads from the target for each of its records. */
+    static final List<String> TARGET_FIELDS = List.of("itemCode", "quantity");
+    private static final Set<String> SEND_METHODS = Set.of("POST", "PUT", "PATCH");
     private static final String NOT_DELETED = "N";
 
     private final IntegrationJobRepository jobs;
     private final IntegrationRunRepository runs;
     private final ProjectAccess access;
+    private final ProjectCalendarQuery calendar;
     private final ConnectorProfileQuery profiles;
     private final ConnectorMappingQuery mappings;
     private final ItemImportCommand items;
@@ -96,6 +111,46 @@ public class IntegrationJobService {
         job.setUpdatedBy(access.requireCurrentUserId());
     }
 
+    /**
+     * Switches the schedule on, as the current user, or off. Switching on starts the count of failed runs again and
+     * clears a pause; the first run is the schedule's next time from now.
+     */
+    public IntegrationJobResponse schedule(String projectId, String jobId, IntegrationScheduleRequest request) {
+        access.requireProjectOwnerAccess(projectId);
+        IntegrationJob job = jobs.lock(jobId, projectId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (request.version() == null) throw bad("Send the job's version with the change.");
+        if (request.version() != job.getVersion()) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Someone changed this job since it was read. Reload it and make the change again.");
+        }
+        if (request.enabled() == null) throw bad("Say whether the schedule is on.");
+        String user = access.requireCurrentUserId();
+        String cron = request.cron() == null || request.cron().isBlank() ? null : request.cron().trim().replaceAll("\\s+", " ");
+        if (request.enabled()) {
+            if (!SCHEDULED_KINDS.contains(job.getKind())) {
+                throw bad("A stock pull receives what it reads, so it runs by hand: reading the same list on a schedule would receive it again.");
+            }
+            if (cron == null) throw bad("Write the schedule to switch it on.");
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+            ZoneId zone = calendar.zone(projectId);
+            IntegrationSchedule schedule = IntegrationSchedule.parse(cron);
+            schedule.requireUsable(zone, now);
+            job.setScheduleCron(cron);
+            job.setScheduleEnabled(true);
+            job.setNextRunAt(schedule.next(zone, now));
+            job.setRunAs(user);
+        } else {
+            if (cron != null) IntegrationSchedule.parse(cron);
+            if (cron != null) job.setScheduleCron(cron);
+            job.setScheduleEnabled(false);
+            job.setNextRunAt(null);
+        }
+        job.setFailuresInRow(0);
+        job.setPausedReason(null);
+        job.setVersion(job.getVersion() + 1);
+        job.setUpdatedBy(user);
+        return toResponse(job);
+    }
+
     IntegrationJob require(String projectId, String jobId) {
         return jobs.findByJobIdAndProjectIdAndDeletedYn(jobId, projectId, NOT_DELETED)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
@@ -106,35 +161,61 @@ public class IntegrationJobService {
         String name = request.name() == null ? "" : request.name().trim();
         if (name.isEmpty() || name.length() > 100) throw bad("Name the job in 1 to 100 characters.");
         String kind = request.kind() == null ? "" : request.kind().trim();
-        if (!KINDS.contains(kind)) throw bad("A job's kind is pull_items or pull_stock.");
+        if (!KINDS.contains(kind)) throw bad("A job's kind is pull_items, pull_stock or push_stock.");
+        if (job.isScheduleEnabled() && !SCHEDULED_KINDS.contains(kind)) {
+            throw bad("Switch the schedule off before making this job a " + kind + ".");
+        }
         if (request.profileVersionId() == null || request.profileVersionId().isBlank()
             || request.operationId() == null || request.operationId().isBlank()) {
             throw bad("Choose the connector profile version and the operation that reads.");
         }
-        // The operation exists in that version, the profile is on and its target is allowed.
+        boolean push = "push_stock".equals(kind);
+        // The operations exist in that version, the profile is on and its target is allowed.
         ConnectorProfileOperation operation = profiles.requireOperation(job.getProjectId(), request.profileVersionId().trim(),
             request.operationId().trim());
-        if (!"GET".equals(operation.method())) throw bad("A pull job reads with a GET operation; " + operation.operationId() + " is " + operation.method() + ".");
-        JsonNode mapping = requireMapping(request.mapping(), "pull_items".equals(kind) ? items.fields() : stock.fields());
+        String verifyOperationId = null;
+        if (push) {
+            if (!SEND_METHODS.contains(operation.method())) {
+                throw bad("A push sends with a POST, PUT or PATCH operation; " + operation.operationId() + " is " + operation.method() + ".");
+            }
+            if (request.verifyOperationId() == null || request.verifyOperationId().isBlank()) {
+                throw bad("A push reads the target before and after sending; choose that GET operation as verifyOperationId.");
+            }
+            ConnectorProfileOperation verify = profiles.requireOperation(job.getProjectId(), operation.profileVersionId(),
+                request.verifyOperationId().trim());
+            if (!"GET".equals(verify.method())) {
+                throw bad("A push reads the target with a GET operation; " + verify.operationId() + " is " + verify.method() + ".");
+            }
+            verifyOperationId = verify.operationId();
+        } else if (!"GET".equals(operation.method())) {
+            throw bad("A pull job reads with a GET operation; " + operation.operationId() + " is " + operation.method() + ".");
+        }
+        JsonNode mapping = push ? requireMapping(request.mapping(), TARGET_FIELDS, true)
+            : requireMapping(request.mapping(), "pull_items".equals(kind) ? items.fields() : stock.fields(), false);
         String note = request.note() == null || request.note().isBlank() ? null : request.note().trim();
         if (note != null && note.length() > 200) throw bad("A note takes at most 200 characters.");
         job.setName(name);
         job.setKind(kind);
         job.setProfileVersionId(operation.profileVersionId());
         job.setOperationId(operation.operationId());
-        job.setVerifyOperationId(null);
+        job.setVerifyOperationId(verifyOperationId);
         job.setMappingJson(write(mapping));
         job.setNote("pull_stock".equals(kind) ? note : null);
     }
 
-    /** {"rowsAt": pointer, "row": {"object": {field: expression}}} with only the import's fields. */
-    private JsonNode requireMapping(JsonNode mapping, List<String> fields) {
+    /**
+     * {"rowsAt": pointer, "row": {"object": {field: expression}}} with only the import's fields. A push's row reads the
+     * target's itemCode and quantity, and its optional request maps FlowMat's document to the body sent.
+     */
+    private JsonNode requireMapping(JsonNode mapping, List<String> fields, boolean push) {
         if (mapping == null || !mapping.isObject() || !mapping.path("rowsAt").isTextual() || !mapping.has("row")) {
             throw bad("The mapping needs rowsAt, a JSON pointer to the list of records, and row, how one record becomes a row.");
         }
         Set<String> keys = new HashSet<>();
         mapping.fieldNames().forEachRemaining(keys::add);
-        if (!Set.of("rowsAt", "row").containsAll(keys)) throw bad("The mapping takes only rowsAt and row.");
+        if (push ? !Set.of("rowsAt", "row", "request").containsAll(keys) : !Set.of("rowsAt", "row").containsAll(keys)) {
+            throw bad(push ? "A push's mapping takes only rowsAt, row and request." : "The mapping takes only rowsAt and row.");
+        }
         String rowsAt = mapping.get("rowsAt").asText();
         if (!rowsAt.isEmpty() && !rowsAt.startsWith("/")) throw bad("rowsAt is a JSON pointer, such as /items, or empty for the whole response.");
         JsonNode row = mapping.get("row");
@@ -142,6 +223,12 @@ public class IntegrationJobService {
         row.get("object").fieldNames().forEachRemaining(field -> {
             if (!fields.contains(field)) throw bad("The import has no field " + field + "; it takes " + String.join(", ", fields) + ".");
         });
+        if (push) {
+            for (String field : fields) {
+                if (!row.get("object").has(field)) throw bad("A push reads " + field + " from each of the target's records; map it in row.");
+            }
+            if (mapping.has("request")) mappings.validate(mapping.get("request"));
+        }
         mappings.validate(row);
         return mapping;
     }
@@ -151,7 +238,7 @@ public class IntegrationJobService {
             .map(run -> IntegrationRunService.summary(run)).orElse(null);
         return new IntegrationJobResponse(job.getJobId(), job.getProjectId(), job.getName(), job.getKind(), job.getProfileVersionId(),
             job.getOperationId(), job.getVerifyOperationId(), read(job.getMappingJson()), job.getNote(), job.getScheduleCron(),
-            job.isScheduleEnabled(), job.getNextRunAt(), job.getRunAs(), job.getPausedReason(), job.getVersion(), last);
+            job.isScheduleEnabled(), job.getNextRunAt(), job.getRunAs(), job.getPausedReason(), job.getFailuresInRow(), job.getVersion(), last);
     }
 
     private JsonNode read(String text) {

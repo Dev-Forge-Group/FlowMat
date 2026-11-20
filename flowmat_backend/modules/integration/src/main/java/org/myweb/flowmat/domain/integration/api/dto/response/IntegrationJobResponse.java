@@ -7,5 +7,6 @@ import java.time.OffsetDateTime;
 public record IntegrationJobResponse(String jobId, String projectId, String name, String kind, String profileVersionId,
                                      String operationId, String verifyOperationId, JsonNode mapping, String note,
                                      String scheduleCron, boolean scheduleEnabled, OffsetDateTime nextRunAt, String runAs,
-                                     String pausedReason, int version, IntegrationRunResponse lastRun) {
+                                     String pausedReason, int failuresInRow, int version,
+                                     IntegrationRunResponse lastRun) {
 }

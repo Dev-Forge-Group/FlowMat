@@ -1,6 +1,7 @@
 package org.myweb.flowmat.domain.inventory.application.publicapi;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -14,4 +15,10 @@ public interface StockQuery {
 
     /** What a stock record that is not deleted holds less what is reserved; empty when there is no such record. */
     Optional<BigDecimal> availableQuantity(String inventoryId);
+
+    /**
+     * What the project holds of each item it has stock records for, every place, lot and status together (reserved
+     * and quarantined stock included), by item id. Items without a stock record are absent.
+     */
+    Map<String, BigDecimal> quantityOnHandByItem(String projectId);
 }

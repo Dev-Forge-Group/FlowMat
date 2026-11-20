@@ -1,6 +1,8 @@
 package org.myweb.flowmat.domain.inventory.application;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,15 @@ public class StockQueryImpl implements StockQuery {
     public Optional<BigDecimal> availableQuantity(String inventoryId) {
         return inventoryRepository.findByInventoryIdAndDeletedYn(inventoryId, NOT_DELETED)
             .map(stock -> zeroIfNull(stock.getQuantity()).subtract(zeroIfNull(stock.getReservedQuantity())));
+    }
+
+    @Override
+    public Map<String, BigDecimal> quantityOnHandByItem(String projectId) {
+        Map<String, BigDecimal> held = new LinkedHashMap<>();
+        for (InventoryRepository.ItemOnHand row : inventoryRepository.onHandByItem(projectId)) {
+            if (row.getItemId() != null) held.put(row.getItemId(), zeroIfNull(row.getQuantity()));
+        }
+        return held;
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {
