@@ -38,12 +38,43 @@ function darkStyle() {
     + ` .wf-label { fill: ${dark.label}; stroke: ${dark.background} } }</style>`
 }
 
+/**
+ * What a picture shows strongly (archify's route and reach share cards): these processes and connections keep their full
+ * strength, the connections in the accent colour, and everything else recedes.
+ */
+export interface SvgEmphasis { nodeIds: ReadonlySet<string>; edgeIds: ReadonlySet<string>; accent: string }
+
+/** The picture's own area and everything drawn in it, so it can stand alone or sit inside another picture. */
+export interface WorkflowSvgParts { left: number; top: number; width: number; height: number; body: string }
+
+const RECEDED = ' opacity="0.28"'
+const LINE = 1.5
+const STRONG_LINE = 2.5
+
 export function workflowSvg(
   title: string,
   processes: readonly SvgProcess[],
   connections: readonly SvgConnection[],
   theme: SvgTheme = 'light',
 ): string {
+  const parts = workflowSvgParts(processes, connections, theme)
+  const lines = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${parts.left} ${parts.top} ${parts.width} ${parts.height}"`
+      + ` width="${parts.width}" height="${parts.height}"`
+      + ` font-family="system-ui, 'Segoe UI', Roboto, sans-serif" role="img">`,
+    `<title>${escape(title)}</title>`,
+    parts.body,
+    '</svg>',
+  ]
+  return `${lines.join('\n')}\n`
+}
+
+export function workflowSvgParts(
+  processes: readonly SvgProcess[],
+  connections: readonly SvgConnection[],
+  theme: SvgTheme = 'light',
+  emphasis?: SvgEmphasis,
+): WorkflowSvgParts {
   const colour = PALETTES[theme === 'dark' ? 'dark' : 'light']
   const left = Math.min(...processes.map((process) => process.x)) - PADDING
   const top = Math.min(...processes.map((process) => process.y)) - PADDING
@@ -51,26 +82,38 @@ export function workflowSvg(
   const bottom = Math.max(...processes.map((process) => process.y + process.height)) + PADDING
   const width = round(right - left)
   const height = round(bottom - top)
-  const colours = [...new Set(connections.map((connection) => connection.stroke))]
-  const markerOf = (colour: string) => `arrow-${colours.indexOf(colour)}`
+  const strong = (connection: SvgConnection) => Boolean(emphasis?.edgeIds.has(connection.id))
+  const strokeOf = (connection: SvgConnection) => (strong(connection) ? emphasis!.accent : connection.stroke)
+  // An arrowhead is sized in line widths, so a strong line has its own, drawn smaller to come out the same size.
+  const arrowKey = (connection: SvgConnection) => `${strong(connection) ? 'strong' : 'plain'}|${strokeOf(connection)}`
+  const arrows = [...new Set(connections.map(arrowKey))]
+  const markerOf = (connection: SvgConnection) => `arrow-${arrows.indexOf(arrowKey(connection))}`
+  const arrow = (key: string) => {
+    const colour = key.slice(key.indexOf('|') + 1)
+    const scale = key.startsWith('strong|') ? LINE / STRONG_LINE : 1
+    const size = (value: number) => round(value * scale)
+    return `<marker id="arrow-${arrows.indexOf(key)}" markerWidth="${size(16)}" markerHeight="${size(16)}" refX="${size(8)}"`
+      + ` refY="${size(4)}" orient="auto"><path d="M0,0 L0,${size(8)} L${size(8)},${size(4)} z" fill="${escape(colour)}"/></marker>`
+  }
+  const recededLine = (connection: SvgConnection) => (emphasis && !strong(connection) ? RECEDED : '')
+  const recededBox = (process: SvgProcess) => (emphasis && !emphasis.nodeIds.has(process.id) ? RECEDED : '')
 
   const lines = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${round(left)} ${round(top)} ${width} ${height}" width="${width}" height="${height}"`
-      + ` font-family="system-ui, 'Segoe UI', Roboto, sans-serif" role="img">`,
-    `<title>${escape(title)}</title>`,
     ...(theme === 'auto' ? [darkStyle()] : []),
     '<defs>',
-    ...colours.map((colour) => `<marker id="${markerOf(colour)}" markerWidth="16" markerHeight="16" refX="8" refY="4" orient="auto">`
-      + `<path d="M0,0 L0,8 L8,4 z" fill="${escape(colour)}"/></marker>`),
+    ...arrows.map(arrow),
     '</defs>',
     `<rect class="wf-bg" x="${round(left)}" y="${round(top)}" width="${width}" height="${height}" fill="${colour.background}"/>`,
-    ...connections.map((connection) => `<path d="${escape(connection.d)}" fill="none" stroke="${escape(connection.stroke)}"`
-      + ` stroke-width="1.5"${connection.dash ? ` stroke-dasharray="${escape(connection.dash)}"` : ''}`
-      + ` marker-end="url(#${markerOf(connection.stroke)})"/>`),
+    ...connections.map((connection) => `<path d="${escape(connection.d)}" fill="none" stroke="${escape(strokeOf(connection))}"`
+      + ` stroke-width="${strong(connection) ? STRONG_LINE : LINE}"${connection.dash ? ` stroke-dasharray="${escape(connection.dash)}"` : ''}`
+      + ` marker-end="url(#${markerOf(connection)})"${recededLine(connection)}/>`),
     ...processes.map((process) => [
-      `<g>`,
+      `<g${recededBox(process)}>`,
       `<rect class="wf-box" x="${round(process.x)}" y="${round(process.y)}" width="${round(process.width)}"`
-        + ` height="${round(process.height)}" rx="12" fill="${colour.box}" stroke="${colour.border}" stroke-width="1.5"/>`,
+        + ` height="${round(process.height)}" rx="12" fill="${colour.box}"`
+        + (emphasis?.nodeIds.has(process.id)
+          ? ` stroke="${escape(emphasis.accent)}" stroke-width="2.5"/>`
+          : ` stroke="${colour.border}" stroke-width="1.5"/>`),
       `<text class="wf-name" x="${round(process.x + 14)}" y="${round(process.y + 26)}" font-size="14" font-weight="600"`
         + ` fill="${colour.name}">${escape(process.name)}</text>`,
       `<text class="wf-kind" x="${round(process.x + 14)}" y="${round(process.y + 46)}" font-size="11" fill="${colour.kind}">`
@@ -79,21 +122,20 @@ export function workflowSvg(
     ].join('')),
     ...connections.flatMap((connection) => (connection.ends ?? []).map((end) =>
       `<circle cx="${round(end.x)}" cy="${round(end.y)}" r="4" class="wf-handle" fill="${colour.box}" stroke="${colour.handle}"`
-        + ` stroke-width="1.5"/>`)),
+        + ` stroke-width="1.5"${recededLine(connection)}/>`)),
     ...connections.filter((connection) => connection.label && connection.labelAt).map((connection) =>
       `<text class="wf-label" x="${round(connection.labelAt!.x)}" y="${round(connection.labelAt!.y)}" font-size="11"`
         + ` fill="${colour.label}" text-anchor="middle" dominant-baseline="middle" stroke="${colour.background}" stroke-width="4"`
-        + ` paint-order="stroke">`
+        + ` paint-order="stroke"${recededLine(connection)}>`
         + `${escape(connection.label!)}</text>`),
-    '</svg>',
   ]
-  return `${lines.join('\n')}\n`
+  return { left: round(left), top: round(top), width, height, body: lines.join('\n') }
 }
 
 function round(value: number): number {
   return Math.round(value * 10) / 10
 }
 
-function escape(value: string): string {
+export function escape(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }

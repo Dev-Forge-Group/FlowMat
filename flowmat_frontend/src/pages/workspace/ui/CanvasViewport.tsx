@@ -49,7 +49,8 @@ import type { ChangeMark } from '../model/revisionChanges'
 import type { LayoutLine, LayoutSnapshot } from '../model/layoutChecks'
 import { CanvasNode } from './CanvasNode'
 import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
-import { workflowSvg, type SvgTheme } from '../model/workflowSvg'
+import { workflowSvg, workflowSvgParts, type SvgConnection, type SvgProcess, type SvgTheme } from '../model/workflowSvg'
+import { SHARE_CARD, shareCardSvg, type ShareCardText } from '../model/shareCard'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
 import { reuseUnchangedNodes } from '../model/reuseUnchangedNodes'
@@ -302,10 +303,22 @@ export type ExportOutcome = { kind: 'done' } | { kind: 'empty' } | { kind: 'unsu
 export type PngTarget = 'download' | 'clipboard'
 export type PngExport = (filename: string, target?: PngTarget) => Promise<ExportOutcome>
 export type SvgExport = (filename: string, theme?: SvgTheme) => Promise<ExportOutcome>
+/** A share card of a reading (archify's route and reach share cards): what it says and what it draws strongly. */
+export interface ShareCardRequest {
+  text: ShareCardText
+  nodeIds: ReadonlySet<string>
+  edgeIds: ReadonlySet<string>
+  theme: 'light' | 'dark'
+}
+export type ShareCardExport = (filename: string, card: ShareCardRequest) => Promise<ExportOutcome>
 
-function ExportController({ onReady, onSvgReady }: {
+/** The card twice as large as it is drawn, so it stays sharp where it is pasted. */
+const SHARE_CARD_SCALE = 2
+
+function ExportController({ onReady, onSvgReady, onShareCardReady }: {
   onReady?: (fn: PngExport) => void
   onSvgReady?: (fn: SvgExport) => void
+  onShareCardReady?: (fn: ShareCardExport) => void
 }) {
   const { getNodes, getEdges } = useReactFlow()
   const getNodesRef = useRef(getNodes)
@@ -313,11 +326,11 @@ function ExportController({ onReady, onSvgReady }: {
   const getEdgesRef = useRef(getEdges)
   getEdgesRef.current = getEdges
 
-  // The vector picture: the boxes React Flow measured and the paths it drew, each line in its kind's own look.
-  useEffect(() => {
-    onSvgReady?.(async (filename: string, theme: SvgTheme = 'light') => {
+  // The workflow as the vector pictures draw it: the boxes React Flow measured and the paths it drew, each line in its
+  // kind's own look. Null when there is no process to draw.
+  const drawn = useCallback((): { processes: SvgProcess[]; connections: SvgConnection[] } | null => {
       const nodes = (getNodesRef.current() as unknown as RfNode[]).filter((node) => node.type === 'flowmatNode')
-      if (nodes.length === 0) return { kind: 'empty' }
+      if (nodes.length === 0) return null
       const measured = (node: RfNode) => (node as unknown as { measured?: { width?: number; height?: number } }).measured
       const processes = nodes.map((node) => ({ id: node.id, x: node.position.x, y: node.position.y,
         width: measured(node)?.width ?? node.width, height: measured(node)?.height ?? node.height,
@@ -336,6 +349,14 @@ function ExportController({ onReady, onSvgReady }: {
         return [{ id: edge.id, d, stroke: look.stroke, dash: look.strokeDasharray ?? null, label: edge.data.label,
           labelAt: length > 0 ? at(length / 2) : null, ends: length > 0 ? [at(0), at(length)] as const : null }]
       })
+      return { processes, connections }
+  }, [])
+
+  useEffect(() => {
+    onSvgReady?.(async (filename: string, theme: SvgTheme = 'light') => {
+      const workflow = drawn()
+      if (!workflow) return { kind: 'empty' }
+      const { processes, connections } = workflow
       const url = URL.createObjectURL(new Blob([workflowSvg(filename, processes, connections, theme)], { type: 'image/svg+xml' }))
       const a = document.createElement('a')
       a.href = url
@@ -344,7 +365,46 @@ function ExportController({ onReady, onSvgReady }: {
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
       return { kind: 'done' }
     })
-  }, [onSvgReady])
+  }, [onSvgReady, drawn])
+
+  // The share card: the workflow with the reading drawn strongly, under its badge, title and summary, as one PNG.
+  useEffect(() => {
+    onShareCardReady?.(async (filename: string, card: ShareCardRequest) => {
+      const workflow = drawn()
+      if (!workflow) return { kind: 'empty' }
+      const diagram = workflowSvgParts(workflow.processes, workflow.connections, card.theme,
+        { nodeIds: card.nodeIds, edgeIds: card.edgeIds, accent: card.text.accent })
+      const svg = shareCardSvg({ title: filename, text: card.text, diagram, theme: card.theme })
+      const source = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
+      try {
+        const image = new Image()
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve()
+          image.onerror = () => reject(new Error('The card could not be drawn.'))
+          image.src = source
+        })
+        const canvas = document.createElement('canvas')
+        canvas.width = SHARE_CARD.width * SHARE_CARD_SCALE
+        canvas.height = SHARE_CARD.height * SHARE_CARD_SCALE
+        const context = canvas.getContext('2d')
+        if (!context) return { kind: 'unsupported' }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+        if (!blob) return { kind: 'failed', message: 'The browser made no picture.' }
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${filename}-${card.text.suffix}.png`
+        a.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 0)
+        return { kind: 'done' }
+      } catch (error) {
+        return { kind: 'failed', message: error instanceof Error ? error.message : 'The card could not be drawn.' }
+      } finally {
+        URL.revokeObjectURL(source)
+      }
+    })
+  }, [onShareCardReady, drawn])
 
   useEffect(() => {
     onReady?.(async (filename: string, target: PngTarget = 'download') => {
@@ -531,6 +591,7 @@ interface Props {
   onExportReady?(fn: PngExport): void
   /** A way to download the workflow as a vector picture (workflowSvg.ts). */
   onSvgExportReady?(fn: SvgExport): void
+  onShareCardExportReady?(fn: ShareCardExport): void
   onEdgeReconnect?(oldEdgeId: string, newConnection: ConnectCompletePayload): void
   onPresence?(msg: PresenceMessage): void
   onGraphChange?(msg: GraphChangeMessage): void
@@ -679,6 +740,7 @@ export function CanvasViewport({
   onAnnotationSelectionReady,
   onExportReady,
   onSvgExportReady,
+  onShareCardExportReady,
   onEdgeReconnect,
   onPresence,
   onGraphChange,
@@ -1373,7 +1435,7 @@ export function CanvasViewport({
         <InternalsUpdater nodeIds={nodesToUpdateInternals} />
         <HandleBoundsRecovery nodes={readingNodes} />
         <ViewportPersister storageKey={storageKey} />
-        <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} />
+        <ExportController onReady={onExportReady} onSvgReady={onSvgExportReady} onShareCardReady={onShareCardExportReady} />
         <ZoomReporter onZoomChange={onZoomChange} />
         {/* Blueprint draws a drafting grid and Editorial a clean page; the others keep the dots. */}
         {preset === 'blueprint'
