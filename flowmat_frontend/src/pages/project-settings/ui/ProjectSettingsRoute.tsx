@@ -15,6 +15,7 @@ import { NotificationSubscriptionsPanel } from './NotificationSubscriptionsPanel
 import { WorkerCalendarsPanel } from './WorkerCalendarsPanel'
 import { LaborPremiumsPanel } from './LaborPremiumsPanel'
 import { HTTPProfilesPanel } from './HTTPProfilesPanel'
+import { IntegrationJobsPanel } from './IntegrationJobsPanel'
 
 const ROLES = ['viewer', 'editor'] as const
 
@@ -322,6 +323,7 @@ export function ProjectSettingsRoute() {
 
       <ProjectTimeZonePanel key={projectId} projectId={projectId} />
       <HTTPProfilesPanel key={`http-${projectId}`} projectId={projectId} />
+      <IntegrationJobsPanel key={`integration-${projectId}`} projectId={projectId} />
       <NotificationSubscriptionsPanel key={`notifications-${projectId}`} projectId={projectId} />
       <WorkerCalendarsPanel key={`workers-${projectId}`} projectId={projectId} />
       <LaborPremiumsPanel key={`premiums-${projectId}`} projectId={projectId} />
