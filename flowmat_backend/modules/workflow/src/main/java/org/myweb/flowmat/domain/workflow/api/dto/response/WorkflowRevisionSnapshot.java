@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import org.myweb.flowmat.domain.workflow.annotation.api.dto.response.CanvasAnnotationResponse;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.response.EditorDocumentResponse;
+import org.myweb.flowmat.domain.workflow.guide.api.dto.response.GuidedViewResponse;
 
 /** Data fixed when a workflow draft is published; session state and Redis cursors are excluded. */
 public record WorkflowRevisionSnapshot(
@@ -19,6 +20,8 @@ public record WorkflowRevisionSnapshot(
     EditorDocumentResponse editorDocument,
     /** Nodes with an execution policy, as fixed at publish (docs/domain/flow-run-execution-policy.md EP3). */
     List<NodeExecutionPolicyResponse> nodePolicies,
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NodeExecutionBindingResponse> nodeBindings
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NodeExecutionBindingResponse> nodeBindings,
+    /** The guided views as they were at publish (ADR-037); left out when there were none. */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GuidedViewResponse> guidedViews
 ) {
 }

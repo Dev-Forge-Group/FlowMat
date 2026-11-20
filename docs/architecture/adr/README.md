@@ -38,6 +38,7 @@
 | [ADR-034](ADR-034-bom-scrap-performance.md) | BOM 줄 실제 손실 집계 | **Accepted** 2026-11-02(2026-10-24 사용자 위임으로 권장안, 로컬 구현 2hy, 읽기 전용) | revision의 끝난 실행을 모아 자재마다 순량 대비 실제 손실률과 계획 스크랩률, 대체 투입은 주 자재 몫 |
 | [ADR-035](ADR-035-gradle-modules.md) | bounded context별 Gradle 모듈 | **Accepted** 2026-11-07(사용자 결정) | context마다 `flowmat_backend/modules/<context>` 모듈, global·user는 platform, 루트는 애플리케이션과 모든 테스트. 의존 방향을 빌드로 강제 |
 | [ADR-036](ADR-036-cross-context-contract-types.md) | context 사이 계약 타입 | **Accepted** 2026-11-07(이전 계획 5단계) | 다른 context의 웹 DTO·enum 대신 publicapi 타입(`BomRequirement`·`BomView`·`BomQuery`·`StockMovementCommand`), 상태는 view의 코드와 메서드. 다른 context의 `api`·`domain` 타입 사용을 ArchUnit으로 금지. 2026-11-08: 포트와 공유 서비스(`ProjectAccess`, `UnitConversion` 등)도 publicapi로, 다른 context의 `application`은 publicapi로만 |
+| [ADR-037](ADR-037-guided-views.md) | 워크플로 안내 보기(Guided views)의 장 저장 | **Accepted** 2026-11-20(2026-10-24 사용자 위임으로 권장안 A, 서버 구현 V136, 화면 남음) | 새 표 `workflow_guided_view`(workflow 모듈, V136)에 장마다 한 줄. 워크플로마다 8장, 장마다 공정 1–30개, 장마다 version. 지운 공정은 읽을 때 뺀다. 발행 스냅숏의 `guidedViews`에 들어간다. 읽기는 VIEWS 패널과 `#view=`·`&beat=` |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

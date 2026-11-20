@@ -105,7 +105,7 @@ modules:
   - id: workflow
     kind: backend-module
     language: java
-    responsibility: 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 도형 편집 문서·실시간 동기화·주석
+    responsibility: 공정 그래프 정의, 포트·연결 계약, 검증, 발행 revision. 도형 편집 문서·실시간 동기화·주석·안내 보기
     path: flowmat_backend/modules/workflow
     frontend:
       - flowmat_frontend/src/entities/workflow
