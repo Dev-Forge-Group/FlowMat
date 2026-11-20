@@ -2053,6 +2053,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           )}
           {panel === 'index' && (
             <ProcessIndex nodes={canvas.nodes} currentId={passportProcessId} previewId={intentShown?.id ?? null}
+              onRename={canEditAnnotations ? (processId, name) => void updateNode({ processId, processName: name }) : undefined}
               onPreview={(processId) => readingRef.current.intent.show(processId)}
               onClose={() => setPanel(null)}
               onChoose={(processId) => {

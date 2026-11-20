@@ -1514,6 +1514,18 @@
 .process-index-head strong { color: var(--ax-text); font-size: 0.78rem; }
 .process-index-head small { color: var(--ax-text-faint); font-size: 0.62rem; }
 .process-index-close { margin-left: auto; color: var(--ax-text-faint); }
+.process-index-rename { margin-left: auto; color: var(--ax-text-faint); font-size: 0.62rem; }
+.process-index-rename + .process-index-close { margin-left: 0.25rem; }
+.process-index-rename-input {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--ax-frontend-stroke);
+  border-radius: 0.45rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-text);
+  font: inherit;
+  font-size: 0.74rem;
+}
 .process-index-list { overflow-y: auto; padding: 0.3rem; }
 .process-index-empty { margin: 0.5rem; color: var(--ax-text-faint); font-size: 0.7rem; }
 .process-index-heading {
