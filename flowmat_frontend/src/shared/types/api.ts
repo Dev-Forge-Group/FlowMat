@@ -517,7 +517,11 @@ export interface BomLineImportResultDto {
   /** Lines of the draft removed (or to be removed) because the import replaces them. */
   removed: number
   errors: number
-  rows: { row: number; itemCode: string | null; action: 'add' | 'error'; message: string | null }[]
+  /** Rows the request left out (skipRows). */
+  skipped: number
+  /** Of those, rows naming a material the draft has now when the import replaces: it is removed and not added back. */
+  skippedCurrent: number
+  rows: { row: number; itemCode: string | null; action: 'add' | 'error' | 'skipped'; message: string | null }[]
 }
 
 /** One row of a stock import (POST /inventories/import); values are text as in the file. */

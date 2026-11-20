@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
 /**
- * Leaving lines out of an item or a stock import (docs/domain/item-import.md I13, stock-import.md), against a mocked API: a file with a
- * wrong line can be saved without it, the file is checked again whenever the choice changes, and what is saved is
- * exactly what the last check showed.
+ * Leaving lines out of an item, a stock or a BOM material import (docs/domain/item-import.md I13 and B1, stock-import.md
+ * S12), against a mocked API: a file with a wrong line can be saved without it, the file is checked again whenever the
+ * choice changes, and what is saved is exactly what the last check showed.
  */
 interface Input { dryRun: boolean; rows: { itemCode: string; itemName?: string }[]; skipRows?: number[] }
 
@@ -135,5 +135,85 @@ test('stock lines with problems are left out in one press and the rest is receiv
   await expect(panel.getByRole('status')).toHaveText('Received: 2 new records, 0 into existing ones, 1 line left out.')
   expect(sent.at(-1)).toMatchObject({ dryRun: false, note: 'opening balance', skipRows: [2] })
   expect(sent.at(-1)?.rows.map((row) => row.itemCode)).toEqual(['OATS', 'NOPE-1', 'RYE'])
+  await expect(check).toHaveCount(0)
+})
+
+test('BOM material lines can be left out, and replacing says which current materials go for good', async ({ page }) => {
+  const projectId = 'prj-bom-import-rows'
+  interface BomInput { dryRun: boolean; replace: boolean; rows: { itemCode: string; quantity?: string; unit?: string }[]; skipRows?: number[] }
+  const material = { itemId: 'flour', projectId, itemCode: 'FLOUR', itemName: 'Flour', itemType: 'material',
+    resourceCategory: 'material', unitId: 'unit_kg', itemStatus: 'active', lotManageYn: 'N', unitCost: 1 }
+  const product = { ...material, itemId: 'cake', itemCode: 'CAKE', itemName: 'Cake' }
+  const bom = { bomId: 'cake-draft', projectId, targetItemId: product.itemId, bomName: 'Cake draft', bomVersion: 1,
+    baseQuantity: 1, baseUnit: 'kg', bomStatus: 'draft', approvedBy: null, approvedAt: null, note: null, lines: [] }
+  const sent: BomInput[] = []
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request()
+    const { pathname } = new URL(request.url())
+    if (await answerAuth(route, pathname)) return
+    if (request.method() === 'POST' && pathname === `/api/boms/${bom.bomId}/lines/import`) {
+      const body = request.postDataJSON() as BomInput
+      sent.push(body)
+      const skip = new Set(body.skipRows ?? [])
+      // Like the server: the draft has SUGAR now. A left-out row is not checked, but when replacing, a left-out SUGAR row
+      // is said to be removed for good; NOPE rows are wrong; SUGAR is wrong only when added to the SUGAR already there.
+      const rows = body.rows.map((row, index) => {
+        if (skip.has(index + 1)) {
+          const current = body.replace && row.itemCode === 'SUGAR'
+          return { row: index + 1, itemCode: row.itemCode, action: 'skipped',
+            message: current ? 'In this BOM now; replacing removes it and this line does not add it back' : null }
+        }
+        if (row.itemCode.startsWith('NOPE')) return { row: index + 1, itemCode: row.itemCode, action: 'error', message: `No item has code ${row.itemCode}` }
+        if (row.itemCode === 'SUGAR' && !body.replace) {
+          return { row: index + 1, itemCode: row.itemCode, action: 'error', message: 'SUGAR is already a material of this BOM; combine the lines' }
+        }
+        return { row: index + 1, itemCode: row.itemCode, action: 'add', message: null }
+      })
+      const errors = rows.filter((row) => row.action === 'error').length
+      return ok(route, { dryRun: body.dryRun, applied: !body.dryRun && errors === 0, added: rows.filter((row) => row.action === 'add').length,
+        removed: body.replace ? 1 : 0, errors, skipped: skip.size,
+        skippedCurrent: rows.filter((row) => row.action === 'skipped' && row.message).length, rows })
+    }
+    if (request.method() !== 'GET') return route.fulfill({ status: 400, body: 'Unexpected write' })
+    if (pathname === '/api/projects') return ok(route, [{ projectId, projectName: 'BOM rows', ownerId: 'demo-owner' }])
+    if (pathname === `/api/projects/${projectId}`) return ok(route, { projectId, projectName: 'BOM rows', ownerId: 'demo-owner' })
+    if (pathname === '/api/items') return ok(route, [material, product])
+    if (pathname === '/api/units') return ok(route, [{ unitId: 'unit_kg', unitCode: 'kg', unitName: 'kilogram', unitType: 'mass', activeYn: 'Y' }])
+    if (pathname === '/api/boms') return ok(route, [bom])
+    if (pathname === `/api/boms/${bom.bomId}`) return ok(route, bom)
+    if (pathname === '/api/material-requirements') return ok(route, { projectId, orders: 0, lines: [], problems: [] })
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  await page.goto(`/projects/${projectId}/inventory?tab=boms`)
+  await page.getByRole('row', { name: /Cake draft/ }).click()
+  const panel = page.getByLabel('Materials from CSV', { exact: true })
+  await panel.getByLabel('Import materials file').setInputFiles({ name: 'cake.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('item_code,quantity,unit\nFLOUR,1,kg\nNOPE-1,1,kg\nSUGAR,2,kg\nEGG,4,ea\n') })
+  const check = panel.getByLabel('Materials import check', { exact: true })
+
+  // Added to what the draft has, SUGAR is there twice; NOPE-1 is no item.
+  await expect(check).toContainText('2 to add, 2 with problems')
+  expect(sent[0]).not.toHaveProperty('skipRows')
+  await panel.getByRole('checkbox', { name: 'Replace current materials', exact: true }).check()
+  await expect(check).toContainText('3 to add, 1 to remove, 1 with problems')
+  expect(sent[1]).toMatchObject({ dryRun: true, replace: true })
+
+  await check.getByRole('button', { name: 'Leave out the 1 line with problems', exact: true }).click()
+  await expect(check).toContainText('3 to add, 1 to remove, 1 left out')
+  expect(sent[2]).toMatchObject({ dryRun: true, replace: true, skipRows: [2] })
+  await expect(check).not.toContainText('not added back')
+
+  // Leaving SUGAR out while replacing removes the SUGAR the draft has and does not put it back: said above and on the line.
+  await check.getByLabel('Import line 4', { exact: true }).uncheck()
+  await expect(check).toContainText('2 to add, 1 to remove, 2 left out')
+  await expect(check).toContainText('1 left-out line names a material this BOM has now. Replacing removes it, and it is not added back.')
+  await expect(check.getByRole('row', { name: /line 4/ })).toContainText('replacing removes it')
+  expect(sent[3]).toMatchObject({ dryRun: true, replace: true, skipRows: [2, 3] })
+
+  await check.getByRole('button', { name: 'Replace materials', exact: true }).click()
+  await expect(panel.getByRole('status')).toHaveText('Added 2 materials, removed 1, 2 lines left out.')
+  expect(sent.at(-1)).toMatchObject({ dryRun: false, replace: true, skipRows: [2, 3] })
+  expect(sent.at(-1)?.rows.map((row) => row.itemCode)).toEqual(['FLOUR', 'NOPE-1', 'SUGAR', 'EGG'])
   await expect(check).toHaveCount(0)
 })

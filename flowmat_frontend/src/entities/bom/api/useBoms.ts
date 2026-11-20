@@ -196,7 +196,14 @@ export function useBomActionMutation(projectId: string) {
 export function useImportBomLinesMutation(projectId: string) {
   const onSuccess = useInvalidateBoms(projectId)
   return useMutation({
-    mutationFn: async ({ bomId, ...body }: { bomId: string; rows: BomLineImportRowDto[]; dryRun: boolean; replace: boolean }) =>
+    mutationFn: async ({ bomId, ...body }: {
+      bomId: string
+      rows: BomLineImportRowDto[]
+      dryRun: boolean
+      replace: boolean
+      /** Rows to leave out, by their number from 1 (docs/domain/item-import.md B1). */
+      skipRows?: number[]
+    }) =>
       unwrapApiResponse(await httpClient.post<ApiEnvelope<BomLineImportResultDto>>(`${path(bomId)}/lines/import`, body)),
     onSuccess,
   })

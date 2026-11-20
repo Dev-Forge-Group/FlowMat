@@ -32,8 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Fills a draft BOM's materials from a spreadsheet (docs/domain/item-import.md "BOM 자재"). Every row is checked first,
  * with the approval rules that concern a single line (docs/domain/inventory-bom-lot-contract.md §5): the material
  * exists, is not the product, is not listed twice, has no approved BOM of its own, its unit converts to the
- * material's unit, and any scrap is 0–100% on a material line (ADR-031). When any row is wrong, or it is a dry run, nothing is saved; otherwise the lines go through the
- * ordinary add and delete in one transaction.
+ * material's unit, and any scrap is 0–100% on a material line (ADR-031). Rows the request leaves out are not checked
+ * (item-import.md B1). When any other row is wrong, or it is a dry run, nothing is saved; otherwise the lines go through
+ * the ordinary add and delete in one transaction.
  */
 @Service
 @RequiredArgsConstructor
@@ -67,6 +68,16 @@ public class BomLineImportService {
         if (rows.size() > MAX_ROWS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Import at most " + MAX_ROWS + " materials at a time.");
         }
+        Set<Integer> leftOut = request.skipRows() == null ? Set.of() : new HashSet<>(request.skipRows());
+        for (int row : leftOut) {
+            if (row < 1 || row > rows.size()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "skipRows names row " + row + "; the file has rows 1 to " + rows.size() + ".");
+            }
+        }
+        if (leftOut.size() == rows.size()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Every row is left out; there is nothing to import.");
+        }
 
         Map<String, List<CatalogItemView>> byCode = catalogQuery.findProjectItems(header.getProjectId()).stream()
             .collect(Collectors.groupingBy(CatalogItemView::itemCode));
@@ -78,12 +89,25 @@ public class BomLineImportService {
         Map<String, List<String>> tree = BomTree.approvedChildren(bomHeaderRepository, bomLineRepository, header.getProjectId(),
             header.getTargetItemId());
 
+        Set<String> currentItems = current.stream().map(BomLine::getChildItemId).collect(Collectors.toSet());
         List<BomLineImportResponse.RowResult> results = new ArrayList<>();
         List<BomLineCreateRequest> additions = new ArrayList<>();
         int errors = 0;
+        int skippedCurrent = 0;
         for (int index = 0; index < rows.size(); index++) {
             BomLineImportRequest.Row row = rows.get(index);
             String code = trimToNull(row.itemCode());
+            if (leftOut.contains(index + 1)) {
+                // Not checked: a material it named is then free for the rows that stay. Replacing still removes what the
+                // draft has, so a material only this row would have put back is gone afterwards; say so on the row.
+                List<CatalogItemView> named = code == null ? List.of() : byCode.getOrDefault(code, List.of());
+                boolean removedForGood = request.replace() && named.size() == 1
+                    && currentItems.contains(named.get(0).itemId());
+                if (removedForGood) skippedCurrent++;
+                results.add(new BomLineImportResponse.RowResult(index + 1, code, "skipped",
+                    removedForGood ? "In this BOM now; replacing removes it and this line does not add it back" : null));
+                continue;
+            }
             List<String> problems = new ArrayList<>();
             BomLineCreateRequest line = check(row, code, header, byCode, taken, tree, problems);
             if (problems.isEmpty()) {
@@ -107,7 +131,8 @@ public class BomLineImportService {
                 bomService.addLine(header.getBomId(), line);
             }
         }
-        return new BomLineImportResponse(request.dryRun(), apply, additions.size(), removed, errors, results);
+        return new BomLineImportResponse(request.dryRun(), apply, additions.size(), removed, errors, leftOut.size(),
+            skippedCurrent, results);
     }
 
     private BomLineCreateRequest check(
