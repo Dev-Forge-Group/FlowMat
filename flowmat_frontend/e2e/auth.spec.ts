@@ -217,6 +217,12 @@ async function mockWorkspaceApi(page: Page) {
     })
   })
 
+  // The workspace reads the workflow's guided views when it opens (docs/architecture/adr/ADR-037-guided-views.md).
+  await page.route('**/api/workflows/wf-e2e/guided-views', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
   await page.route('**/api/workflows/wf-e2e/graph-changes**', async (route) => {
     await route.fulfill({
       status: 200,
