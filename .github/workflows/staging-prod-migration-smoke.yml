@@ -3,6 +3,10 @@ name: Staging Production Migration Smoke
 on:
   workflow_dispatch:
 
+# The workflow token only reads; no job writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

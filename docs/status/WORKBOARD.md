@@ -4,6 +4,8 @@
 
 ## 1. 진행 중
 
+> 2026-11-20 리드: 사용자가 준 에이전트 하네스 설계서 중 FlowMat 부분을 적용했다(UniPlace 쪽은 건드리지 않았다). [AGENTS.md](../../AGENTS.md)에 정본과 고치지 않는 곳, 원장과 DB, 검증, 위험 등급과 사람의 승인, 끝난 기준을 더했고, `.claude/settings.json`에 비밀 파일 읽기 차단과 push·배포 명령의 확인을, `.claude/skills/`에 FlowMat 절차 다섯 개를 넣었다. 워크플로 토큰은 모두 읽기 전용이고 외부 Action은 커밋 SHA로 고정했다(Dependabot이 버전 주석과 함께 올린다). 홈 저장소, 명령 감시 Hook, Stop Hook, WSL2 샌드박스는 사용자 PC와 개인 설정의 일이라 저장소에 넣지 않았다.
+
 > 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다. 같은 날 settingTool 첫 기능의 남은 BOM 자재 가져오기에 줄 고르기를 넣었고([item-import](../domain/item-import.md) B1), 4주차 4번 [다음 달 후보](MONTH-PLAN-2026-11-16.md#다음-달-후보-11-20)를 적었다. archify 이식도 끝났다: 6초 WebM 내보내기와 안내 보기(VIEWS, [ADR-037](../architecture/adr/ADR-037-guided-views.md), V136)가 들어가 [대조표](../editor/archify-parity.md)에 "없음"이 남지 않았다. V136은 개발 DB(5434)에 아직 적용되지 않았다(위 2번에 더했다). settingTool 대조표의 작은 것 셋도 정리했다: `Shift` 축 고정, 공정 목록에서 이름 이어서 고치기, 공정 번호는 가져오지 않음(이유는 [대조표](SETTINGTOOL-FEATURE-MAP.md)). 다음 달 후보 중 compute(조건식 검사를 편집기에)는 앞당겨 끝냈다: 연결 조건과 포트 검증 규칙이 입력하는 중에 서버와 같은 문구로 오류를 보인다(Rust의 WebAssembly 빌드). 이어서 사용자가 고른 FM-INT-002(예약·반복 연동)를 시작했다: [ADR-038](../architecture/adr/ADR-038-integration-jobs.md)의 네 단계 중 1단계로 새 모듈 `integration`, V137, 작업 저장(소유자), 수동 실행·미리 보기·실행 기록이 들어갔다. 외부 자료는 품목·재고 CSV 가져오기와 같은 규칙(catalog·inventory의 새 공개 명령)으로 들어온다. 다음은 2단계 예약이다.
 
 > 2026-11-16 리드: [월간 개발 계획](MONTH-PLAN-2026-11-16.md)의 1~3주차 일이 `main`에 들어갔다(PR #96–#108, 각 PR 본문이 기록이다).
