@@ -19,6 +19,7 @@ rootProject.name = 'flowmat_backend'
 	'purchasing',
 	'workforce',
 	'production',
+	'integration',
 ].each { name ->
 	include ":modules:${name}"
 	project(":modules:${name}").projectDir = file("modules/${name}")

@@ -209,6 +209,17 @@ modules:
     extraction_notes:
       - DB에서 MES 묶음의 production과 서로 외래키로 묶여 있다(warehouse_task → stock_allocation·work_order, stock_allocation → inventory·lot_master). ERP와 MES를 나누려면 이 외래키부터 없앤다.
 
+  - id: integration
+    kind: backend-module
+    language: java
+    responsibility: 예약·반복 연동 작업. 연동 프로필의 작업으로 품목·재고를 가져오고, 실행마다 항목별 결과를 남긴다(ADR-038)
+    path: flowmat_backend/modules/integration
+    depends_on: [platform, project, connector, catalog, inventory]
+    contract: none
+    data:
+      foreign_keys_to: []
+    status: internal
+
   - id: quality
     kind: backend-module
     language: java
