@@ -3,6 +3,7 @@ package org.myweb.flowmat.domain.integration.api;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.integration.api.dto.request.IntegrationJobRequest;
+import org.myweb.flowmat.domain.integration.api.dto.request.IntegrationScheduleRequest;
 import org.myweb.flowmat.domain.integration.api.dto.response.IntegrationJobResponse;
 import org.myweb.flowmat.domain.integration.api.dto.response.IntegrationRunResponse;
 import org.myweb.flowmat.domain.integration.application.IntegrationJobService;
@@ -48,6 +49,14 @@ public class IntegrationJobController {
     public ApiResponse<Void> delete(@PathVariable("projectId") String projectId, @PathVariable("jobId") String jobId) {
         jobs.delete(projectId, jobId);
         return ApiResponse.ok(null);
+    }
+
+    /** Switches the job's schedule on, as the caller, or off. */
+    @PutMapping("/{jobId}/schedule")
+    public ApiResponse<IntegrationJobResponse> schedule(@PathVariable("projectId") String projectId,
+                                                        @PathVariable("jobId") String jobId,
+                                                        @RequestBody IntegrationScheduleRequest request) {
+        return ApiResponse.ok(jobs.schedule(projectId, jobId, request));
     }
 
     /** What a run would do now; nothing is saved. */
