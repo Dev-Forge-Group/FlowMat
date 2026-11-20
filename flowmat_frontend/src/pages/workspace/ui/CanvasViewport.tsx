@@ -630,6 +630,8 @@ interface Props {
   }): void
   onFitViewReady?(fn: () => void): void
   onSelectAllReady?(fn: () => void): void
+  /** The processes selected on the canvas, whenever the selection changes (for a guided view's new chapter). */
+  onProcessSelectionChange?(processIds: string[]): void
   onAnnotationSelectionReady?(getSelectedAnnotationIds: () => string[]): void
   onExportReady?(fn: PngExport): void
   /** A way to download the workflow as a vector picture (workflowSvg.ts). */
@@ -781,6 +783,7 @@ export function CanvasViewport({
   onConnectDropOnCanvas,
   onFitViewReady,
   onSelectAllReady,
+  onProcessSelectionChange,
   onAnnotationSelectionReady,
   onExportReady,
   onSvgExportReady,
@@ -1412,6 +1415,7 @@ export function CanvasViewport({
         }}
         onSelectionChange={({ nodes: selNodes }) => {
           if (selNodes.length > 1) setMultiSelect()
+          onProcessSelectionChange?.(selNodes.filter((node) => node.type === 'flowmatNode').map((node) => node.id))
         }}
         onEdgeClick={(_e, edge) => {
           selectEdge(edge.id)

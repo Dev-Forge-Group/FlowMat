@@ -3,7 +3,7 @@ import { presetLabel, type CanvasPreset } from './StylePresetMenu'
 /**
  * archify's diagram view controls (adapted from archify template.source.html and viewer.css, Apache-2.0): one dock at
  * the canvas's bottom right with the reading modes (ROUTE, MAP, LENS, and FlowMat's RUNS and CHANGES), the process index
- * (INDEX), the finder, the guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from
+ * (INDEX), the guided views (VIEWS), the finder, the guide, a zoom stepper whose middle shows the reading depth (MAP below 100%, READ, FULL from
  * 175%) and the zoom, and archify's toolbar controls: the visual style, export, motion (LIVE or STILL) and the
  * presentation stage.
  */
@@ -14,7 +14,7 @@ function readingDepth(zoom: number): 'MAP' | 'READ' | 'FULL' {
 
 export function DiagramNav({
   routeActive, onRoute, mapOpen, onMap, lensActive, onLens, runsActive, onRuns, changesActive, onChanges, indexOpen, onIndex,
-  onFind, onGuide,
+  viewsOpen = false, onViews, onFind, onGuide,
   zoom, onZoomOut, onReset, onZoomIn, preset, styleOpen, onStyle, exportOpen, onExport, motion, presenting, onPresent,
 }: {
   routeActive: boolean
@@ -29,6 +29,9 @@ export function DiagramNav({
   onChanges(): void
   indexOpen: boolean
   onIndex(): void
+  /** archify's guided views: the workflow's chapters. */
+  viewsOpen?: boolean
+  onViews?(): void
   onFind(): void
   onGuide(): void
   zoom: number
@@ -61,6 +64,10 @@ export function DiagramNav({
         aria-label="Compare with a revision" title="Compare the draft with a published revision" onClick={onChanges}>CHANGES</button>
       <button type="button" className="diagram-nav-mode" data-mode="index" aria-expanded={indexOpen}
         aria-label="Open process index" title="Process index" onClick={onIndex}>INDEX</button>
+      {onViews && (
+        <button type="button" className="diagram-nav-mode" data-mode="views" aria-expanded={viewsOpen}
+          aria-label="Open guided views" title="Guided views: the workflow in chapters" onClick={onViews}>VIEWS</button>
+      )}
       <button type="button" className="diagram-nav-find" aria-label="Find a node" title="Find a node (/)" onClick={onFind}>
         <span className="diagram-nav-icon find" aria-hidden="true" />
       </button>

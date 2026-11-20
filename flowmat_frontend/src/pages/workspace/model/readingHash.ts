@@ -9,15 +9,20 @@ export type ReadingState =
   | { kind: 'relation'; connectionId: string }
   /** One or two process kinds, as the palette names them. */
   | { kind: 'lens'; kinds: readonly string[] }
+  /** A guided view's chapter (archify's `#view=`), and the process a playing chapter has reached (`&beat=`). */
+  | { kind: 'view'; viewId: string; beat: string | null }
 
 const LENS_KINDS = new Set(getWorkflowPaletteDefinitions().map((definition) => definition.nodeType))
 
 /**
- * `#focus=<id>`, `#focus=<id>&reach=upstream|downstream`, `#route=<from>~<to>`, `#relation=<connection id>` or
- * `#lens=<kind>[~<kind>]`; empty for no reading.
+ * `#focus=<id>`, `#focus=<id>&reach=upstream|downstream`, `#route=<from>~<to>`, `#relation=<connection id>`,
+ * `#lens=<kind>[~<kind>]` or `#view=<chapter id>[&beat=<process id>]`; empty for no reading.
  */
 export function formatReadingHash(state: ReadingState | null): string {
   if (!state) return ''
+  if (state.kind === 'view') {
+    return `#view=${encodeURIComponent(state.viewId)}${state.beat ? `&beat=${encodeURIComponent(state.beat)}` : ''}`
+  }
   if (state.kind === 'route') return `#route=${encodeURIComponent(state.from)}~${encodeURIComponent(state.to)}`
   if (state.kind === 'lens') return `#lens=${state.kinds.map(encodeURIComponent).join('~')}`
   if (state.kind === 'relation') return `#relation=${encodeURIComponent(state.connectionId)}`
@@ -50,15 +55,23 @@ export function withViewParams(readingHash: string, runId: string | null, revisi
 }
 
 /**
- * The reading an address asks for, if every process, connection or kind it names is known; anything else (other keys, a
- * bad direction, a process or connection that is gone, a third kind) reads as no reading rather than a broken view.
+ * The reading an address asks for, if every process, connection, kind or chapter it names is known; anything else (other
+ * keys, a bad direction, a process or connection that is gone, a third kind) reads as no reading rather than a broken
+ * view. A chapter's beat that is not one of the workflow's processes is dropped and the chapter kept, as archify does.
  */
 export function parseReadingHash(
   hash: string,
   knownProcessIds: ReadonlySet<string>,
   knownConnectionIds: ReadonlySet<string> = new Set(),
+  knownViewIds: ReadonlySet<string> = new Set(),
 ): ReadingState | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const viewId = params.get('view')
+  if (viewId != null) {
+    if (!knownViewIds.has(viewId)) return null
+    const beat = params.get('beat')
+    return { kind: 'view', viewId, beat: beat && knownProcessIds.has(beat) ? beat : null }
+  }
   const connectionId = params.get('relation')
   if (connectionId != null) return knownConnectionIds.has(connectionId) ? { kind: 'relation', connectionId } : null
   const routeValue = params.get('route')

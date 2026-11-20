@@ -24,6 +24,7 @@ scripts), rewritten as React components and CSS for FlowMat's workflow canvas:
   revision changes, layout checks, SVG export, share cards, motion, the motion clip)
 - The export menu and its six-second WebM recording (`ExportMenu.tsx`, `recordMotion.ts`, `model/workflowMotion.ts`),
   from `viewer/export.js`
+- The guided views panel and its playback (`GuidedViewsPanel.tsx`, `model/guidedViews.ts`), from `viewer/guided-views.js`
 
 Each adapted file says so in its header comment. FlowMat changed them to read FlowMat's processes, connections, runs and
 revisions instead of Archify's diagram data. FlowMat does not include Archify's fonts or brand icons; the CSS only names
