@@ -29,7 +29,7 @@
 | PC-06. 등록된 단위의 유형은 포트·연결 간 같아야 한다. 모르는 단위는 저장을 허용하고 검증 보고서에 경고한다. | kg↔ea 같은 잘못된 변환 방지 | 400 `Connection unit type must match port units.` |
 | PC-07. 포트의 `schemaJson`은 `{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}` 모양이다. 속성 타입은 `string`, `number`, `boolean`만 허용하고 필수 이름은 `properties`에 있어야 한다. 최상위의 알 수 없는 키는 무시한다. | 서로 비교 가능한 최소 스키마 확보 | 400 `schemaJson.type must be object.`, `schemaJson.properties...`, `schemaJson.required...` 등 필드 포함 메시지 |
 | PC-08. 입력 포트의 필수 속성은 출력 포트의 `properties`에 같은 타입으로 있어야 한다. 한쪽 스키마가 없으면 연결은 허용한다. | 필수 입력의 공급 보장 | 400 `Target port needs <name> (<type>).` |
-| PC-09. `conditionExpr`와 `validationRule`은 아래 문법에 맞고 최대 500자다. `attrs.name`은 해당 포트 스키마에 선언돼야 한다. 스키마가 없으면 참조를 허용한다. | 임의 코드 실행을 막고 조건을 재현 가능하게 함 | 400 `Invalid condition at position N: ...` |
+| PC-09. `conditionExpr`와 `validationRule`은 아래 문법에 맞고 최대 500자다. `attrs.name`은 해당 포트 스키마에 선언돼야 한다. 스키마가 없으면 참조를 허용한다. 편집기는 입력하는 중에 같은 검사를 한다(2026-11-20): 연결 조건은 출발 출력 포트의 스키마로, 포트 검증 규칙은 같은 양식의 스키마 초안으로 보고, 서버와 같은 문구를 입력란 아래에 보인다. 저장 때 서버가 다시 검사한다 | 임의 코드 실행을 막고 조건을 재현 가능하게 함 | 400 `Invalid condition at position N: ...` |
 | PC-10. `capacity`는 `null` 또는 0 이상이고 `failurePolicy`는 `stop`, `skip`, `retry` 중 하나다. | 정의 값의 의미 보존 | 400 `Connection capacity cannot be negative.` 또는 `Unknown connection failure policy.` |
 | PC-11. 연결된 포트의 방향·자원 종류·품목·단위·스키마 수정은 기존 연결을 모두 재검증한다. 포트 삭제 시 연결도 같은 트랜잭션에서 소프트 삭제하고 각 연결 삭제 이벤트를 보낸다. | 고아 연결과 사후 호환성 파괴 방지 | 409 `Port change would break connection(s): <ids>` |
 

@@ -2148,6 +2148,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
                 focusLabel={inlineEditingEdgeId === selectedEdge?.id}
                 sourceIsExclusive={selectedEdge ? canvas.nodeMap[selectedEdge.fromProcessId]?.nodeType === 'exclusive' : false}
                 sourceIsSplit={selectedEdge ? canvas.nodeMap[selectedEdge.fromProcessId]?.nodeType === 'split' : false}
+                sourceSchema={selectedEdge?.fromIoId ? canvas.portMap[selectedEdge.fromIoId]?.schemaJson ?? null : null}
                 onDelete={(connectionId) => deleteApiRef.current.deleteEdge(connectionId)}
                 onOpenRuleBuilder={() => {}}
               />

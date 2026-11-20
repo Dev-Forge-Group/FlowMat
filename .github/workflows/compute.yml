@@ -7,11 +7,13 @@ on:
     branches: [ main, develop, 'release-validation/**' ]
     paths:
       - 'compute/**'
+      - 'flowmat_frontend/src/shared/wasm/**'
       - '.github/workflows/compute.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'compute/**'
+      - 'flowmat_frontend/src/shared/wasm/**'
       - '.github/workflows/compute.yml'
   # Runs it whatever changed.
   workflow_dispatch:
@@ -53,6 +55,10 @@ jobs:
 
     - name: Build for WebAssembly
       run: cargo build --locked --release --lib --target wasm32-unknown-unknown
+
+    # The editor ships flowmat_frontend/src/shared/wasm/flowmat_condition.wasm; it must be what this source builds.
+    - name: Check the editor's module against the source
+      run: wasm/build.sh --check
 
     - name: Use Node.js 22
       uses: actions/setup-node@v4
