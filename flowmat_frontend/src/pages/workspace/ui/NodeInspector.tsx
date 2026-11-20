@@ -24,6 +24,8 @@ import type {
   UpdateProcessIoInput,
   RuleTargetInput,
 } from '../../../entities/workflow/model/types'
+import { declaredAttributes, useConditionCheck } from '../../../shared/lib/conditionLanguage'
+import { ConditionCheckNote, conditionProblem } from './ConditionCheckNote'
 
 interface Props {
   node: CanvasNodeViewModel | null
@@ -60,6 +62,10 @@ export function NodeInspector({
   const [portForm, setPortForm] = useState<PortFormState>(createDefaultPortFormState())
   const [editingPortId, setEditingPortId] = useState<string | null>(null)
   const [portError, setPortError] = useState<string | null>(null)
+  // The port's own draft schema names the attrs its rule may read; while the schema is not valid there is nothing to check.
+  const ruleDeclared = useMemo(() => (isValidSchemaJson(portForm.schemaJson) ? declaredAttributes(portForm.schemaJson) : null),
+    [portForm.schemaJson])
+  const ruleReport = useConditionCheck(portForm.validationRule, ruleDeclared)
 
   const projectId = node?.projectId ?? ''
   const itemsQuery = useItemsQuery(projectId)
@@ -373,7 +379,9 @@ export function NodeInspector({
 
             <label style={{ display: 'grid', gap: '4px' }}>
               <span>Validation rule</span>
-              <input maxLength={2000} value={portForm.validationRule} onChange={(event) => setPortForm((current) => ({ ...current, validationRule: event.target.value }))} />
+              <input maxLength={2000} value={portForm.validationRule} onChange={(event) => setPortForm((current) => ({ ...current, validationRule: event.target.value }))}
+                aria-invalid={conditionProblem(ruleReport) ? true : undefined} aria-describedby="port-rule-check" />
+              <ConditionCheckNote id="port-rule-check" report={ruleReport} />
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>

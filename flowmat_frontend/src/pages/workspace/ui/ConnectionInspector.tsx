@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { splitInput, type SplitKind } from '../model/splitShare'
 import { lossPercentText, lossRateInput } from '../model/lossPercent'
@@ -9,6 +9,8 @@ import type {
   UpdateProcessConnectionInput,
   RuleTargetInput,
 } from '../../../entities/workflow/model/types'
+import { declaredAttributes, useConditionCheck } from '../../../shared/lib/conditionLanguage'
+import { ConditionCheckNote, conditionProblem } from './ConditionCheckNote'
 
 interface Props {
   edge: CanvasEdgeViewModel | null
@@ -21,6 +23,8 @@ interface Props {
   sourceIsExclusive?: boolean
   /** The connection leaves a Split gateway, so it takes a share of what the Split divides (ADR-008). */
   sourceIsSplit?: boolean
+  /** The schema of the output port it leaves, whose properties a condition's attrs must name; null without one. */
+  sourceSchema?: Record<string, unknown> | null
 }
 
 const CONNECTION_TYPE_OPTIONS = [
@@ -35,7 +39,9 @@ const CONNECTION_TYPE_OPTIONS = [
   'equipment_flow',
 ]
 
-export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sourceIsExclusive = false, sourceIsSplit = false }: Props) {
+export function ConnectionInspector({
+  edge, onSubmit, onDelete, focusLabel, sourceIsExclusive = false, sourceIsSplit = false, sourceSchema = null,
+}: Props) {
   const labelRef = useRef<HTMLInputElement>(null)
   const edgeIdRef = useRef<string | null>(null)
   const draftChangedRef = useRef(false)
@@ -56,6 +62,7 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
   const [splitKind, setSplitKind] = useState<SplitKind | ''>('')
   const [splitValue, setSplitValue] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const conditionReport = useConditionCheck(conditionExpr, useMemo(() => declaredAttributes(sourceSchema), [sourceSchema]))
 
   useEffect(() => {
     if (focusLabel) setTimeout(() => labelRef.current?.focus(), 50)
@@ -242,7 +249,9 @@ export function ConnectionInspector({ edge, onSubmit, onDelete, focusLabel, sour
 
         <label style={{ display: 'grid', gap: '4px' }}>
           <span>Condition expression</span>
-          <input value={conditionExpr} onChange={(e) => setConditionExpr(e.target.value)} />
+          <input value={conditionExpr} onChange={(e) => setConditionExpr(e.target.value)}
+            aria-invalid={conditionProblem(conditionReport) ? true : undefined} aria-describedby="connection-condition-check" />
+          <ConditionCheckNote id="connection-condition-check" report={conditionReport} />
         </label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

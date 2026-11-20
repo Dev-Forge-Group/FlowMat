@@ -54,6 +54,16 @@ node wasm/check-fixtures.mjs
 
 시간 비교는 저장소 루트에서 `scripts/perf/condition-bench.sh`로 한다.
 
+## 편집기에서
+
+편집기는 이 크레이트의 WebAssembly 빌드로 연결 조건과 포트 검증 규칙을 입력하는 중에 검사한다(`flowmat_frontend/src/shared/lib/conditionLanguage.ts`). 빌드된 모듈은 `flowmat_frontend/src/shared/wasm/flowmat_condition.wasm`에 커밋돼 있어 프런트 빌드와 CI에 Rust가 필요 없다. 소스를 바꾸면 다시 만들어 함께 커밋한다.
+
+```bash
+wasm/build.sh
+```
+
+`wasm/build.sh`는 경로를 바꿔 적어(`--remap-path-prefix`) 어느 기계에서 빌드해도 같은 바이트가 나온다. compute CI가 `wasm/build.sh --check`로 커밋된 모듈이 이 소스의 빌드와 같은지 본다. 프런트의 `conditionLanguage.test.ts`가 그 모듈과 TypeScript 감싸개로 고정 입력 1,641개를 돌린다.
+
 ## WebAssembly 경계
 
 바인딩 생성기 없이 C ABI로 내보낸다. 호스트는 `alloc(len)`으로 받은 메모리에 UTF-8을 쓰고, 결과는 JSON 텍스트의 포인터(상위 32비트)와 길이(하위 32비트)로 받아 `dealloc`으로 돌려준다. 쓰는 예는 `wasm/check-fixtures.mjs`다.
