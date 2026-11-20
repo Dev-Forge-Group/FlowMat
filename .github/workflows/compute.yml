@@ -34,8 +34,7 @@ jobs:
         working-directory: compute/condition-expression
 
     steps:
-    - uses: actions/checkout@v4
-
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
     # rustup is on the runner; with no arguments it installs the version, components and target that
     # rust-toolchain.toml names.
     - name: Rust toolchain
@@ -61,7 +60,7 @@ jobs:
       run: wasm/build.sh --check
 
     - name: Use Node.js 22
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: 22.x
 

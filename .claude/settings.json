@@ -3,5 +3,23 @@
     "commit": "",
     "pr": "",
     "sessionUrl": false
+  },
+  "permissions": {
+    "deny": [
+      "Read(./flowmat_backend/.env)",
+      "Read(./flowmat_backend/.env.local)",
+      "Read(./flowmat_frontend/.env)",
+      "Read(./flowmat_frontend/.env.local)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)"
+    ],
+    "ask": [
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(aws *)",
+      "Bash(kubectl *)",
+      "Bash(argocd *)",
+      "Bash(docker push *)"
+    ]
   }
 }
