@@ -1,8 +1,10 @@
 # 작업 현황판
 
-> **현행 문서** · 최종 갱신 2026-11-16 · 작업을 시작·끝내거나 결정이 나면 같은 변경에서 고친다. 무엇이 구현됐는지는 [CURRENT_CAPABILITIES](CURRENT_CAPABILITIES.md), 아키텍처 결정은 [결정 인계](../architecture/decision-handoff.md)가 기준이다. 이 판은 "지금 무엇을 하고, 다음에 무엇을 하며, 무엇을 기다리는가"만 모은다.
+> **현행 문서** · 최종 갱신 2026-11-20 · 작업을 시작·끝내거나 결정이 나면 같은 변경에서 고친다. 무엇이 구현됐는지는 [CURRENT_CAPABILITIES](CURRENT_CAPABILITIES.md), 아키텍처 결정은 [결정 인계](../architecture/decision-handoff.md)가 기준이다. 이 판은 "지금 무엇을 하고, 다음에 무엇을 하며, 무엇을 기다리는가"만 모은다.
 
 ## 1. 진행 중
+
+> 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다.
 
 > 2026-11-16 리드: [월간 개발 계획](MONTH-PLAN-2026-11-16.md)의 1~3주차 일이 `main`에 들어갔다(PR #96–#108, 각 PR 본문이 기록이다).
 > - **1주차:** release-validation 합치기, Dependabot 정리, 실 API 스펙의 숫자 접미사(#100).

@@ -63,6 +63,11 @@ npm run test:e2e
 npm run build
 ```
 
+`compute/condition-expression` is a Rust implementation of the condition language that gives the same answers,
+messages and positions as the backend's Java one, checked against shared fixtures and built for WebAssembly. The server
+still uses Java ([performance baseline §5](docs/operations/performance-baseline.md)); see its
+[README](compute/condition-expression/README.md).
+
 The canonical applications are `flowmat_backend` and `flowmat_frontend`.
 `legacy` is retained for historical compatibility and is not part of the
 canonical build; no in-repository build, CI, deployment, or import references
