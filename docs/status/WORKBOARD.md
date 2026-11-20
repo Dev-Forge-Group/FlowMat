@@ -4,7 +4,7 @@
 
 ## 1. 진행 중
 
-> 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다. 같은 날 settingTool 첫 기능의 남은 BOM 자재 가져오기에 줄 고르기를 넣었고([item-import](../domain/item-import.md) B1), 4주차 4번 [다음 달 후보](MONTH-PLAN-2026-11-16.md#다음-달-후보-11-20)를 적었다. archify 이식도 끝났다: 6초 WebM 내보내기와 안내 보기(VIEWS, [ADR-037](../architecture/adr/ADR-037-guided-views.md), V136)가 들어가 [대조표](../editor/archify-parity.md)에 "없음"이 남지 않았다. V136은 개발 DB(5434)에 아직 적용되지 않았다(위 2번에 더했다). settingTool 대조표의 작은 것 셋도 정리했다: `Shift` 축 고정, 공정 목록에서 이름 이어서 고치기, 공정 번호는 가져오지 않음(이유는 [대조표](SETTINGTOOL-FEATURE-MAP.md)). 다음 달 후보 중 compute(조건식 검사를 편집기에)는 앞당겨 끝냈다: 연결 조건과 포트 검증 규칙이 입력하는 중에 서버와 같은 문구로 오류를 보인다(Rust의 WebAssembly 빌드).
+> 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다. 같은 날 settingTool 첫 기능의 남은 BOM 자재 가져오기에 줄 고르기를 넣었고([item-import](../domain/item-import.md) B1), 4주차 4번 [다음 달 후보](MONTH-PLAN-2026-11-16.md#다음-달-후보-11-20)를 적었다. archify 이식도 끝났다: 6초 WebM 내보내기와 안내 보기(VIEWS, [ADR-037](../architecture/adr/ADR-037-guided-views.md), V136)가 들어가 [대조표](../editor/archify-parity.md)에 "없음"이 남지 않았다. V136은 개발 DB(5434)에 아직 적용되지 않았다(위 2번에 더했다). settingTool 대조표의 작은 것 셋도 정리했다: `Shift` 축 고정, 공정 목록에서 이름 이어서 고치기, 공정 번호는 가져오지 않음(이유는 [대조표](SETTINGTOOL-FEATURE-MAP.md)). 다음 달 후보 중 compute(조건식 검사를 편집기에)는 앞당겨 끝냈다: 연결 조건과 포트 검증 규칙이 입력하는 중에 서버와 같은 문구로 오류를 보인다(Rust의 WebAssembly 빌드). 이어서 사용자가 고른 FM-INT-002(예약·반복 연동)를 시작했다: [ADR-038](../architecture/adr/ADR-038-integration-jobs.md)의 네 단계 중 1단계로 새 모듈 `integration`, V137, 작업 저장(소유자), 수동 실행·미리 보기·실행 기록이 들어갔다. 외부 자료는 품목·재고 CSV 가져오기와 같은 규칙(catalog·inventory의 새 공개 명령)으로 들어온다. 다음은 2단계 예약이다.
 
 > 2026-11-16 리드: [월간 개발 계획](MONTH-PLAN-2026-11-16.md)의 1~3주차 일이 `main`에 들어갔다(PR #96–#108, 각 PR 본문이 기록이다).
 > - **1주차:** release-validation 합치기, Dependabot 정리, 실 API 스펙의 숫자 접미사(#100).
@@ -14,7 +14,7 @@
 >
 > **사용자가 해야 열리는 일**(여기서 할 수 없었다):
 > 1. `main` 브랜치 보호(1주차 6번): 저장소 Settings에서 직접 push 금지와 `Commit Attribution` 필수.
-> 2. 개발 DB(5434)에 V133–V136 적용(3주차 2번): 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db ALLOW_DROPPED="cad_import_job payment_discount project_activity_log project_comment project_export project_file project_permission resource_types resource_usage resources simulation_run simulation_step" scripts/ops/upgrade-rehearsal.sh`가 통과한 뒤 같은 jar로 적용한다([절차](../operations/backup-restore.md) §5).
+> 2. 개발 DB(5434)에 V133–V137 적용(3주차 2번): 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db ALLOW_DROPPED="cad_import_job payment_discount project_activity_log project_comment project_export project_file project_permission resource_types resource_usage resources simulation_run simulation_step" scripts/ops/upgrade-rehearsal.sh`가 통과한 뒤 같은 jar로 적용한다([절차](../operations/backup-restore.md) §5).
 > 3. 릴리스 후보 태그(4주차 3번): 이름(권장 `v0.9.0-rc.1`)과 라이선스 표기를 정하면 [점검표](RELEASE-CHECKLIST.md)를 그 커밋에서 돌리고 태그를 단다.
 > 4. 편집기 패키지 전환(4주차 1번)에 필요한 `read:packages` 토큰, `.github` 저장소의 첫 커밋(4주차 2번), uniplace-ai의 AWS 신뢰 정책.
 

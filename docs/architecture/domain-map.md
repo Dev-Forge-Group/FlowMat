@@ -15,9 +15,10 @@
 | Core 실행 | `flowrun` | 범용 실행 기록: 실행·단계·시도·이벤트, 그래프 라우팅과 실패 정책 | FlowRun, FlowRunStep, FlowRunStepAttempt, FlowRunEvent | `FlowRunCommand`(연결 실행 시작·종료) |
 | Core 규칙 | `rule` | 실행 규칙 정의와 평가 | FlowRule | `FlowRuleEngineService`(실행 전 규칙 검사, 2026-11-08) |
 | 외부 연동 | `connector` | HTTP 프로필·판, 매핑, 요청 실행·취소 | ConnectorProfile, ConnectorProfileVersion | `ConnectorProfileQuery`, `ConnectorMappingQuery`, `ConnectorHttpGateway`, `CancellableConnectorHttpGateway`와 실행 계약 |
-| 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간), `UnitConversion`(품목 단위 환산)·`ItemStatusRule`(품목 상태 규칙, 2026-11-08) |
+| 외부 연동 | `integration` | 연동 작업(프로필의 작업으로 읽어 품목·재고 가져오기 규칙으로 들임), 미리 보기, 실행 기록. 예약과 보내기는 다음 단계([ADR-038](adr/ADR-038-integration-jobs.md)) | IntegrationJob, IntegrationRun | 없음 |
+| 제조 기준정보 | `catalog` | 품목, 단위·환산, 설비, 설비 달력·정지·전환, 프로젝트 휴일 | Item, UnitMaster, Equipment, EquipmentSchedule(달력 판), EquipmentCalendar, EquipmentDowntime, EquipmentChangeover, ProjectHoliday | `CatalogQuery`(품목 조회, 단위 코드 확인, 설비 조회, 가장 이른 가용 구간, 전환 시간), `UnitConversion`(품목 단위 환산)·`ItemStatusRule`(품목 상태 규칙, 2026-11-08), `ItemImportCommand`(품목 가져오기, 2026-11-20) |
 | 제조 계획 | `bom` | BOM 작성·승인·revision, 전개·역전개·원가 누적 | BomHeader, BomLine | `BomQuery`, `BomRevisionQuery`, `BomStructureQuery`, `BomOutputQuery`와 공개 view·`BomRequirement` |
-| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03), `StockMovementCommand`(재고 이동)·`LotTraceCommand`(LOT 계보) (2026-11-07~08) |
+| 제조 재고 | `inventory` | 재고 행, 거래 원장, LOT·계보, 위치, 창고 작업, 재고 경보 | Inventory, InventoryTransaction, LotMaster, LotTrace, StorageLocation, WarehouseTask, StockAlert | `LotQuery`(LOT 조회), `StockQuery`(원장 이동량, 가용 수량) (2026-10-03), `StockMovementCommand`(재고 이동)·`LotTraceCommand`(LOT 계보) (2026-11-07~08), `StockImportCommand`(재고 가져오기, 2026-11-20) |
 | 제조 실행 | `production` | 작업지시, 생산 실행과 투입·산출, 보정 전표, 재고 할당, 작업 지침, 준비 점검, 간이 MRP, 설비 부하 | WorkOrder, WorkOrderItem, ProductionRun, ProductionRunItem, RunStateSnapshot, ProductionRunCorrection, StockAllocation, WorkInstruction, RunInstructionCheck | `WorkOrderQuery`(작업지시 조회) (2026-10-03). 실행 조회는 quality가 정의한 `ProductionRunQuery`를 구현한다(§4) |
 | 제조 품질 | `quality` | 검사·불량, 검사 기준, 부적합·시정 조치 | QualityInspection, DefectLog, InspectionStandard, Nonconformity, CorrectiveAction | `InspectionStandardQuery`, `NonconformityQuery`, `RunInspectionCommand`. 조회 포트 `ProductionRunQuery`는 production이 구현한다(§4) |
 | 구매 | `purchasing` | 공급처·품목별 조건, 발주·승인·입고·반품·공급처 대변 | Supplier, SupplierItem, PurchaseOrder, PurchaseOrderLine | `PurchaseSupplyQuery`(주문 중 공급 조회) |
@@ -39,7 +40,7 @@ Organization은 [ADR-001](adr/ADR-001-organization-project-boundary.md)에 따�
 
 - **Core**: `workflow`·`flowrun`·`rule`. 업종 개념을 넣지 않는다. 포트의 의미는 `resourceType`과 `schemaJson`으로 나타내고, `itemId`는 Catalog와 연결될 때만 쓰는 선택적 binding이다.
 - **제조·업무 확장**: `catalog`·`bom`·`inventory`·`production`·`quality`·`purchasing`·`workforce`. 재고 원장의 변경은 inventory의 명령 계약을 통해 수행한다.
-- **외부 연동**: `connector`. workflow가 실행 binding을 정의하고 flowrun이 공개 HTTP 실행 계약을 사용한다.
+- **외부 연동**: `connector`·`integration`. workflow가 실행 binding을 정의하고 flowrun이 공개 HTTP 실행 계약을 사용한다. integration은 같은 계약으로 읽은 자료를 catalog·inventory의 가져오기 명령에 넘긴다([ADR-038](adr/ADR-038-integration-jobs.md)).
 - **플랫폼**: `project`·`user`·`payment`·`notification`.
 - FlowRun의 범용성은 비제조 vertical slice로 검증될 때까지 목표다(ADR-003 결정 8).
 
@@ -57,7 +58,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 | APS / 용량 | `catalog`, `production`, `workforce` | 설비·인력 달력, 전환 시간, 부하표, 한 건·여러 건의 일정 제안, 전환 시간 합을 줄이는 순서 제안 | 납기·부하 균형을 함께 보는 최적화는 남음 |
 | WMS | `inventory` | 위치 목록, 이동, 할당, Putaway·Pick, 실사, 휴대 기기용 스캔 화면 | 위치 용량 모델 없음 |
 | QMS | `quality`, `notification` | 검사·불량, 검사 기준, NCR·CAPA, 효과 확인, 담당·기한 알림 | 상세 검증 범위는 [현재 기능 기준선](../status/CURRENT_CAPABILITIES.md) 기준 |
-| BPM / Workflow | `workflow`, `flowrun`, `rule`, `connector` | 정의·발행·검증, 실행 단계·시도·이벤트, 조건 라우팅, 시간 제한·재시도·동시 실행 제한, 명시적 HTTP 단계 실행 | BPMN·범용 자동 실행기·예약 반복 실행은 없음 |
+| BPM / Workflow | `workflow`, `flowrun`, `rule`, `connector` | 정의·발행·검증, 실행 단계·시도·이벤트, 조건 라우팅, 시간 제한·재시도·동시 실행 제한, 명시적 HTTP 단계 실행 | BPMN·범용 자동 실행기는 없음. 예약 반복 연동(FM-INT-002)은 수동 가져오기까지([ADR-038](adr/ADR-038-integration-jobs.md)) |
 
 ## 4. 의존 규칙과 지금의 위반
 
@@ -77,7 +78,7 @@ FlowMat은 아래 제품을 각각 복제하지 않는다. 필요한 개념만 �
 - ADR-002에 남아 있던 다른 context의 `application` 직접 접근 허용은 ADR-036 결정 6으로 대체됐다. `UnitConverter`·`ProjectAccessService` 같은 구현 대신 `UnitConversion`·`ProjectAccess` 공개 계약을 사용하며, 위반은 테스트가 바로 막는다.
 - context 사이 의존은 한 방향만 둔다(2026-11-07부터 `ModuleBoundaryTest`가 순환을 막는다). 각 context를 따로 Gradle 모듈로 뗄 수 있게 하기 위해서다. 지금 가능한 순서는 다음과 같다. 오른쪽 context는 왼쪽을 쓸 수 있고, 왼쪽은 오른쪽을 모른다.
 
-  `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality` < `purchasing`·`workforce` < `production`
+  `user` < `project` < `notification` < `catalog` < `bom`·`connector` < `workflow` < `flowrun`·`rule` < `inventory`·`payment` < `quality`·`integration` < `purchasing`·`workforce` < `production`
 
 - 왼쪽 context가 오른쪽 context의 기능이 필요하면, 왼쪽 context가 인터페이스를 정의하고 오른쪽 context가 구현한다(`ItemUsageCheck`와 같은 방식). 이 인터페이스는 정의한 context의 `application.publicapi`에 둔다([ADR-036](adr/ADR-036-cross-context-contract-types.md) 결정 6). 2026-11-07에 순환을 만들던 의존 3개(catalog → inventory, inventory → production, quality → production)를 이렇게 끊었다.
 
