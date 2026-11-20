@@ -1,5 +1,6 @@
 package org.myweb.flowmat.domain.bom.api.dto.request;
 
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
@@ -8,8 +9,17 @@ import java.util.List;
  *
  * @param dryRun only check and say what would happen
  * @param replace remove the draft's current lines first; otherwise the file's lines are added to them
+ * @param skipRows optional: rows to leave out, by their number among the data rows from 1. They are neither checked nor
+ *                 added, and the other rows are checked as if these were not in the file (item-import.md B1). With
+ *                 replace, a material of the draft that only a left-out row named is removed and not added back
  */
-public record BomLineImportRequest(boolean dryRun, boolean replace, List<Row> rows) {
+public record BomLineImportRequest(boolean dryRun, boolean replace,
+                                   List<@NotNull(message = "rows must not contain null entries.") Row> rows,
+                                   List<@NotNull(message = "skipRows must not contain null entries.") Integer> skipRows) {
+
+    public BomLineImportRequest(boolean dryRun, boolean replace, List<Row> rows) {
+        this(dryRun, replace, rows, null);
+    }
 
     /**
      * @param itemCode the material's item code

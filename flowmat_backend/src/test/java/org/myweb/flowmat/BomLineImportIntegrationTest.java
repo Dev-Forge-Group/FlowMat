@@ -89,6 +89,62 @@ class BomLineImportIntegrationTest extends IntegrationTestSupport {
         importLines(doughBom, true, false).andExpect(status().isConflict());
     }
 
+    /** B1: rows can be left out; with replace, a material of the draft that only a left-out row named is gone afterwards. */
+    @Test
+    void rowsLeftOutAreNotCheckedAndTheRestIsSavedTogether() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String cake = item("BLI-CAKE-" + tag, "unit_ea");
+        String flour = item("BLI-FLOUR3-" + tag, "unit_kg");
+        String sugar = item("BLI-SUGAR-" + tag, "unit_kg");
+        String egg = item("BLI-EGG-" + tag, "unit_ea");
+        String bomId = id(call(post("/boms"), json(Map.of("projectId", DEMO_PROJECT, "targetItemId", cake, "bomName", "Cake " + tag,
+            "baseQuantity", 1, "baseUnit", "ea"))), "bomId");
+        call(post("/boms/" + bomId + "/lines"), json(Map.of("childItemId", sugar, "quantity", 1, "unit", "kg"))).andExpect(status().isOk());
+
+        Map<String, String> flourFirst = row("itemCode", "BLI-FLOUR3-" + tag, "quantity", "1", "unit", "kg");
+        Map<String, String> missing = row("itemCode", "NOPE-" + tag, "quantity", "1", "unit", "kg");
+        Map<String, String> flourAgain = row("itemCode", "BLI-FLOUR3-" + tag, "quantity", "2", "unit", "kg");
+        Map<String, String> sugarAgain = row("itemCode", "BLI-SUGAR-" + tag, "quantity", "3", "unit", "kg");
+        Map<String, String> eggs = row("itemCode", "BLI-EGG-" + tag, "quantity", "4", "unit", "ea");
+
+        // Whole, the file has three wrong rows: no such item, flour twice, sugar already a material.
+        importLines(bomId, true, false, List.of(), flourFirst, missing, flourAgain, sugarAgain, eggs)
+            .andExpect(jsonPath("$.data.errors").value(3))
+            .andExpect(jsonPath("$.data.skipped").value(0));
+        // Leaving out the first flour row makes the second one fine: rows left out are not checked at all.
+        importLines(bomId, true, false, List.of(1, 2, 4), flourFirst, missing, flourAgain, sugarAgain, eggs)
+            .andExpect(jsonPath("$.data.errors").value(0))
+            .andExpect(jsonPath("$.data.added").value(2))
+            .andExpect(jsonPath("$.data.skipped").value(3))
+            .andExpect(jsonPath("$.data.skippedCurrent").value(0))
+            .andExpect(jsonPath("$.data.rows[0].action").value("skipped"))
+            .andExpect(jsonPath("$.data.rows[3].message").doesNotExist())
+            .andExpect(jsonPath("$.data.applied").value(false));
+        call(get("/boms/" + bomId)).andExpect(jsonPath("$.data.lines.length()").value(1));
+
+        // Replacing with the sugar row left out removes sugar and does not put it back; the row says so.
+        importLines(bomId, true, true, List.of(1, 2, 4), flourFirst, missing, flourAgain, sugarAgain, eggs)
+            .andExpect(jsonPath("$.data.removed").value(1))
+            .andExpect(jsonPath("$.data.skippedCurrent").value(1))
+            .andExpect(jsonPath("$.data.rows[3].message").value(containsString("replacing removes it")))
+            .andExpect(jsonPath("$.data.rows[1].message").doesNotExist());
+        importLines(bomId, false, true, List.of(1, 2, 4), flourFirst, missing, flourAgain, sugarAgain, eggs)
+            .andExpect(jsonPath("$.data.applied").value(true))
+            .andExpect(jsonPath("$.data.added").value(2));
+        call(get("/boms/" + bomId))
+            .andExpect(jsonPath("$.data.lines.length()").value(2))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + flour + "')].quantity").value(hasItem(2.0)))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + egg + "')].quantity").value(hasItem(4.0)))
+            .andExpect(jsonPath("$.data.lines[?(@.childItemId == '" + sugar + "')]").isEmpty());
+
+        // Rows that are not in the file, and leaving out every row, are refused.
+        importLines(bomId, true, false, List.of(3), eggs).andExpect(status().isBadRequest());
+        importLines(bomId, true, false, List.of(0), eggs).andExpect(status().isBadRequest());
+        importLines(bomId, true, false, List.of(1), eggs).andExpect(status().isBadRequest());
+        call(post("/boms/" + bomId + "/lines/import"), "{\"dryRun\":true,\"replace\":false,\"rows\":[{\"itemCode\":\"x\"}],"
+            + "\"skipRows\":[null]}").andExpect(status().isBadRequest());
+    }
+
     @Test
     void aTypeColumnAddsByProductsAndWaste() throws Exception {
         String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
@@ -195,6 +251,13 @@ class BomLineImportIntegrationTest extends IntegrationTestSupport {
     @SafeVarargs
     private ResultActions importLines(String bomId, boolean dryRun, boolean replace, Map<String, String>... rows) throws Exception {
         return call(post("/boms/" + bomId + "/lines/import"), json(Map.of("dryRun", dryRun, "replace", replace, "rows", List.of(rows))));
+    }
+
+    @SafeVarargs
+    private ResultActions importLines(String bomId, boolean dryRun, boolean replace, List<Integer> skipRows,
+                                      Map<String, String>... rows) throws Exception {
+        return call(post("/boms/" + bomId + "/lines/import"), json(Map.of("dryRun", dryRun, "replace", replace,
+            "rows", List.of(rows), "skipRows", skipRows)));
     }
 
     private String item(String code, String unitId) throws Exception {

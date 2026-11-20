@@ -90,11 +90,14 @@ public class BomController {
         return ApiResponse.ok(bomService.addLine(bomId, request));
     }
 
-    /** Materials for a draft from a spreadsheet (docs/domain/item-import.md "BOM 자재"); all rows or none. */
+    /**
+     * Materials for a draft from a spreadsheet (docs/domain/item-import.md "BOM 자재"); all the rows not left out, or
+     * none.
+     */
     @PostMapping("/{bomId}/lines/import")
     public ApiResponse<BomLineImportResponse> importLines(
         @PathVariable("bomId") String bomId,
-        @RequestBody BomLineImportRequest request
+        @Valid @RequestBody BomLineImportRequest request
     ) {
         return ApiResponse.ok(bomLineImportService.importLines(bomId, request));
     }
