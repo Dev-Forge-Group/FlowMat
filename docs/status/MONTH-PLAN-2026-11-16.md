@@ -75,7 +75,7 @@
 | 1 | FlowMat이 편집기 패키지를 설치해 쓴다 | `lib/flowmat-editor` 사본과 그 고정 테스트가 없다. CI와 개발자 PC에서 설치된다. `modules.yml`의 editor가 `independent`다 |
 | 2 | 공용 작성자 표기 검사 | FlowMat·IBM-1st-Project·flowmat-editor·uniplace-ai가 `.github` 저장소의 재사용 워크플로를 부른다 |
 | 3 | 릴리스 후보 | 점검표를 모두 통과한 커밋에 태그가 있다. `CURRENT_CAPABILITIES.md`가 그 커밋 기준이다 |
-| 4 | 다음 달 후보 정리 | 3주차 측정 결과로 본 compute, 예약·반복 연동(FM-INT-002), AI로 풀 의사결정 한 가지(FM-AI)의 범위가 각각 한 단락으로 적혀 있다 |
+| 4 | ~~다음 달 후보 정리~~ | **끝(11-20).** 아래 [다음 달 후보](#다음-달-후보-11-20). 3주차 측정 결과로 본 compute, 예약·반복 연동(FM-INT-002), AI로 풀 의사결정 한 가지(FM-AI)의 범위가 각각 한 단락으로 적혀 있다 |
 | 5 | (여유가 있으면) uniplace-ai 전환 | AWS 신뢰 정책이 고쳐진 뒤 새 저장소의 이미지가 `latest`가 되고 IBM의 `AI/`가 지워진다 |
 
 ## 함께 가는 세 줄기 (2026-11-13 사용자 요청)
@@ -86,7 +86,7 @@
 |---|---|---|---|
 | **archify 온전 이식** | 없음. 프런트만 바뀌므로 업무 검증과 나란히 한다. 대조표는 [archify 뷰어 기능 대조](../editor/archify-parity.md)이고, 11-14에 연결 고정 링크(`#relation=`)부터 시작했다 | 2주차: archify 뷰어의 기능 전체와 FlowMat을 대조한 표. 2~4주차: 빠진 것을 이식 | 대조표의 모든 줄이 "있음" 또는 "가져오지 않음(이유)"이고, 이식한 것마다 브라우저 테스트가 있다 |
 | **Rust 마이그레이션** | 3주차의 성능 기준선과 입출력 스냅숏. 계산이 DB 트랜잭션과 섞여 있어 그대로는 옮길 수 없다 | 3~4주차: JPA 없는 `modules/compute`로 순수 계산을 나누고 기존 시뮬레이션 테스트와 결과를 맞춘다. 4주차: 계산 하나를 Rust로 구현해 같은 입력으로 비교. **끝(11-20):** 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 Rust로 구현했다. `ConditionExpression`은 이미 JPA 없는 순수 클래스라 `modules/compute`로 떼지 않았다. 고정 입력 1,641개(결과 28,161개, 오류 441개)에서 Java와 답·오류 문구·위치가 같고, WebAssembly 빌드도 같다. Rust가 시간 0.6배, 할당 0.7배지만 마이크로초 단위다([성능 기준선 §5](../operations/performance-baseline.md)) | Rust 구현이 스냅숏 입력 전부에서 Java와 같은 결과를 내고, 시간·메모리 비교가 기록돼 있다. 실제 전환은 다음 달 |
-| **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | ~~3주차: 기능 목록과 FlowMat 대응표~~ **끝(11-14)**: [SETTINGTOOL-FEATURE-MAP.md](SETTINGTOOL-FEATURE-MAP.md). 겹치는 것은 업무가 아니라 도구가 일하는 방식이다. 첫 기능 "가져오기에서 줄을 골라 적용"은 품목과 재고 가져오기에 들어갔다(11-14, [item-import](../domain/item-import.md) I13, [stock-import](../domain/stock-import.md) S12). BOM 자재 가져오기가 남았고, 외부 적용 뒤 검증 보고와 도면 배치는 다음 달 후보다 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
+| **optimized_setup 기능 가져오기** | 소스는 [Dev-Forge-Group/settingTool](https://github.com/Dev-Forge-Group/settingTool)(2026-11-14, Python·PyQt5, 약 111,000줄). 주차장 현장 설정 도구다 | ~~3주차: 기능 목록과 FlowMat 대응표~~ **끝(11-14)**: [SETTINGTOOL-FEATURE-MAP.md](SETTINGTOOL-FEATURE-MAP.md). 겹치는 것은 업무가 아니라 도구가 일하는 방식이다. 첫 기능 "가져오기에서 줄을 골라 적용"은 품목과 재고 가져오기에 들어갔다(11-14, [item-import](../domain/item-import.md) I13, [stock-import](../domain/stock-import.md) S12). BOM 자재 가져오기에도 들어갔다(11-20, [item-import](../domain/item-import.md) B1: 바꾸기에서 뺀 줄이 지금 자재면 바꾼 뒤 빠진다고 알린다). 외부 적용 뒤 검증 보고와 도면 배치는 다음 달 후보다 | 가져올 기능이 정해져 있고, 첫 기능이 테스트와 함께 들어가 있다 |
 
 **Rust의 범위(2026-11-14, 코드를 보고 정함): 계산만 옮긴다. 백엔드 전체는 옮기지 않는다.**
 
@@ -99,6 +99,16 @@
 - **(11-20 비교 뒤) 서버는 Java로 둔다.** 조건식 하나의 컴파일이 Java 2.5µs, Rust 1.6µs, 평가가 70ns와 45ns다. 아낄 수 있는 시간이 DB 왕복 하나보다 몇 자릿수 작다. Rust 구현의 쓸모는 WebAssembly로 편집기에서 서버와 같은 검사를 하는 것이고, 그 연결이 다음 달 후보다.
 
 네 줄기를 4주에 다 넣으면 빠듯하다. 밀릴 때 지키는 순서는 밑작업 → 두 여정과 릴리스 후보 → archify → compute와 Rust → optimized_setup이다.
+
+## 다음 달 후보 (11-20)
+
+4주차 4번이다. 세 가지 모두 시작 전에 ADR로 저장 위치와 범위를 정한다. 고르는 순서의 권장은 compute → FM-INT-002 → FM-AI다. 앞의 것일수록 이미 있는 코드에 기대고 결과를 재기 쉽다.
+
+**compute: 조건식 검사를 편집기에 넣는다.** 3주차에 잰 느린 곳(BOM 전개, MRP)은 N+1 질의였고 읽기를 묶어 풀었다. 11-20에 비교한 조건식 언어는 Rust가 Java의 0.6배 시간이지만 마이크로초 단위다([성능 기준선 §5](../operations/performance-baseline.md)). 그래서 계산 서비스를 따로 두거나 서버 계산을 Rust로 옮기지 않는다. 남는 쓸모는 하나다. [`compute/condition-expression`](../../compute/condition-expression/README.md)의 WebAssembly 빌드(gzip 68KB)를 편집기에 실어, 연결 조건과 포트 검증 규칙을 입력하는 중에 서버와 같은 문구로 같은 칸에 오류를 보이고, 포트 스키마에 없는 `attrs.<이름>`도 바로 알린다. 저장할 때 서버가 검사하는 것은 그대로 두고, 화면 검사는 먼저 알려 주는 일만 한다. 정할 것은 빌드 경로 하나다. 프런트 CI에 Rust를 더하거나, 빌드된 `.wasm`을 프런트에 넣고 compute CI가 같은 소스에서 같은 바이트가 나오는지 확인한다(권장: 후자, 프런트 빌드가 Rust를 몰라도 된다). 끝난 기준은 두 입력란의 브라우저 테스트와, 고정 입력 1,641개를 프런트 쪽에서도 돌리는 단위 테스트다. 다음 대상(`FlowRunGraph`의 경로 계산)은 편집기가 실행 전에 경로를 보여 줘야 할 때만 한다.
+
+**FM-INT-002: 예약·반복 연동.** 지금의 외부 HTTP 연동은 프로젝트별 프로필, Flow Run 단계의 요청 미리 보기·명시 실행·결과 적용이다. 사람이 단계를 실행할 때만 돈다. 다음 달에는 이것을 정해진 때에 반복해 돌린다. 연동 작업(`integration_job`: 프로필, 매핑, 방향 pull·push, 대상), 일정(`integration_schedule`: 프로젝트 시간대의 cron, 멈춤), 실행과 기록(`integration_run`, `integration_run_log`) 네 가지를 둔다. 실행마다 settingTool의 순서를 따른다([대조표](SETTINGTOOL-FEATURE-MAP.md) §4-2). 대상을 확인하고, 바뀐 것만 보내고, 다시 읽어 보낸 값과 맞는지 보고, 항목마다 성공·부분 성공·실패·확인 불가를 남긴다. 여러 인스턴스가 같은 실행을 두 번 잡지 않게 행 잠금으로 실행을 가져가고, 실행마다 재전송 키를 둔다. 기존 대상 정책(허용 목록, HTTPS, 사설 주소 차단)과 시간 제한 감시를 그대로 쓴다. 하지 않는 것은 범용 iPaaS와 사용자가 쓰는 스크립트다. 끝난 기준은 재고나 품목을 일정대로 가져오는 pull 작업 하나(미리 보기와 실행 기록 포함)와, 보낸 뒤 다시 읽어 검증하는 push 작업 하나가 실제 API 테스트로 도는 것이다.
+
+**FM-AI: 설비별 작업지시 순서.** 고를 의사결정은 생산 순서다. 입력이 이미 다 있다. 전환 시간 규칙과 속성 규칙, 설비 능력과 달력, 작업지시의 수량과 납기다. 비교할 기준도 있다. 부하표의 "전환 순서 제안"은 작업지시 8개까지 모든 순서를 보고, 넘으면 매번 전환이 가장 짧은 다음 품목을 고른다([설비 부하](../domain/equipment-load.md) Q3). 다음 달 범위는 설비 하나의 한 주 창에서 전환 시간과 납기 지연을 함께 줄이는 순서를 제안하는 것이다. 풀이는 최적화 풀이기(예: CP-SAT)로 하고 언어 모델은 쓰지 않는다. 벤치마크의 FM-AI-001·002를 따라 제안과 실행을 나눈다. 제안은 `recommendation`(입력 스냅숏, 풀이기와 버전, 결과, 근거, 상태, 승인자)으로 남는다. 적용은 사람이 승인한 뒤 기존 소유자 일정 변경(`POST /work-orders/{id}/reschedules`, 사유 필수)으로만 한다. 풀이기는 DB를 직접 고치지 않는다. 끝난 기준은 같은 입력 스냅숏 묶음에서 지금의 규칙보다 전환 시간과 지연의 합이 줄어든 것을 표로 보이는 것이다. 줄지 않으면 넣지 않는다.
 
 ## 이번 달에 하지 않는 것
 

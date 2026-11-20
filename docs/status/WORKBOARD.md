@@ -4,7 +4,7 @@
 
 ## 1. 진행 중
 
-> 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다.
+> 2026-11-20 리드: Rust 줄기의 "계산 하나를 Rust로 구현해 비교"가 끝났다. 조건식 언어를 [`compute/condition-expression`](../../compute/condition-expression/README.md)에 구현했고, Java가 답을 적은 고정 입력 1,641개에서 Rust와 그 WebAssembly 빌드가 같은 답·오류 문구·위치를 낸다. Rust가 0.6배 시간이지만 마이크로초 단위라 서버는 Java로 둔다. 쓸 곳은 편집기의 입력 중 검사이고 다음 달 후보다([성능 기준선 §5](../operations/performance-baseline.md)). CI에 `Compute (Rust)` 워크플로가 생겼다. 같은 날 settingTool 첫 기능의 남은 BOM 자재 가져오기에 줄 고르기를 넣었고([item-import](../domain/item-import.md) B1), 4주차 4번 [다음 달 후보](MONTH-PLAN-2026-11-16.md#다음-달-후보-11-20)를 적었다.
 
 > 2026-11-16 리드: [월간 개발 계획](MONTH-PLAN-2026-11-16.md)의 1~3주차 일이 `main`에 들어갔다(PR #96–#108, 각 PR 본문이 기록이다).
 > - **1주차:** release-validation 합치기, Dependabot 정리, 실 API 스펙의 숫자 접미사(#100).
