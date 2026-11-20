@@ -6,12 +6,14 @@ import {
   toggleLensKind,
 } from './canvasReadingModel'
 import { readingGraph, type ReachDirection } from './graphReading'
+import type { GuidedChapter } from './guidedViews'
 import { processRelations } from './processRelations'
 import {
   formatReadingHash, parseChangesParam, parseReadingHash, parseRunParam, withViewParams, type ReadingState,
 } from './readingHash'
 
 const NO_KINDS: readonly string[] = []
+const NO_CHAPTERS: readonly GuidedChapter[] = []
 
 /**
  * Reading the process canvas: a process with its neighbours, everything before or after it, the way between two, or one
@@ -23,6 +25,7 @@ const NO_KINDS: readonly string[] = []
 export function useCanvasReading(
   canvas: { nodes: CanvasNodeViewModel[]; edges: CanvasEdgeViewModel[] },
   bringIntoView?: (processIds: string[]) => void,
+  chapters: readonly GuidedChapter[] = NO_CHAPTERS,
 ) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -30,9 +33,11 @@ export function useCanvasReading(
   const names = useMemo(() => new Map(canvas.nodes.map((node) => [node.processId, node.name])), [canvas.nodes])
   const known = useMemo(() => new Set(graph.nodeIds), [graph])
   const knownConnections = useMemo(() => new Set(graph.edges.map((edge) => edge.id)), [graph])
-  const state = useMemo(() => parseReadingHash(location.hash, known, knownConnections), [location.hash, known, knownConnections])
+  const knownViews = useMemo(() => new Set(chapters.map((chapter) => chapter.id)), [chapters])
+  const state = useMemo(() => parseReadingHash(location.hash, known, knownConnections, knownViews),
+    [location.hash, known, knownConnections, knownViews])
   const nameOf = useCallback((processId: string) => names.get(processId) ?? processId, [names])
-  const view = useMemo(() => (state ? readingView(graph, state, nameOf) : null), [graph, state, nameOf])
+  const view = useMemo(() => (state ? readingView(graph, state, nameOf, chapters) : null), [graph, state, nameOf, chapters])
   // undefined: not picking a route; null: waiting for its start; an id: waiting for its end. Picking belongs to the reading
   // the address held when it began, so a link opened in this tab or Back, which names another reading, ends it.
   const readingKey = formatReadingHash(state)
@@ -60,8 +65,8 @@ export function useCanvasReading(
 
   const show = useCallback((next: ReadingState) => {
     write(next)
-    reveal(readingTargets(graph, next))
-  }, [graph, reveal, write])
+    reveal(readingTargets(graph, next, chapters))
+  }, [chapters, graph, reveal, write])
 
   const cancelRoute = useCallback(() => {
     setPicking(undefined)
@@ -141,6 +146,17 @@ export function useCanvasReading(
     return null
   }, [cancelRoute, lensKinds, show, write])
 
+  /**
+   * Opens a chapter, bringing its processes into view, or moves a playing chapter to its next process; the camera moves
+   * only when the chapter changes.
+   */
+  const showChapter = useCallback((viewId: string, beat: string | null = null) => {
+    cancelRoute()
+    const next: ReadingState = { kind: 'view', viewId, beat }
+    if (state?.kind === 'view' && state.viewId === viewId) write(next)
+    else show(next)
+  }, [cancelRoute, show, state, write])
+
   const counts = useCallback((processId: string) => reachCounts(graph, processId), [graph])
   const knows = useCallback((processId: string) => known.has(processId), [known])
   const relationsOf = useCallback((processId: string) => processRelations(canvas.edges, processId, known), [canvas.edges, known])
@@ -181,6 +197,12 @@ export function useCanvasReading(
     run: { id: runId, show: showRun },
     /** The published revision the draft is compared with (its id from the address), and a way to compare with another or none. */
     changes: { id: changesId, show: showChanges },
+    /** The guided view chapter being read and the process it has reached, and a way to open one or move it on. */
+    guide: {
+      viewId: state?.kind === 'view' ? state.viewId : null,
+      beat: state?.kind === 'view' ? state.beat : null,
+      show: showChapter,
+    },
     nameOf,
     knows,
     counts,

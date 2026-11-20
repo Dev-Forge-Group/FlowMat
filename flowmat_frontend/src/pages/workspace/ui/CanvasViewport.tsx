@@ -55,6 +55,7 @@ import { motionMimeType, motionScene, type MotionEdgeInput } from '../model/work
 import { recordMotion } from './recordMotion'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
+import { lockDrag } from '../model/axisLock'
 import { reuseUnchangedNodes } from '../model/reuseUnchangedNodes'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
@@ -630,6 +631,8 @@ interface Props {
   }): void
   onFitViewReady?(fn: () => void): void
   onSelectAllReady?(fn: () => void): void
+  /** The processes selected on the canvas, whenever the selection changes (for a guided view's new chapter). */
+  onProcessSelectionChange?(processIds: string[]): void
   onAnnotationSelectionReady?(getSelectedAnnotationIds: () => string[]): void
   onExportReady?(fn: PngExport): void
   /** A way to download the workflow as a vector picture (workflowSvg.ts). */
@@ -781,6 +784,7 @@ export function CanvasViewport({
   onConnectDropOnCanvas,
   onFitViewReady,
   onSelectAllReady,
+  onProcessSelectionChange,
   onAnnotationSelectionReady,
   onExportReady,
   onSvgExportReady,
@@ -1028,8 +1032,37 @@ export function CanvasViewport({
     setLocalEdges(toRfEdges(edges, selectedEdgeId))
   }, [edges, selectedEdgeId])
 
+  // settingTool's Shift lock (axisLock.ts): where each dragged process was picked up, and whether Shift is held now.
+  const dragStartsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const shiftRef = useRef(false)
+  useEffect(() => {
+    const track = (event: KeyboardEvent | PointerEvent) => { shiftRef.current = event.shiftKey }
+    const release = () => { shiftRef.current = false }
+    window.addEventListener('keydown', track, true)
+    window.addEventListener('keyup', track, true)
+    window.addEventListener('pointermove', track, true)
+    window.addEventListener('blur', release)
+    return () => {
+      window.removeEventListener('keydown', track, true)
+      window.removeEventListener('keyup', track, true)
+      window.removeEventListener('pointermove', track, true)
+      window.removeEventListener('blur', release)
+    }
+  }, [])
+
   const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
+    (incoming: NodeChange[]) => {
+      // With Shift held, a drag keeps to the axis it has moved further along, every dragged process alike.
+      let changes = incoming
+      if (shiftRef.current && dragStartsRef.current.size > 0) {
+        const moving = incoming.flatMap((change) => (change.type === 'position' && change.position
+          ? [{ id: change.id, position: change.position }] : []))
+        const locked = lockDrag(dragStartsRef.current, moving)
+        if (locked.size > 0) {
+          changes = incoming.map((change) => (change.type === 'position' && locked.has(change.id)
+            ? { ...change, position: locked.get(change.id)! } : change))
+        }
+      }
       setLocalNodes((nds) => {
         const updated = applyNodeChanges(changes, nds as unknown as Node[]) as unknown as RfNode[]
         localNodesRef.current = updated
@@ -1073,8 +1106,13 @@ export function CanvasViewport({
     }
   }, [sendNodeMove])
 
+  const handleNodeDragStart = useCallback((_event: unknown, _node: Node, dragged: Node[]) => {
+    dragStartsRef.current = new Map(dragged.map((one) => [one.id, { x: one.position.x, y: one.position.y }]))
+  }, [])
+
   const handleNodeDragStop = useCallback(() => {
     setSnapGuides([])
+    dragStartsRef.current = new Map()
   }, [])
 
   const handleConnectStart: OnConnectStart = useCallback(
@@ -1412,12 +1450,14 @@ export function CanvasViewport({
         }}
         onSelectionChange={({ nodes: selNodes }) => {
           if (selNodes.length > 1) setMultiSelect()
+          onProcessSelectionChange?.(selNodes.filter((node) => node.type === 'flowmatNode').map((node) => node.id))
         }}
         onEdgeClick={(_e, edge) => {
           selectEdge(edge.id)
           onEdgeSelect(edge.id)
         }}
         onNodeDrag={handleNodeDrag as OnNodeDrag}
+        onNodeDragStart={handleNodeDragStart as OnNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onConnectStart={handleConnectStart}
         onConnect={handleConnect}

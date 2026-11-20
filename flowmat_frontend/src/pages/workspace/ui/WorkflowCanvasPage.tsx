@@ -38,6 +38,9 @@ import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
 import { ExportMenu, type ExportChoice, type MotionAvailability } from './ExportMenu'
 import { ProcessIndex } from './ProcessIndex'
+import { GuidedViewsPanel } from './GuidedViewsPanel'
+import { useGuidedViewsQuery } from '../../../entities/workflow/api/useGuidedViews'
+import type { GuidedChapter } from '../model/guidedViews'
 import type { ExportOutcome, MotionExport, PngExport, ShareCardExport, SvgExport } from './CanvasViewport'
 import { motionMimeType } from '../model/workflowMotion'
 import { shareCardText } from '../model/shareCard'
@@ -999,13 +1002,28 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     const measure = layoutRef.current
     setLayoutFound(measure ? layoutWarnings(measure()) : null)
   }, [])
-  const reading = useCanvasReading(canvas, revealProcesses)
+  // archify's guided views: the workflow's chapters, stored with it (ADR-037). Until they load, a `#view=` link waits.
+  const guidedViews = useGuidedViewsQuery(canvas.workflow.workflowId)
+  const chapters = useMemo((): GuidedChapter[] => (guidedViews.data ?? []).map((view) => ({ id: view.guidedViewId,
+    label: view.label, note: view.note, focus: view.focusProcessIds, version: view.version })), [guidedViews.data])
+  // The processes selected on the canvas, in reading order (top to bottom, then left to right), for a new chapter.
+  const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([])
+  const selectedInOrder = useMemo(() => {
+    const at = new Map(canvas.nodes.map((node) => [node.processId, node.position]))
+    return selectedProcessIds.filter((id) => at.has(id)).sort((a, b) =>
+      (at.get(a)!.y - at.get(b)!.y) || (at.get(a)!.x - at.get(b)!.x))
+  }, [canvas.nodes, selectedProcessIds])
+  const handleProcessSelection = useCallback((ids: string[]) => {
+    setSelectedProcessIds((current) => (current.length === ids.length && current.every((id, index) => id === ids[index])
+      ? current : ids))
+  }, [])
+  const reading = useCanvasReading(canvas, revealProcesses, chapters)
   const readingRef = useRef(reading)
   readingRef.current = reading
   // A production run shown over the canvas (address `run=`): each process's mark from its latest step; view only.
   const canvasProcessIds = useMemo(() => new Set(canvas.nodes.map((node) => node.processId)), [canvas.nodes])
   // archify keeps one reading panel open at a time: the finder, the lens, the guide, or FlowMat's run and revision pickers.
-  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | 'index' | null>(null)
+  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | 'index' | 'views' | null>(null)
   const runView = useRunOverlay(canvas.workflow.workflowId, reading.run.id, canvasProcessIds, panel === 'runs')
   const changesView = useRevisionChanges(canvas.workflow.workflowId, reading.changes.id, canvas)
   // archify's view controls: the semantic radar (overview map), the camera stepper and the zoom it shows.
@@ -1903,6 +1921,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onDeleteAnnotations={handleDeleteAnnotations}
               onFitViewReady={(fn) => { fitViewRef.current = fn }}
               onSelectAllReady={(fn) => { selectAllRef.current = fn }}
+              onProcessSelectionChange={handleProcessSelection}
               onExportReady={(fn) => { exportPngRef.current = fn }}
               onSvgExportReady={(fn) => { exportSvgRef.current = fn }}
               onShareCardExportReady={(fn) => { exportShareCardRef.current = fn }}
@@ -1990,6 +2009,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             runsActive={reading.run.id != null} onRuns={() => setPanel((open) => (open === 'runs' ? null : 'runs'))}
             changesActive={reading.changes.id != null}
             indexOpen={panel === 'index'} onIndex={() => setPanel((open) => (open === 'index' ? null : 'index'))}
+            viewsOpen={panel === 'views'} onViews={() => setPanel((open) => (open === 'views' ? null : 'views'))}
             onChanges={() => setPanel((open) => (open === 'changes' ? null : 'changes'))}
             onFind={() => setPanel('finder')} onGuide={() => {
               setMapOpen(false)
@@ -2025,8 +2045,15 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               status={reading.state?.kind === 'lens' ? reading.view?.text ?? null : null}
               onToggle={reading.lens.toggle} onClear={reading.clear} onClose={() => setPanel(null)} />
           )}
+          {panel === 'views' && (
+            <GuidedViewsPanel workflowId={canvas.workflow.workflowId} chapters={chapters} activeId={reading.guide.viewId}
+              beat={reading.guide.beat} known={reading.knows} nameOf={reading.nameOf} canEdit={canEditAnnotations}
+              selectedProcessIds={selectedInOrder} onShow={reading.guide.show} onClear={reading.clear}
+              onClose={() => setPanel(null)} />
+          )}
           {panel === 'index' && (
             <ProcessIndex nodes={canvas.nodes} currentId={passportProcessId} previewId={intentShown?.id ?? null}
+              onRename={canEditAnnotations ? (processId, name) => void updateNode({ processId, processName: name }) : undefined}
               onPreview={(processId) => readingRef.current.intent.show(processId)}
               onClose={() => setPanel(null)}
               onChoose={(processId) => {

@@ -54,6 +54,19 @@ describe('reading hash', () => {
     expect(parseReadingHash('#focus=mix&changes=rev3', known)).toEqual({ kind: 'focus', processId: 'mix', reach: null })
   })
 
+  it('writes and reads back a guided view chapter and the process it has reached', () => {
+    const views = new Set(['ch-1'])
+    expect(formatReadingHash({ kind: 'view', viewId: 'ch-1', beat: null })).toBe('#view=ch-1')
+    expect(formatReadingHash({ kind: 'view', viewId: 'ch 1', beat: 'p1' })).toBe('#view=ch%201&beat=p1')
+    expect(parseReadingHash('#view=ch-1&beat=bake', known, new Set(), views)).toEqual({ kind: 'view', viewId: 'ch-1', beat: 'bake' })
+    // A beat that is not a process is dropped and the chapter kept; a chapter the workflow does not have is no reading.
+    expect(parseReadingHash('#view=ch-1&beat=gone', known, new Set(), views)).toEqual({ kind: 'view', viewId: 'ch-1', beat: null })
+    expect(parseReadingHash('#view=ch-2', known, new Set(), views)).toBeNull()
+    expect(parseReadingHash('#view=ch-1', known)).toBeNull()
+    // The run beside it stays readable on its own.
+    expect(withViewParams('#view=ch-1&beat=p1', 'run-9', null)).toBe('#view=ch-1&beat=p1&run=run-9')
+  })
+
   it('reads anything it does not fully understand as no reading', () => {
     for (const hash of ['', '#', '#other=1', '#focus=', '#focus=gone', '#focus=mix&reach=sideways', '#route=mix', '#route=mix~mix',
       '#route=mix~gone', '#route=a~b~c', '#lens=', '#lens=robot', '#lens=storage~storage', '#lens=input~output~storage',

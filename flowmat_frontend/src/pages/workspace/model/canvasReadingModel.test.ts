@@ -183,3 +183,27 @@ describe('routePickText and routePickError', () => {
       .toBe('Wash cannot be reached from Mix along the arrows. Pick a highlighted process.')
   })
 })
+
+describe('a guided view chapter', () => {
+  const chapters = [
+    { id: 'ch-1', label: 'Make it', note: null, focus: ['mix', 'bake', 'gone'], version: 1 },
+    { id: 'ch-2', label: 'Lost', note: null, focus: ['gone'], version: 1 },
+  ]
+
+  it('shows its processes and the connections between them, with the process it has reached', () => {
+    const view = readingView(graph, { kind: 'view', viewId: 'ch-1', beat: 'bake' }, nameOf, chapters)!
+    expect([...view.highlight!.nodeIds]).toEqual(['mix', 'bake'])
+    expect([...view.highlight!.edgeIds]).toEqual(['c1'])
+    expect(view.highlight!.origin).toBe('bake')
+    expect(view.text).toBe('Chapter 1 of 2: Make it · 2 processes · at Bake')
+    expect(view.steps).toEqual(['mix', 'bake'])
+    expect(readingTargets(graph, { kind: 'view', viewId: 'ch-1', beat: null }, chapters)).toEqual(['mix', 'bake'])
+  })
+
+  it('says so when none of its processes are left, and reads an unknown chapter as nothing', () => {
+    const lost = readingView(graph, { kind: 'view', viewId: 'ch-2', beat: null }, nameOf, chapters)!
+    expect(lost.highlight).toBeNull()
+    expect(lost.text).toContain('none of its processes are on the canvas')
+    expect(readingView(graph, { kind: 'view', viewId: 'nope', beat: null }, nameOf, chapters)).toBeNull()
+  })
+})

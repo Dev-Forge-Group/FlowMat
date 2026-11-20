@@ -1514,6 +1514,18 @@
 .process-index-head strong { color: var(--ax-text); font-size: 0.78rem; }
 .process-index-head small { color: var(--ax-text-faint); font-size: 0.62rem; }
 .process-index-close { margin-left: auto; color: var(--ax-text-faint); }
+.process-index-rename { margin-left: auto; color: var(--ax-text-faint); font-size: 0.62rem; }
+.process-index-rename + .process-index-close { margin-left: 0.25rem; }
+.process-index-rename-input {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--ax-frontend-stroke);
+  border-radius: 0.45rem;
+  background: var(--ax-toolbar-menu-bg);
+  color: var(--ax-text);
+  font: inherit;
+  font-size: 0.74rem;
+}
 .process-index-list { overflow-y: auto; padding: 0.3rem; }
 .process-index-empty { margin: 0.5rem; color: var(--ax-text-faint); font-size: 0.7rem; }
 .process-index-heading {
@@ -1559,6 +1571,52 @@
 .process-index-item[data-kind="join"],
 .process-index-item[data-kind="split"] { --index-color: var(--ax-messagebus-stroke); }
 .process-index-item[data-kind="exclusive"] { --index-color: var(--ax-security-stroke); }
+
+/* ---------- Guided views (archify guided-views.js): chapters in the index's panel, a caption and the controls ---------- */
+.guided-views-chapters { display: grid; gap: 0.1rem; margin: 0; padding: 0; list-style: none; }
+.guided-views-chapter { grid-template-columns: 1.15rem minmax(0, 1fr); }
+.guided-views-number {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ax-frontend-stroke) 18%, transparent);
+  color: var(--ax-text);
+  font-size: 0.6rem;
+  font-weight: 650;
+}
+.guided-views-caption {
+  margin: 0.4rem 0.3rem 0.1rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--ax-frontend-stroke) 10%, transparent);
+}
+.guided-views-caption strong { display: block; color: var(--ax-text); font-size: 0.74rem; }
+.guided-views-caption p { margin: 0.2rem 0 0; color: var(--ax-text-muted); font-size: 0.68rem; }
+.guided-views-caption .guided-views-beat { color: var(--ax-text); font-weight: 600; }
+.guided-views-controls { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.3rem; }
+.guided-views-controls button {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ax-panel-border);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--ax-toolbar-text);
+  font-size: 0.68rem;
+}
+.guided-views-controls button:hover:not(:disabled) { background: var(--ax-toolbar-hover); }
+.guided-views-controls button:disabled { opacity: 0.45; }
+.guided-views-controls button[aria-pressed="true"] {
+  border-color: var(--ax-frontend-stroke);
+  background: color-mix(in srgb, var(--ax-frontend-stroke) 14%, transparent);
+}
+.guided-views-form { display: grid; gap: 0.35rem; padding: 0.3rem; color: var(--ax-text); font-size: 0.7rem; }
+.guided-views-form label { display: grid; gap: 0.15rem; }
+.guided-views-form small { color: var(--ax-text-muted); }
+.guided-views-form input,
+.guided-views-form textarea { font: inherit; }
+.guided-views-message { margin: 0.3rem; color: #047857; font-size: 0.68rem; }
+.guided-views-message[data-error] { color: #dc2626; }
 
 /* archify's export menu shares the style menu's panel; its outputs come in sections. */
 /* The menu rises from the view controls; on a short canvas it scrolls rather than run up under the ribbon. */

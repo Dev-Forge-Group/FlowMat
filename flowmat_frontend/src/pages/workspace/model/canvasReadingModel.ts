@@ -1,5 +1,6 @@
 import { getWorkflowNodeDefinition, getWorkflowPaletteDefinitions } from '../../../entities/workflow/model/nodeCatalog'
 import { neighbourhood, reach, route, type ReadingGraph } from './graphReading'
+import { liveFocus, type GuidedChapter } from './guidedViews'
 import type { ReadingState } from './readingHash'
 
 export type ReadingTone = 'focus' | 'upstream' | 'downstream' | 'route' | 'candidate' | 'lens'
@@ -29,8 +30,14 @@ const count = (value: number, one: string, many = `${one}s`) => `${value} ${valu
  * What a reading shows and says, from the saved graph only: a process with its neighbours, every process before or after
  * it, or the way between two processes. Null for a process the graph does not have.
  */
-export function readingView(graph: ReadingGraph, state: ReadingState, nameOf: (processId: string) => string): ReadingView | null {
+export function readingView(
+  graph: ReadingGraph,
+  state: ReadingState,
+  nameOf: (processId: string) => string,
+  chapters: readonly GuidedChapter[] = [],
+): ReadingView | null {
   if (state.kind === 'lens') return lensView(graph, state.kinds)
+  if (state.kind === 'view') return chapterView(graph, state, nameOf, chapters)
   if (state.kind === 'relation') {
     const edge = graph.edges.find((candidate) => candidate.id === state.connectionId)
     if (!edge) return null
@@ -83,7 +90,11 @@ export function readingView(graph: ReadingGraph, state: ReadingState, nameOf: (p
  * The processes a reading is about, to bring into view: a route (or its two ends when there is none), a reach, a
  * neighbourhood, or a lens with what is nearby.
  */
-export function readingTargets(graph: ReadingGraph, state: ReadingState): string[] {
+export function readingTargets(graph: ReadingGraph, state: ReadingState, chapters: readonly GuidedChapter[] = []): string[] {
+  if (state.kind === 'view') {
+    const chapter = chapters.find((candidate) => candidate.id === state.viewId)
+    return chapter ? liveFocus(chapter, (id) => graph.nodeIds.includes(id)) : []
+  }
   if (state.kind === 'lens') {
     const shown = lensView(graph, state.kinds).highlight
     return shown ? [...shown.nodeIds, ...(shown.nearIds ?? [])] : []
@@ -95,6 +106,32 @@ export function readingTargets(graph: ReadingGraph, state: ReadingState): string
   }
   if (!state.reach) return neighbourhood(graph, state.processId).nodeIds
   return reach(graph, state.processId, state.reach)?.nodeIds ?? []
+}
+
+/**
+ * A guided view's chapter: its processes and the connections between them strong, the process a playing chapter has
+ * reached marked as the origin. archify's chapter caption: "2 / 4 · Payment path".
+ */
+function chapterView(
+  graph: ReadingGraph,
+  state: Extract<ReadingState, { kind: 'view' }>,
+  nameOf: (processId: string) => string,
+  chapters: readonly GuidedChapter[],
+): ReadingView | null {
+  const index = chapters.findIndex((chapter) => chapter.id === state.viewId)
+  if (index < 0) return null
+  const chapter = chapters[index]
+  const focus = liveFocus(chapter, (id) => graph.nodeIds.includes(id))
+  const place = `Chapter ${index + 1} of ${chapters.length}: ${chapter.label}`
+  if (focus.length === 0) return { highlight: null, text: `${place} · none of its processes are on the canvas any more`, steps: [] }
+  const members = new Set(focus)
+  const between = graph.edges.filter((edge) => members.has(edge.from) && members.has(edge.to))
+  const beat = state.beat && members.has(state.beat) ? state.beat : null
+  return {
+    highlight: { nodeIds: members, edgeIds: new Set(between.map((edge) => edge.id)), tone: 'focus', origin: beat },
+    text: `${place} · ${count(focus.length, 'process', 'processes')}${beat ? ` · at ${nameOf(beat)}` : ''}`,
+    steps: focus,
+  }
 }
 
 /**
