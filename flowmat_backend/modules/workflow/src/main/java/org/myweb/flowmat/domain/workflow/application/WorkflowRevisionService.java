@@ -3,8 +3,8 @@ package org.myweb.flowmat.domain.workflow.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.OffsetDateTime;
@@ -13,8 +13,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.project.application.publicapi.ProjectAccess;
 import org.myweb.flowmat.domain.workflow.annotation.application.CanvasAnnotationService;
-import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionPolicyResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionBindingResponse;
+import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionPolicyResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSnapshot;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSummaryResponse;
@@ -25,6 +25,7 @@ import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
 import org.myweb.flowmat.domain.workflow.domain.entity.WorkflowRevision;
 import org.myweb.flowmat.domain.workflow.editor.application.WorkflowEditorDocumentService;
+import org.myweb.flowmat.domain.workflow.guide.application.GuidedViewService;
 import org.myweb.flowmat.domain.workflow.repository.ProcessConnectionRepository;
 import org.myweb.flowmat.domain.workflow.repository.ProcessIoRepository;
 import org.myweb.flowmat.domain.workflow.repository.ProcessRepository;
@@ -60,6 +61,7 @@ public class WorkflowRevisionService {
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final IdGenerator idGenerator;
+    private final GuidedViewService guidedViewService;
     private final ProcessExecutionBindingService bindingService;
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -105,7 +107,8 @@ public class WorkflowRevisionService {
                     process.getRetryLimit(), process.getRetryDelaySeconds(), process.getRetryBackoff(),
                     process.getMaxRetryDelaySeconds(), process.getConcurrencyLimit()))
                 .toList(),
-            bindings
+            bindings,
+            guidedViewService.snapshot(workflowId)
         );
 
         WorkflowRevision revision = new WorkflowRevision();

@@ -25,6 +25,7 @@
 - 연결
 - 주석
 - 도형 편집 문서
+- 안내 보기의 장(`guidedViews`, 2026-11-20, [ADR-037](../architecture/adr/ADR-037-guided-views.md)). 장이 없으면 필드가 없다. 그 전에 발행한 판에도 없다
 
 세션 상태와 Redis 커서는 넣지 않는다.
 

@@ -30,7 +30,7 @@ archify는 Apache-2.0이다. 가져온 코드와 스타일의 고지는 [THIRD_P
 | └ 6초 움직임 WebM | `export.js` | 내보내기 메뉴의 WebM · 6 seconds(`workflowMotion`, `recordMotion`). archify처럼 SVG 그림을 한 번 그리고, 그 위에 연결마다 신호 점이 캔버스가 그린 경로를 따라 달리는 장면을 프레임마다 그려 브라우저 `MediaRecorder`로 녹화한다(가로 최대 1280, 30fps). archify는 다이어그램에 적힌 단계 번호로 순서를 정하지만 FlowMat은 흐름에서 정한다: 신호가 공정에 닿으면 그 공정이 빛나고 다음 연결의 신호가 떠난다(이어달리기). 6초에 다 들어가지 않는 깊은 워크플로는 간격을 줄여 신호가 겹치고, 얕으면 흐름이 되풀이된다. 연결이 없는 공정은 빛나지 않는다. 신호는 경로 카드의 하늘색이다. 화면의 Live/Still과 무관하다(파일을 만들 뿐 화면은 움직이지 않는다). 연결이 없거나 녹화할 수 없는 브라우저면 메뉴에서 꺼지고 이유를 적는다 | 있음(2026-11-20) |
 | 공정 목록(Node index) | `node-outline.js` | 보기 도구의 INDEX, `ProcessIndex`. 레인 대신 공정 종류로 묶는다 | 있음(2026-11-14) |
 | 옆 패널(rail: 메모와 목록, 아래로 옮기기·접기) | 셸의 rail | 목록은 다른 읽기 패널처럼 캔버스 위에 뜬다 | 가져오지 않음: FlowMat은 오른쪽 인스펙터가 옆 패널 자리이고, archify의 메모(notes)에 해당하는 내용이 없다 |
-| **안내 보기(Guided views: 장마다 보기·재생·자막·장 링크)** | `guided-views.js` | 저장 위치는 [ADR-037](../architecture/adr/ADR-037-guided-views.md)(새 표, 발행 스냅숏에 포함) | 없음(ADR 결정 2026-11-20, 구현 전) |
+| **안내 보기(Guided views: 장마다 보기·재생·자막·장 링크)** | `guided-views.js` | 저장 위치는 [ADR-037](../architecture/adr/ADR-037-guided-views.md)(새 표, 발행 스냅숏에 포함). 서버 API는 2026-11-20(`/workflows/{id}/guided-views`) | 없음(서버만 있음, 화면 남음) |
 | 테마 전환 | 셸(`T`) | 머리글의 `ThemeModeControl` | 있음. `T` 단축키는 가져오지 않음: FlowMat에서 `T`는 글상자 도구다 |
 | 패스포트의 소스 근거(검증된 저장소·파일 링크) | `focus.js` | | 가져오지 않음: FlowMat 공정에는 소스 근거가 없다. 공정의 설명·작업 지침이 같은 자리에 맞으면 따로 정한다 |
 | 트리 펼치기·접기 | `tree-branches.js` | | 가져오지 않음: 트리 다이어그램 전용이고 FlowMat 그래프는 트리가 아니다 |
