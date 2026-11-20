@@ -29,6 +29,7 @@ FlowMat은 업종이 아니라 흐름을 모델링하고 실행한다. 제조·�
 | BOM 대체 자재 | [ADR-032](adr/ADR-032-bom-substitute-materials.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안) |
 | BOM 선택 자재 | [ADR-033](adr/ADR-033-bom-optional-materials.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안, V133 개발 DB 미적용) |
 | BOM 줄 실제 손실 집계 | [ADR-034](adr/ADR-034-bom-scrap-performance.md) | **Accepted**(2026-11-02, 2026-10-24 사용자 위임으로 권장안) |
+| 워크플로 안내 보기의 장 저장 | [ADR-037](adr/ADR-037-guided-views.md) | **Accepted**(2026-11-20, 2026-10-24 사용자 위임으로 권장안 A, 구현 전) |
 
 ADR-001~003(Architecture Decision Freeze)과 재고·BOM·LOT 계약의 구현 결정(D2)은 별개의 결정 트랙이다. D2가 남아 있어도 아키텍처 결정을 막지 않는다([WORKBOARD](../status/WORKBOARD.md) §3).
 
