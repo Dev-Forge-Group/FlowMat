@@ -1412,6 +1412,12 @@ code {
   text-align: left;
 }
 
+/* A node's default handle when it has ports (CanvasNode.tsx): there for connections saved without ports, not shown. */
+.react-flow__handle.canvas-node__default-handle--quiet {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* The check as drawn on the canvas (issueMarks.ts): a count on each process and connection it has something to say
    about, red with errors, amber with warnings only. Pictures of the workflow leave it out. */
 .canvas-issue-mark {

@@ -340,8 +340,14 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
         </div>
       )}
 
-      {node.inputs.length === 0 && <Handle type="target" position={Position.Left} id="in-default" />}
-      {node.outputs.length === 0 && <Handle type="source" position={Position.Right} id="out-default" />}
+      {/* The default handles stay when a node has ports, quiet and not for drawing new lines, so a connection saved
+          without ports still has an end to be drawn to. */}
+      <Handle type="target" position={Position.Left} id="in-default"
+        isConnectable={node.inputs.length === 0}
+        className={node.inputs.length === 0 ? undefined : 'canvas-node__default-handle--quiet'} />
+      <Handle type="source" position={Position.Right} id="out-default"
+        isConnectable={node.outputs.length === 0}
+        className={node.outputs.length === 0 ? undefined : 'canvas-node__default-handle--quiet'} />
     </div>
     </>
   )
