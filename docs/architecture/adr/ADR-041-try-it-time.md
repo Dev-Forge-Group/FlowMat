@@ -25,6 +25,7 @@
    - `after(spans, from, working)`: `from`부터 구간을 쌓아 `working`이 지난 때. 구간을 정확히 채우면 그 구간의 끝이다.
    - `intersect(one, other)`: 겹치는 구간.
    조회(작업지시, 인력, 설비 달력)와 7·31·366일 넓히기는 그대로 둔다. 기존 근무 시간 통합 테스트가 같은 답을 내는지로 확인한다.
+   - 자리: 처음에는 `production`(`ProductionRunWorkingTime` 옆)에 둔다. `FlowRunSchedule`(결정 4)은 라우터가 있는 `flowrun`에 생기는데, `flowrun`은 `production`·`workforce`에 의존하지 않는다(코드 의존은 `production → flowrun`). 그래서 `FlowRunSchedule`을 쓸 때 `WorkingStretches`를 `flowrun`의 공개 계약(`publicapi`)으로 옮기고 구간 타입(`Stretch`)을 함께 둔다. `production`은 인력·설비 구간을 그 타입으로 바꿔 넘긴다. 모듈 경계 테스트와 `modules.yml`의 의존은 바뀌지 않는다.
 4. **Java가 답을 적는다.** 그래프 실행은 시스템 시계로 단계의 끝을 적으므로, 서버에서 실제로 돌린 시각은 다시 돌리면 달라진다. 그래서 답은 두 겹으로 묶는다.
    - **순수 함수 `FlowRunSchedule`.** 라우터가 쓰는 규칙을 그대로 모은다. 끝난 때(게이트웨이는 받은 때) + 지연, 근무 시간 지연은 `WorkingStretches.afterWorking`, 합류는 가장 늦은 도착, 근무 밖이면 `WorkingStretches.firstStart`, 마이크로초로 자르기다. 고정 입력 `time.json`의 답은 이 함수가 그래프, 시작 시각, 구간, 입력에서 낸다. 사례에는 구간 안, 구간 밖에서 기다림, 근무 시간 지연이 구간 여럿에 걸침, 구간 끝에서 정확히 끝남, 구간 없음, 오프셋이 바뀌는 구간, 소수 초를 넣는다.
    - **서버와 같은지.** 통합 테스트가 생산 실행에 묶인 그래프 실행을 실제로 돌린다. 각 단계의 실제 끝 시각과 그 작업지시의 구간을 `FlowRunSchedule`에 넣어, 라우터가 적은 `readyAt`·`scheduledAt`과 같은지 본다. 시계를 고정하지 않아도 된다.
