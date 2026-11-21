@@ -14,6 +14,7 @@ import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
 import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
 import { LiveValidation } from './LiveValidation'
+import { TryFlowPanel } from './TryFlowPanel'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
@@ -1869,6 +1870,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
       </section>
 
       <LiveValidation report={liveValidation} nameOf={reading.nameOf} onSelect={selectIssue} />
+      <TryFlowPanel canvas={canvas} nameOf={reading.nameOf} onSelectProcess={selectNode} />
 
       {workspaceMessage && (
         <div

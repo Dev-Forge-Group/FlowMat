@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const module = process.argv[2] ?? join(root, 'target/wasm32-unknown-unknown/release/flowmat_flow_kernel.wasm')
 const { instance } = await WebAssembly.instantiate(readFileSync(module))
-const { memory, alloc, dealloc, validate, route } = instance.exports
+const { memory, alloc, dealloc, validate, route, walk } = instance.exports
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -64,3 +64,7 @@ compare('validation.json', validation.cases, (entry) =>
 const routing = read('routing.json')
 compare('routing.json', routing.cases, (entry) =>
   call(route, { graph: entry.graph, probes: entry.probes, schemaVersion: routing.context.schemaVersion }))
+
+const walks = read('walk.json')
+compare('walk.json', walks.cases, (entry) =>
+  call(walk, { graph: entry.graph, input: entry.input, schemaVersion: walks.context.schemaVersion }))

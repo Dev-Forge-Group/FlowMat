@@ -60,11 +60,45 @@ export type KernelRouting =
       probes: ({ decisions: KernelDecision[] } | { error: KernelRefusal })[]
     }
 
+/** One step of a tried flow: what it received, what it passed on, and whether a report would be refused. */
+export interface KernelWalkStep {
+  nodeId: string
+  status: 'completed' | 'refused' | 'planned' | 'failed' | 'cancelled' | 'running'
+  /** The step it came from, by place in {@link KernelWalk.steps}; none for a start. */
+  source?: number
+  connectionId?: string
+  input: Record<string, unknown>
+  output?: Record<string, unknown>
+  error?: KernelRefusal
+  refusal?: { status: number; message: string }
+}
+
+export interface KernelWalkEvent {
+  step: number
+  type: 'transfer_loss' | 'connection_filtered' | 'gateway_routed'
+  payload: Record<string, unknown>
+}
+
+/**
+ * A flow tried from its start nodes to the end, as the server would run it with every reported step passing on what it
+ * received: finished, failed (a gateway with no route) or running (a report refused or a Join still waiting).
+ */
+export type KernelWalk =
+  | { error: KernelRefusal }
+  | {
+      status: 'finished' | 'failed' | 'running'
+      failure?: KernelRefusal
+      steps: KernelWalkStep[]
+      events: KernelWalkEvent[]
+    }
+
 export interface FlowKernel {
   /** The draft check; {@code knownUnits} is the unit catalog, code to unit type. */
   validate(graph: KernelGraph, knownUnits: Record<string, string>): KernelValidation
   /** Routing the graph as a published revision would be routed. */
   route(graph: KernelGraph, probes: KernelProbe[], schemaVersion?: number): KernelRouting
+  /** Trying the flow with one input at its start nodes. */
+  walk(graph: KernelGraph, input: Record<string, unknown>, schemaVersion?: number): KernelWalk
 }
 
 interface KernelExports {
@@ -73,6 +107,7 @@ interface KernelExports {
   dealloc(pointer: number, length: number): void
   validate(request: number, length: number): bigint
   route(request: number, length: number): bigint
+  walk(request: number, length: number): bigint
 }
 
 /** The kernel over an instantiated module's exports. */
@@ -90,8 +125,8 @@ export function flowKernel(exports: WebAssembly.Exports): FlowKernel {
     const length = Number(packed & 0xffffffffn)
     const answer = JSON.parse(decoder.decode(new Uint8Array(module.memory.buffer, at, length))) as unknown
     module.dealloc(at, length)
-    if (answer && typeof answer === 'object' && 'failure' in answer) {
-      throw new Error(`The flow kernel refused the request: ${String((answer as { failure: unknown }).failure)}`)
+    if (answer && typeof answer === 'object' && 'requestError' in answer) {
+      throw new Error(`The flow kernel refused the request: ${String((answer as { requestError: unknown }).requestError)}`)
     }
     return answer
   }
@@ -101,6 +136,9 @@ export function flowKernel(exports: WebAssembly.Exports): FlowKernel {
     },
     route(graph, probes, schemaVersion = 3) {
       return call(module.route, JSON.stringify({ graph, probes, schemaVersion })) as KernelRouting
+    },
+    walk(graph, input, schemaVersion = 3) {
+      return call(module.walk, JSON.stringify({ graph, input, schemaVersion })) as KernelWalk
     },
   }
 }

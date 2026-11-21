@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use flowmat_flow_kernel::{Graph, RunGraph, Units, published, validate};
+use flowmat_flow_kernel::{Graph, RunGraph, Units, published, validate, walk};
 use serde_json::{Value as Json, json};
 
 fn read(name: &str) -> Json {
@@ -99,4 +99,28 @@ fn route(graph: &Json, probes: &Json, version: i64) -> Json {
         )
         .collect();
     json!({"roots": runtime.roots(), "delays": delays, "joins": joins, "probes": answers})
+}
+
+#[test]
+fn walks_match_the_servers_runs() {
+    let file = read("walk.json");
+    let version = file["context"]["schemaVersion"].as_i64().expect("schemaVersion");
+    let mut failures = Vec::new();
+    for case in cases(&file) {
+        let runtime = RunGraph::read(&published(&case["graph"], version)).expect("a walk's graph reads");
+        let answer = walk(&runtime, &case["input"]);
+        if answer != case["expected"] {
+            failures.push(format!(
+                "{}:\n  java: {}\n  rust: {}",
+                case["id"], case["expected"], answer
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} walks differ:\n{}",
+        failures.len(),
+        cases(&file).len(),
+        failures.join("\n")
+    );
 }

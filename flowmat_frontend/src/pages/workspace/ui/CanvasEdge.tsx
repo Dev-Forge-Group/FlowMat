@@ -12,6 +12,7 @@ import type { CSSProperties } from 'react'
 import type { CanvasEdgeViewModel } from '../../../entities/workflow/model/types'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { issueMarkLabel, useIssueMarksStore } from '../model/issueMarks'
+import { useTryFlowStore } from '../model/tryFlow'
 
 type CanvasEdgeComponentProps = Omit<EdgeProps, 'data'> & {
   data: CanvasEdgeViewModel
@@ -100,6 +101,7 @@ export function CanvasEdge({
   const openNodePicker = useCanvasInteractionStore((s) => s.openNodePicker)
   const requestDeleteEdge = useCanvasInteractionStore((s) => s.requestDeleteEdge)
   const issueMark = useIssueMarksStore((s) => s.marks.connections[edge.connectionId])
+  const tried = useTryFlowStore((s) => s.flows[edge.connectionId])
 
   const arrowColor = selected ? '#6366f1' : typeStyle.stroke
   const controlsVisible = hovered || selected
@@ -182,6 +184,15 @@ export function CanvasEdge({
             className={`canvas-issue-mark canvas-issue-mark--edge nodrag nopan ${issueMark.errors > 0 ? 'canvas-issue-mark--error' : 'canvas-issue-mark--warning'}`}
             style={{ position: 'absolute', transform: `translate(-50%, -150%) translate(${labelX}px,${labelY}px)` }}>
             {issueMark.errors > 0 ? issueMark.errors : issueMark.warnings}
+          </span>
+        </EdgeLabelRenderer>
+      )}
+
+      {tried && (
+        <EdgeLabelRenderer>
+          <span className="canvas-flow-chip nodrag nopan" aria-label={`Tried: ${tried}`}
+            style={{ position: 'absolute', transform: `translate(-50%, 60%) translate(${labelX}px,${labelY}px)` }}>
+            {tried}
           </span>
         </EdgeLabelRenderer>
       )}

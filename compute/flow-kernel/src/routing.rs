@@ -29,6 +29,15 @@ impl Refusal {
     pub fn to_json(&self) -> Json {
         json!({"code": self.code, "message": self.message})
     }
+
+    /// The HTTP status the server answers with.
+    pub fn http_status(&self) -> u16 {
+        match self.code {
+            "CONFLICT" => 409,
+            "BAD_REQUEST" => 400,
+            _ => 500,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -370,6 +379,19 @@ impl RunGraph {
         self.joins.contains(node)
     }
 
+    pub fn is_exclusive(&self, node: &str) -> bool {
+        self.exclusive.contains(node)
+    }
+
+    pub fn is_split(&self, node: &str) -> bool {
+        self.splits.contains(node)
+    }
+
+    /// Whether what goes along the connection is not the node's output: a Split's share or a loss.
+    pub fn quantity_changes(&self, node: &str, connection: &str) -> bool {
+        self.splits.contains(node) || self.by_id.get(connection).is_some_and(|edge| edge.loss_rate.is_some())
+    }
+
     /// The connection's delay in seconds as published, 0 without one.
     pub fn delay_seconds(&self, connection: &str) -> Decimal {
         self.by_id
@@ -696,7 +718,7 @@ fn loss(edge: &Edge, values: &Json) -> Option<Loss> {
 }
 
 /// The output with its quantity replaced.
-fn with_quantity(output: &Json, quantity: &Decimal) -> Json {
+pub(crate) fn with_quantity(output: &Json, quantity: &Decimal) -> Json {
     let mut copy = output.clone();
     if let Some(object) = copy.as_object_mut() {
         object.insert("quantity".into(), quantity.to_json());

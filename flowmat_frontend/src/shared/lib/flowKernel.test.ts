@@ -27,6 +27,14 @@ describe('the flow kernel in the editor', () => {
     }
   })
 
+  it('tries every recorded flow as the server ran it', () => {
+    const file = read('walk.json')
+    expect(file.cases.length).toBeGreaterThan(50)
+    for (const entry of file.cases) {
+      expect(kernel.walk(entry.graph, entry.input, file.context.schemaVersion), entry.id).toEqual(entry.expected)
+    }
+  })
+
   it('routes every recorded graph as Java does', () => {
     const file = read('routing.json')
     expect(file.cases.length).toBeGreaterThan(100)

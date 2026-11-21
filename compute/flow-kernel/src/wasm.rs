@@ -4,10 +4,10 @@
 
 use serde_json::{Value as Json, json};
 
-use crate::{Graph, RunGraph, Units, published, validate as check};
+use crate::{Graph, RunGraph, Units, published, validate as check, walk as try_flow};
 
 /// The check's answer for `{graph, knownUnits}`: `{errors, warnings, issues}` as the server sends it, or
-/// `{"failure": "…"}` when the request is not JSON.
+/// `{"requestError": "…"}` when the request is not JSON.
 ///
 /// # Safety
 /// `request` points at `length` bytes written by the host.
@@ -15,7 +15,7 @@ use crate::{Graph, RunGraph, Units, published, validate as check};
 pub unsafe extern "C" fn validate(request: *const u8, length: usize) -> u64 {
     // SAFETY: the caller gives memory it wrote.
     let Some(request) = (unsafe { parse(request, length) }) else {
-        return result(json!({"failure": "the request is not JSON"}));
+        return result(json!({"requestError": "the request is not JSON"}));
     };
     result(check(
         &Graph::from_json(&request["graph"]),
@@ -33,7 +33,7 @@ pub unsafe extern "C" fn validate(request: *const u8, length: usize) -> u64 {
 pub unsafe extern "C" fn route(request: *const u8, length: usize) -> u64 {
     // SAFETY: the caller gives memory it wrote.
     let Some(request) = (unsafe { parse(request, length) }) else {
-        return result(json!({"failure": "the request is not JSON"}));
+        return result(json!({"requestError": "the request is not JSON"}));
     };
     let version = request["schemaVersion"].as_i64().unwrap_or(3);
     let runtime = match RunGraph::read(&published(&request["graph"], version)) {
@@ -72,6 +72,24 @@ pub unsafe extern "C" fn route(request: *const u8, length: usize) -> u64 {
         }
     }
     result(json!({"roots": runtime.roots(), "delays": delays, "joins": joins, "probes": probes}))
+}
+
+/// Trying the flow, `{graph, input, schemaVersion}`: `{error}` when the graph cannot run as a published revision, else
+/// the run from start to end as `fixtures/walk.json` records the server's (status, failure, steps, events).
+///
+/// # Safety
+/// `request` points at `length` bytes written by the host.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn walk(request: *const u8, length: usize) -> u64 {
+    // SAFETY: the caller gives memory it wrote.
+    let Some(request) = (unsafe { parse(request, length) }) else {
+        return result(json!({"requestError": "the request is not JSON"}));
+    };
+    let version = request["schemaVersion"].as_i64().unwrap_or(3);
+    match RunGraph::read(&published(&request["graph"], version)) {
+        Ok(runtime) => result(try_flow(&runtime, &request["input"])),
+        Err(refusal) => result(json!({"error": refusal.to_json()})),
+    }
 }
 
 /// # Safety
