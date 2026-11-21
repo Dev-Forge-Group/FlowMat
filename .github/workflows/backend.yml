@@ -13,6 +13,7 @@ on:
       - 'compute/condition-expression/fixtures/**'
       # SequenceFixtureTest checks the sequence optimizer's baselines against SequenceCost.
       - 'compute/sequence-optimizer/fixtures/**'
+      - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, develop ]
@@ -23,6 +24,7 @@ on:
       - 'compute/condition-expression/fixtures/**'
       # SequenceFixtureTest checks the sequence optimizer's baselines against SequenceCost.
       - 'compute/sequence-optimizer/fixtures/**'
+      - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/backend.yml'
   # Runs it whatever changed.
   workflow_dispatch:

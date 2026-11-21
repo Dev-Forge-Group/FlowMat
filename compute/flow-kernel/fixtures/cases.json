@@ -1,0 +1,101 @@
+{
+  "about": "Hand-picked graphs for the flow kernel's validation (ADR-040 decision 5). Each is a whole workflow as the kernel takes it; FlowKernelFixtureTest puts Java's answer for each into validation.json ahead of the seeded graphs.",
+  "cases": [
+    {"id": "clean-line", "note": "Input → process → Output with matching ports: nothing to report.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "mix", "processName": "Mix", "nodeType": "process"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}],
+      "ports": [
+        {"processIoId": "in_o", "processId": "in", "direction": "output", "ioName": "flour", "resourceType": "material", "itemId": "item-a", "quantity": 10, "unit": "kg", "requiredYn": "N", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}}}"},
+        {"processIoId": "mix_i", "processId": "mix", "direction": "input", "ioName": "flour", "resourceType": "material", "itemId": "item-a", "quantity": 10, "unit": "kg", "requiredYn": "Y", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}}}"},
+        {"processIoId": "mix_o", "processId": "mix", "direction": "output", "ioName": "dough", "resourceType": "product", "itemId": "item-b", "quantity": 9, "unit": "kg", "requiredYn": "N", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}}}"},
+        {"processIoId": "out_i", "processId": "out", "direction": "input", "ioName": "dough", "resourceType": "product", "itemId": "item-b", "quantity": 9, "unit": "kg", "requiredYn": "Y", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}}}"}],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "mix", "fromIoId": "in_o", "toIoId": "mix_i", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "mix", "toProcessId": "out", "fromIoId": "mix_o", "toIoId": "out_i", "lossRate": 0.1, "delayTimeSec": 600, "defaultRouteYn": "N"}]}},
+    {"id": "gateway-two-defaults", "note": "An Exclusive gateway with two default routes, one of them with a condition, and two routes tied on priority.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "gw", "processName": "Grade?", "nodeType": "exclusive"},
+        {"processId": "a", "processName": "Grade A", "nodeType": "output"},
+        {"processId": "b", "processName": "Grade B", "nodeType": "output"},
+        {"processId": "c", "processName": "Rework", "nodeType": "output"},
+        {"processId": "d", "processName": "Scrap", "nodeType": "output"}],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "gw", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "a", "conditionExpr": "quantity > 5", "priority": 1, "defaultRouteYn": "N"},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "b", "conditionExpr": "quantity > 2", "priority": 1, "defaultRouteYn": "N"},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "c", "conditionExpr": "quantity > 1", "defaultRouteYn": "Y"},
+        {"connectionId": "c5", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "d", "defaultRouteYn": "Y"}]}},
+    {"id": "gateway-ok", "note": "An Exclusive gateway with ordered conditions and one default: nothing to report.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "gw", "processName": "Size?", "nodeType": "exclusive"},
+        {"processId": "big", "processName": "Big", "nodeType": "output"},
+        {"processId": "small", "processName": "Small", "nodeType": "output"}],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "gw", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "big", "conditionExpr": "quantity >= 10", "priority": 1, "defaultRouteYn": "N"},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "gw", "toProcessId": "small", "defaultRouteYn": "Y"}]}},
+    {"id": "split-over", "note": "A Split whose percents add up to 130% and that has two rests.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "sp", "processName": "Divide", "nodeType": "split"},
+        {"processId": "a", "processName": "Line A", "nodeType": "output"},
+        {"processId": "b", "processName": "Line B", "nodeType": "output"},
+        {"processId": "c", "processName": "Line C", "nodeType": "output"},
+        {"processId": "d", "processName": "Line D", "nodeType": "output"}],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "sp", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "a", "splitKind": "share", "splitValue": 70, "defaultRouteYn": "N"},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "b", "splitKind": "share", "splitValue": 60, "defaultRouteYn": "N"},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "c", "splitKind": "rest", "defaultRouteYn": "N"},
+        {"connectionId": "c5", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "d", "splitKind": "rest", "defaultRouteYn": "N"}]}},
+    {"id": "split-ok", "note": "A Split of 60% and the rest, then a Join of both branches: nothing to report.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "sp", "processName": "Divide", "nodeType": "split"},
+        {"processId": "a", "processName": "Line A", "nodeType": "process"},
+        {"processId": "b", "processName": "Line B", "nodeType": "process"},
+        {"processId": "jn", "processName": "Gather", "nodeType": "join"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "sp", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "a", "splitKind": "share", "splitValue": 60, "defaultRouteYn": "N"},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "b", "splitKind": "rest", "defaultRouteYn": "N"},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "a", "toProcessId": "jn", "defaultRouteYn": "N"},
+        {"connectionId": "c5", "workflowId": "wf", "fromProcessId": "b", "toProcessId": "jn", "defaultRouteYn": "N"},
+        {"connectionId": "c6", "workflowId": "wf", "fromProcessId": "jn", "toProcessId": "out", "defaultRouteYn": "N"}]}},
+    {"id": "schema-mismatch", "note": "An output whose lot is a number feeding an input that requires lot as a string, a port with no schema feeding one with a schema, and a unit the catalog does not know.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "chk", "processName": "Check", "nodeType": "process"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}],
+      "ports": [
+        {"processIoId": "in_o", "processId": "in", "direction": "output", "resourceType": "data", "requiredYn": "N", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"number\"}},\"required\":[\"lot\"]}"},
+        {"processIoId": "chk_i", "processId": "chk", "direction": "input", "resourceType": "data", "requiredYn": "Y", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}},\"required\":[\"lot\"]}", "validationRule": "attrs.lot != ''"},
+        {"processIoId": "chk_o", "processId": "chk", "direction": "output", "resourceType": "data", "requiredYn": "N", "allowShortageYn": "N"},
+        {"processIoId": "out_i", "processId": "out", "direction": "input", "resourceType": "data", "quantity": 1, "unit": "box", "requiredYn": "Y", "allowShortageYn": "N", "schemaJson": "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}},\"required\":[\"lot\"]}"}],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "chk", "fromIoId": "in_o", "toIoId": "chk_i", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "chk", "toProcessId": "out", "fromIoId": "chk_o", "toIoId": "out_i", "defaultRouteYn": "N"}]}},
+    {"id": "loop", "note": "Two processes feeding each other between an Input and an Output.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "a", "processName": "Heat", "nodeType": "process"},
+        {"processId": "b", "processName": "Cool", "nodeType": "process"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "a", "defaultRouteYn": "N"},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "a", "toProcessId": "b", "defaultRouteYn": "N"},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "b", "toProcessId": "a", "defaultRouteYn": "N"},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "b", "toProcessId": "out", "defaultRouteYn": "N"}]}},
+    {"id": "empty", "note": "A workflow with nothing in it.", "graph": {"processes": [], "ports": [], "connections": []}}
+  ]
+}
