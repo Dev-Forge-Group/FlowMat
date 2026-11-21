@@ -99,13 +99,31 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
 
     /** Null without a work order, or with neither equipment nor full-share crew. */
     private Team team(String productionRunId) {
-        WorkOrder order = productionRunRepository.findById(productionRunId)
+        return productionRunRepository.findById(productionRunId)
             .map(ProductionRun::getWorkOrderId)
             .flatMap(workOrderRepository::findById)
+            .map(this::team)
             .orElse(null);
-        if (order == null) {
-            return null;
-        }
+    }
+
+    /**
+     * The stretches of [from, until) when a work order's equipment and its full-share crew with shifts work together, and who
+     * fixed them (docs/architecture/adr/ADR-041-try-it-time.md decision 5): what a production run of the order waits for and
+     * counts working-time delays by. Empty when nothing fixes the time, so every delay counts all time; no stretches when the
+     * team never works together in the window, or its equipment is gone.
+     */
+    public Optional<TeamTime> workingTime(WorkOrder order, OffsetDateTime from, OffsetDateTime until) {
+        Team team = team(order);
+        Together together = team == null ? null : together(team, from, until);
+        return together == null ? Optional.empty()
+            : Optional.of(new TeamTime(team.equipmentId(), together.crew(), together.spans()));
+    }
+
+    /** A work order's working time: its equipment (null without one), the crew with shifts it follows, the stretches. */
+    public record TeamTime(String equipmentId, List<String> crew, List<WorkingStretch> stretches) {
+    }
+
+    private Team team(WorkOrder order) {
         String equipmentId = order.getEquipmentId();
         // Only people needed for all of their time fix when the step can start (WC39, ADR-016 decision 3).
         List<String> fullCrew = crewRepository.findAllByWorkOrderIdOrderByAddedAtAscCrewIdAsc(order.getWorkOrderId()).stream()

@@ -32,6 +32,10 @@
 ## 진행
 
 - **1주차 1번 ADR-041: 끝(Accepted).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md). 결정 4는 그래프 실행이 시스템 시계를 쓴다는 것을 보고 고쳤다. 고정 입력의 답은 서버에서 실제로 돌린 시각이 아니라, 라우터와 같은 순수 함수가 낸다.
+- **2주차 2번 구간 읽기 API: 끝(2026-11-21, 일찍).** `GET /work-orders/{id}/working-time`([worker-calendar](../domain/worker-calendar.md) WC68). `ProductionRunWorkingTime`과 같은 계산이다. `TryItTimeIntegrationTest` 4개:
+  - API가 낸 구간을 `FlowRunTiming`에 넣으면, 같은 작업지시의 생산 실행에서 라우터가 적은 `readyAt`·`scheduledAt`·기다린 설비·인력과 같다. 근무 밖 기다림과 근무 시간 지연 둘 다 본다(ADR-041 결정 4의 서버 대조).
+  - 설비도 인력도 없는 작업지시는 모든 시간이다.
+  - 기간 오류도 본다.
 - **2주차 1번 Rust `schedule`: 끝(2026-11-21, 일찍).**
   - `time.rs`: 오프셋이 붙은 시각의 읽기·쓰기(`ISO_OFFSET_DATE_TIME`), 마이크로초 자르기. 시간대 데이터베이스는 들이지 않았다.
   - `schedule.rs`: `walk`의 답 위에 `FlowRunTiming`과 같은 규칙으로 시각을 매긴다.
