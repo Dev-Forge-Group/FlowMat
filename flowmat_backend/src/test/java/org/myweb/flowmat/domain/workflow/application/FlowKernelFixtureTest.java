@@ -71,32 +71,43 @@ class FlowKernelFixtureTest {
         assertThat(hits.keySet()).as("every issue code is hit by some graph").containsAll(CODES);
     }
 
+    /** A graph's processes, ports and connections as the store holds them. */
+    record Stored(List<Process> processes, List<ProcessIo> ports, List<ProcessConnection> connections) {}
+
+    /** The fixture's unit catalog, looked up as CatalogQueryImpl looks a code up in unit_master. */
+    static final WorkflowUnits UNITS = new WorkflowUnits() {
+        // Ignoring case, and for "known" surrounding spaces too.
+        @Override
+        public boolean known(String code) {
+            return code != null && type(code.trim()).isPresent();
+        }
+
+        @Override
+        public Optional<String> type(String code) {
+            if (code == null) return Optional.empty();
+            return KNOWN_UNITS.entrySet().stream().filter(unit -> unit.getKey().equalsIgnoreCase(code))
+                .map(Map.Entry::getValue).findFirst();
+        }
+    };
+
     /** What the server's check says of a graph given as the kernel takes it, in the server's response shape. */
     static WorkflowValidationResponse answer(JsonNode graph) {
+        Stored stored = storedGraph(graph);
+        return WorkflowValidationService.check(stored.processes(), stored.ports(), stored.connections(), UNITS);
+    }
+
+    static Stored storedGraph(JsonNode graph) {
         List<Process> processes = new ArrayList<>();
         graph.get("processes").forEach(node -> processes.add(MAPPER.convertValue(node, Process.class)));
         List<ProcessIo> ports = new ArrayList<>();
-        graph.get("ports").forEach(node -> ports.add(MAPPER.convertValue(stored(node), ProcessIo.class)));
+        graph.get("ports").forEach(node -> ports.add(MAPPER.convertValue(storedRow(node), ProcessIo.class)));
         List<ProcessConnection> connections = new ArrayList<>();
-        graph.get("connections").forEach(node -> connections.add(MAPPER.convertValue(stored(node), ProcessConnection.class)));
-        return WorkflowValidationService.check(processes, ports, connections, new WorkflowUnits() {
-            // As CatalogQueryImpl looks a code up in unit_master: ignoring case, and for "known" surrounding spaces too.
-            @Override
-            public boolean known(String code) {
-                return code != null && type(code.trim()).isPresent();
-            }
-
-            @Override
-            public Optional<String> type(String code) {
-                if (code == null) return Optional.empty();
-                return KNOWN_UNITS.entrySet().stream().filter(unit -> unit.getKey().equalsIgnoreCase(code))
-                    .map(Map.Entry::getValue).findFirst();
-            }
-        });
+        graph.get("connections").forEach(node -> connections.add(MAPPER.convertValue(storedRow(node), ProcessConnection.class)));
+        return new Stored(processes, ports, connections);
     }
 
     /** A port or connection as stored: the schema as text and the default route as Y or N. */
-    private static ObjectNode stored(JsonNode response) {
+    private static ObjectNode storedRow(JsonNode response) {
         ObjectNode row = response.deepCopy();
         JsonNode schema = row.remove("schemaJson");
         if (schema != null && !schema.isNull()) row.put("schemaJson", FlowKernelFixtures.json(schema));

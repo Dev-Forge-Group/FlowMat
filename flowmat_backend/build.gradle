@@ -104,6 +104,9 @@ dependencies {
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:postgresql'
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.1'
+	// Runs the flow kernel's WebAssembly module in the JVM for the ADR-040 decision 6 measurement (-Dflow.bench=true).
+	testImplementation 'com.dylibso.chicory:runtime:1.7.5'
+	testImplementation 'com.dylibso.chicory:compiler:1.7.5'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
@@ -131,7 +134,7 @@ tasks.named('test') {
 	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison;
 	// -Dsequence.fixtures.update=true rewrites the sequence optimizer's baselines; -Dflow.fixtures.update=true the flow
 	// kernel's validation answers.
-	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update', 'flow.fixtures.update'].each { name ->
+	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update', 'flow.fixtures.update', 'flow.bench'].each { name ->
 		def value = providers.systemProperty(name).orNull
 		if (value != null) systemProperty name, value
 	}
