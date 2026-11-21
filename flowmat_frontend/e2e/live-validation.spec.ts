@@ -17,7 +17,7 @@ const connection = (connectionId: string, fromProcessId: string, toProcessId: st
   unit: null, delayTimeSec: null, lossRate: null, priority: null, conditionExpr: null, capacity: null,
   failurePolicy: 'stop', defaultRoute: false, splitKind: null, splitValue: null, version: 1, versionNonce: 1 })
 
-test('the check as drawn finds an issue without asking the server and drops it once it is fixed', async ({ page }) => {
+test('the check as drawn finds and marks an issue without asking the server and drops it once it is fixed', async ({ page }) => {
   let connections = [connection('c-in-mix', 'p-in', 'p-mix'), connection('c-mix-out', 'p-mix', 'p-out'),
     connection('c-loop', 'p-mix', 'p-mix')]
   let validationRequests = 0
@@ -55,6 +55,10 @@ test('the check as drawn finds an issue without asking the server and drops it o
   await page.goto('/projects/prj-e2e/workflows/wf-live')
   await expect(page.locator('.react-flow__node')).toHaveCount(3, { timeout: 15_000 })
 
+  // The canvas marks the connection the check is about.
+  const mark = page.getByRole('img', { name: '1 error as drawn: CONNECTION_INCOMPATIBLE' })
+  await expect(mark).toBeVisible()
+
   const live = page.getByRole('region', { name: 'Check as drawn' })
   const summary = live.getByRole('button', { name: /^As drawn:/ })
   await expect(summary).toHaveText('As drawn: 1 errors, 0 warnings')
@@ -68,5 +72,6 @@ test('the check as drawn finds an issue without asking the server and drops it o
   await page.getByRole('button', { name: 'Delete connection' }).click()
   await expect(summary).toHaveText('As drawn: 0 errors, 0 warnings')
   await expect(live.getByText('Nothing to fix as drawn.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /as drawn:/ })).toHaveCount(0)
   expect(validationRequests).toBe(0)
 })

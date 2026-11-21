@@ -27,6 +27,7 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
 - **그리는 대로 검사**(`useLiveValidation`, `LiveValidation.tsx`): 캔버스가 150ms 멈추면 검사한다.
   - 캔버스 보기 모델을 커널의 그래프로 바꿔(`toKernelGraph`) 단위 목록과 함께 넣는다.
   - "As drawn: N errors, M warnings" 한 줄을 늘 보이고, 누르면 이슈 목록이 열린다.
+  - 캔버스의 공정 모서리와 연결 위에 이슈 수가 붙는다(`issueMarks.ts`). 내보낸 그림에는 넣지 않는다.
   - 서버의 "Check workflow"와 발행 전 검사는 그대로다.
 
 | 함수 | 넣는 것 | 답 |

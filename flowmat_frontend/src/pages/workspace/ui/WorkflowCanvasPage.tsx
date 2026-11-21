@@ -23,6 +23,7 @@ import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQu
 import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpdateWorkflowMutation'
 import { useWorkflowValidationQuery, workflowValidationQueryKey, type WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import { useLiveValidation } from '../../../entities/workflow/api/useLiveValidation'
+import { issueMarks, NO_MARKS, useIssueMarksStore } from '../model/issueMarks'
 import type { PresenceMessage, GraphChangeMessage } from '../../../entities/workflow/api/useWorkflowSync'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { NodePaletteSidebar } from './NodePaletteSidebar'
@@ -562,6 +563,11 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const [showValidation, setShowValidation] = useState(false)
   const validationQuery = useWorkflowValidationQuery(canvas.workflow.workflowId, showValidation)
   const liveValidation = useLiveValidation(canvas)
+  // The canvas marks each process and connection the check as drawn has something to say about.
+  useEffect(() => {
+    useIssueMarksStore.getState().setMarks(issueMarks(liveValidation))
+  }, [liveValidation])
+  useEffect(() => () => useIssueMarksStore.getState().setMarks(NO_MARKS), [])
   /** An issue's button selects what it is about, from the server's check or the check as drawn. */
   const selectIssue = useCallback((issue: WorkflowValidationIssue) => {
     const target = validationSelection(issue)

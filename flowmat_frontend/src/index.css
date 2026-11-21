@@ -1412,6 +1412,46 @@ code {
   text-align: left;
 }
 
+/* The check as drawn on the canvas (issueMarks.ts): a count on each process and connection it has something to say
+   about, red with errors, amber with warnings only. Pictures of the workflow leave it out. */
+.canvas-issue-mark {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 16px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 3px 5px;
+  flex-shrink: 0;
+}
+
+.canvas-issue-mark--error {
+  color: #fff;
+  background: #dc2626;
+}
+
+.canvas-issue-mark--warning {
+  color: #78350f;
+  background: #fde68a;
+}
+
+/* On a process, a corner badge, so the name keeps the header. */
+.canvas-issue-mark--node {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 2;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.canvas-issue-mark--edge {
+  pointer-events: all;
+}
+
+.workspace-canvas-viewport.reading-exporting .canvas-issue-mark {
+  display: none;
+}
+
 /* The check as drawn (LiveValidation.tsx): one line that turns red while the drawing has errors. */
 .live-check {
   border: 1px solid #cbd5e1;
