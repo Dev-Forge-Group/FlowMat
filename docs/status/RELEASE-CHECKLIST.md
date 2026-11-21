@@ -15,7 +15,7 @@
 | 3 | 모의 API 브라우저 테스트 | `mock-e2e.yml` | 세 조각 모두 실패 0(재시도로 통과한 것은 원인을 적는다) |
 | 4 | 실 API 브라우저 테스트 | `browser-e2e.yml` | 모든 단계 통과. 두 여정의 `purchase-warehouse-live`, `production-quality-live`가 들어 있다. 이 워크플로는 스펙을 하나씩 적으므로, 새 실 API 스펙은 단계를 더해야 돈다. `labor-premium-cost-real-api`만 빠져 있다: 일회용 환경 전용 표시(`FLOWMAT_*_E2E_DISPOSABLE`)가 있어야 도는 스펙이다 |
 | 5 | 작성자 표기 | `commit-attribution.yml` | 통과([AGENTS.md](../../AGENTS.md)) |
-| 6 | 의존성 감사 | `security.yml` | `npm audit --audit-level=moderate` 0건, `dependencyCheckAnalyze`(OWASP) 보고서에 새 높음·치명 항목 없음. 남기는 항목은 이유를 적는다 |
+| 6 | 의존성 감사 | `security.yml` | `npm audit --audit-level=moderate` 0건, `dependencyCheckAnalyze`(OWASP) 보고서에 새 높음·치명 항목 없음. 남기는 항목은 이유를 적는다. OWASP는 저장소 secret `NVD_API_KEY`가 있으면 빠르고, 없으면 첫 동기화가 오래 걸린다(그다음은 캐시) |
 
 ## 2. 두 여정
 

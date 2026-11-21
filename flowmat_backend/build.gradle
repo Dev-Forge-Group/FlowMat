@@ -186,8 +186,16 @@ def moduleSources = files(contextModules.collect { it.file('src/main/java') })
 
 dependencyCheck {
 	formats = ['HTML', 'SARIF']
+	// Kept under the Gradle user home so CI can cache it between weekly runs (security.yml).
+	data {
+		directory = "${gradle.gradleUserHomeDir}/dependency-check-data"
+	}
 	nvd {
-		// Without an NVD API key the first database sync can take a very long time.
-		apiKey = System.getenv('NVD_API_KEY')
+		// CI passes an empty value when the NVD_API_KEY secret is not set, and the NVD client refuses an empty key
+		// ("Invalid API Key, length of 0"), which failed every weekly scan. An empty key now means no key: the sync then
+		// keeps to NVD's rate for anonymous clients (5 requests in 30 s), slow the first time and quick from the cache.
+		def key = System.getenv('NVD_API_KEY')?.trim()
+		apiKey = key ?: null
+		if (!key) delay = 8000
 	}
 }

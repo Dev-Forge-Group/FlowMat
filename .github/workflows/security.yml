@@ -54,6 +54,8 @@ jobs:
     # The NVD sync is slow, so run the OWASP scan only on the weekly schedule or on demand.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Without an NVD_API_KEY secret the first sync of the vulnerability data takes a long while; the cache below keeps it.
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: flowmat_backend
@@ -66,6 +68,13 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: gradle
+
+    - name: Restore the vulnerability data
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.gradle/dependency-check-data
+        key: dependency-check-data-${{ github.run_id }}
+        restore-keys: dependency-check-data-
 
     - name: Run OWASP dependency check
       run: ./gradlew dependencyCheckAnalyze
