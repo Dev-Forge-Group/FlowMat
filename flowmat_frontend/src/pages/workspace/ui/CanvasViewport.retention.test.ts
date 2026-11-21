@@ -51,11 +51,13 @@ describe('Workspace editor keyboard integration', () => {
     // A new editor element is saved by the page's editor document hook, which records it for undo.
     const documentSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'useEditorDocumentActions.ts'), 'utf8')
     const layerSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkspaceEditorLayer.tsx'), 'utf8')
+    // The layer's command handle and its documents' logic are typed and worked out in the editor document model.
+    const modelSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'workspaceEditorDocument.ts'), 'utf8')
 
     expect(pageSource).toContain('isEditorCommandContext')
     expect(pageSource).toContain('useEditorDocumentActions(')
     expect(documentSource).toContain('editorCommandApiRef.current?.recordBackendSnapshot')
-    expect(layerSource).toContain('recordBackendSnapshot(document: EditorDocument')
+    expect(modelSource).toContain('recordBackendSnapshot(document: EditorDocument')
     expect(layerSource).toContain('split.annotationIds.length === 0')
     expect(layerSource).toContain('persistDocument(selectElements(target.document, target.selectedIds))')
   })

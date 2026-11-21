@@ -85,7 +85,7 @@ React Flow에는 공정 노드만 등록돼 있다(`flowmatNode`). 공정 노드
 
 - 엔진 단위 테스트 12개 파일(`lib/flowmat-editor/**/*.test.ts`), import 경계 검사 포함
 - `pages/workspace/ui/CanvasViewport.retention.test.ts`: 공정 노드·연결이 계속 React Flow로 그려지는지, 편집 층이 덮어쓰지 않는지
-- `pages/workspace/ui/WorkspaceEditorLayer.test.ts`: 저장 실패 시 편집 유지 판단
+- `pages/workspace/model/workspaceEditorDocument.test.ts`: 저장 실패 시 편집 유지 판단, 끌기(이동·크기)·복제·연결선·앞뒤 순서·주석 z-index·실행 취소 이력. 그리기 층(`WorkspaceEditorLayer`)은 상태를 들고 그리기만 하고, 문서 계산은 `model/workspaceEditorDocument.ts`가 한다
 - 렌더러 성능 확인: `SvgRenderer.performance.test.ts`
 - 브라우저 E2E는 워크플로 검증(`e2e/workflow-validation.spec.ts`)만 있다. 도형 편집 자체의 E2E는 없다.
 
