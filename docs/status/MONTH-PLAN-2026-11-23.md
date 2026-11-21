@@ -63,19 +63,37 @@
   - Chicory 1.7.5로 같은 모듈을 JVM에서 돌렸다. 170개 모두 같은 답이다.
   - 한 번 검사가 Java 103µs(p95 244µs)인데, 컴파일된 모듈은 1.9ms(4.1ms), 해석기는 101ms다.
   - 기준(2배 이하)을 넘지 못했으므로 서버는 Java를 둔다. 고정 입력 대조를 CI에 남긴다([성능 기준선 §6](../operations/performance-baseline.md)).
-- **4주차 2번 큰 화면 나누기: 진행 중.**
-  - `WorkflowCanvasPage`를 2,201줄에서 1,169줄로 줄였다.
-  - 빼낸 것:
-    - 도구 정의·단축키(`workspaceTools`).
-    - 편집기 요소(`workspaceEditorElements`), 요소 검사기(`EditorElementInspector`).
-    - 협업(`useWorkspaceCollaboration`), 키보드(`useWorkspaceKeyboard`).
-    - 리본(`workspaceRibbon`), 내보내기(`useWorkspaceExport`, `workflowJson`).
-  - 빼낸 순수 함수에는 단위 테스트를 붙였다. 매번 모의 브라우저 전체(489개, preview 빌드)가 통과했다.
-  - 남은 것: 머리줄·캔버스 위 패널·검사기 화면을 컴포넌트로 나눠 800줄 이하로. `CanvasViewport`(1,537줄)와 `WorkspaceEditorLayer`(1,475줄)도.
+- **4주차 2번 큰 화면 나누기: 끝.** 세 화면 모두 800줄 이하다.
+
+  | 화면 | 전 | 후 |
+  |---|---|---|
+  | `WorkflowCanvasPage` | 2,201 | 604 |
+  | `CanvasViewport` | 1,537 | 773 |
+  | `WorkspaceEditorLayer` | 1,475 | 788 |
+
+  - 작업 화면에서 빼낸 것:
+    - 도구 정의·단축키(`workspaceTools`), 편집기 요소(`workspaceEditorElements`), 요소 검사기(`EditorElementInspector`).
+    - 협업(`useWorkspaceCollaboration`), 키보드(`useWorkspaceKeyboard`), 리본(`workspaceRibbon`), 내보내기(`useWorkspaceExport`, `workflowJson`).
+    - 머리줄(`WorkspaceTopbar`), 검사 줄(`WorkspaceChecks`: 서버 검사·발행·As drawn·Try it), 오른쪽 검사기(`WorkspaceInspector`), 읽기 패널(`ReadingPanels`), 협업자 커서(`RemoteCursors`).
+    - 캔버스의 요청(`useCanvasRequests`: 삭제 확인·삭제·복제·색·이름), 주석(`useWorkspaceAnnotations`), 편집기 문서 저장(`useEditorDocumentActions`).
+  - 캔버스에서 빼낸 것: 맞춤선(`snapGuides`), React Flow 요소와 연결 대응(`canvasFlowElements`), 읽기·실행·변경 표시(`canvasMarks`), 카메라 단계(`cameraSteps`), 자유 그리기(`useFreehandDrawing`), 보기 손잡이(`useCanvasViewHandles`), 위에 그리는 층(`CanvasOverlayLayers`), 그림 내보내기(`CanvasExportController`), React Flow 감시(`CanvasFlowWatchers`).
+  - 그리기 층에서 빼낸 것: 문서 계산(`workspaceEditorDocument`: 끌기·복제·연결선·순서·스타일·실행 취소 이력), 누른 곳 읽기(`workspaceEditorEvents`), 저장(`useEditorLayerPersistence`).
+  - 상태 계산은 순수 함수로 빼고 단위 테스트를 붙였다: 삭제 계획과 확인 문구(`canvasDeletion`), 읽기 순서(`inReadingOrder`), Intent Trace 안내(`intentAnnouncement`), 표시 클래스, 맞춤선, 연결 대응·중복 검사, 카메라 단계, 끌기·연결선·순서·z-index·이력.
+  - 단위 테스트 1,157개와 모의 브라우저 전체(489개, preview 빌드)가 나눌 때마다 통과했다.
 - **고정 입력이 찾은 Java 결함 셋.** 고쳤고, 각각 테스트가 있다.
   - 나머지 연결이 둘인 분할이 판에 있으면 경로 계산이 NPE(500)를 냈다. 이제 409로 거절한다.
   - 포트 스키마의 이름 순서가 JVM을 띄울 때마다 달랐다. 그래서 둘 이상 어긋날 때 오류가 가리키는 이름이 서버를 다시 띄울 때마다 바뀔 수 있었다. 이제 이름 순서다.
   - 자원 종류가 비고 옛 `ioType`도 없는 포트를 이으면 계약 검사가 NPE를 냈다.
+
+## 다음 달 후보 (4주차 3번)
+
+이번 달의 숫자로 범위를 적는다. 권하는 순서는 1 → 3이고, 2는 하지 않는다.
+
+1. **시간을 넣은 돌려 보기.** 지금의 "Try it"은 양과 경로만 따라간다. 서버가 실제로 돌린 그래프 실행 94개와 같은 답이다. 다음은 각 단계가 언제 시작하고 끝나는지를 더하는 것이다. 규칙은 새로 만들지 않고 FM-AI의 `SequenceCost`를 그대로 쓴다. 설비 달력의 가용 구간에 생산 시간(남은 수량 ÷ (시간당 산출 × 효율))과 앞 품목에서의 전환 분을 차례로 채운다. Java가 평가 묶음 40개에서 `SequenceCost`의 답을 고정 입력으로 적고, 커널의 `simulate`가 분 단위까지 같은지 Rust·WASM·TypeScript에서 본다. 범위는 단계 하나에 설비 하나다. 자재 부족, 인력 달력, 여러 설비를 함께 푸는 일은 넣지 않는다. 끝난 기준은 셋이다. 고정 입력이 모두 같다. 편집기의 "Try it"이 단계마다 끝나는 시각과 전체 소요를 보여 준다. 실 API 브라우저 테스트가 같은 흐름을 서버에서 계획한 시각과 비교한다. 위험은 시간대다. 달력은 프로젝트 시간대를 따르므로 고정 입력에 시간대와 서머타임 경계 사례를 넣는다.
+2. **커널을 서버 전체에 쓰기: 하지 않는다.** Chicory로 컴파일한 모듈은 같은 답을 내지만 한 번 검사가 1.9ms로, Java(0.10ms)의 18배다. 기준(2배 이하)과 거리가 멀다. Rust를 JNI나 FFM으로 붙이면 빨라지겠지만, 운영 이미지마다 네이티브 빌드가 생기고 원장과 같은 JVM에 네이티브 코드가 들어온다. 지금은 고정 입력 대조(검증 170, 경로 130, 실행 94, 조건식 1,641)가 두 구현을 묶어 둔다. 규칙을 바꿀 때 두 곳을 고치는 비용이 실제로 커지면 다시 잰다. 그 신호는 한 달에 규칙 변경이 세 번을 넘는 것이다.
+3. **그리기 층의 동시 편집.** 지금 공정·포트·연결은 항목마다 REST로 바꾸고, 서버가 번호(`seq`)를 붙인 그래프 변경을 보내면 브라우저가 차례로 적용한다. 번호가 비면 다시 받는다. 이 부분은 서버 검사와 발행이 있으므로 그대로 둔다. 바꿀 곳은 그리기 층(편집기 문서)이다. 지금은 문서 전체를 저장하고, 다른 사람이 먼저 저장했으면 409로 서버 판을 다시 보여 준다. 그래서 두 사람이 다른 도형을 동시에 고쳐도 한쪽 편집이 사라질 수 있다. 다음은 요소 단위 변경(추가·이동·스타일·삭제)을 보내고 받는 것이다. 같은 요소의 같은 필드만 나중 쓴 쪽이 이긴다. 커널은 그래프 쪽에 남는다. 협업자의 변경이 도착하면 As drawn이 그 자리에서 다시 검사하는 지금 동작을 유지한다. 끝난 기준은 둘이다. 두 브라우저가 서로 다른 요소를 동시에 고쳐도 둘 다 남는다(실 API 브라우저 테스트). 같은 요소를 고치면 누가 이겼는지 보인다.
+
+작은 후보: 백엔드 테스트(CI 약 8분)를 job 여럿으로 나누기. JVM을 둘로 나눠도 CI 실행기에서는 줄지 않았다(1주차 4번).
 
 ## 한 달 뒤 목표
 
