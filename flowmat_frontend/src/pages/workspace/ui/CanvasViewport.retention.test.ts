@@ -27,12 +27,14 @@ describe('CanvasViewport React Flow retention', () => {
 describe('Workspace editor keyboard integration', () => {
   it('keeps editor tool shortcuts and editor select-all wired in the workspace page', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // The shortcut table itself lives in the workspace tools model (workspaceTools.test.ts checks what it answers).
+    const tools = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'workspaceTools.ts'), 'utf8')
 
     expect(source).toContain('getWorkspaceToolShortcut')
-    expect(source).toContain("return 'editor-rectangle'")
-    expect(source).toContain("return 'editor-ellipse'")
-    expect(source).toContain("return 'editor-line'")
-    expect(source).toContain("return 'editor-text'")
+    expect(tools).toContain("return 'editor-rectangle'")
+    expect(tools).toContain("return 'editor-ellipse'")
+    expect(tools).toContain("return 'editor-line'")
+    expect(tools).toContain("return 'editor-text'")
     expect(source).toContain('editorCommandApiRef.current?.selectAll()')
     expect(source).toContain('editorCommandApiRef.current?.clearSelection()')
     expect(source).toContain('editorCommandApiRef.current?.undo()')

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import type {
   CanvasAnnotationPoint,
@@ -15,6 +15,15 @@ import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
 import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { TryFlowPanel } from './TryFlowPanel'
+import { EditorElementInspector } from './EditorElementInspector'
+import {
+  ANNOTATION_TOOL_DEFINITIONS,
+  EDITOR_TOOL_DEFINITIONS,
+  getToolLabel,
+  getUndoRedoShortcut,
+  getWorkspaceToolShortcut,
+} from '../model/workspaceTools'
+import { createWorkspaceEditorElement, normalizeFreehand, WORKSPACE_EDITOR_GRID_SIZE } from '../model/workspaceEditorElements'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
@@ -79,9 +88,7 @@ import {
 import {
   isWorkflowEditorTool,
   type WorkflowEditorTool,
-  type WorkflowPaletteTool,
 } from '../../../entities/workflow/model/nodeCatalog'
-import { Circle, Minus, Pencil, Shapes, Square, Triangle, Type as TypeIcon, Waypoints } from 'lucide-react'
 import { Ribbon } from '../../../widgets/canvas-toolbar/ui/Ribbon'
 import {
   buildRibbonTabs,
@@ -89,17 +96,10 @@ import {
   type RibbonDynamicButtons,
   type RibbonGroupContent,
 } from '../../../widgets/canvas-toolbar/config/ribbonConfig'
+import { Shapes } from 'lucide-react'
 import {
-  createElementId,
-  createEllipseElement,
-  createLineElement,
-  createRectangleElement,
-  createTextElement,
-  createTriangleElement,
   insertElement,
   snapPoint,
-  type EditorDocument,
-  type EditorElement,
   type Vec2,
 } from '../../../lib/flowmat-editor'
 
@@ -121,41 +121,6 @@ interface Props {
   projectId: string
 }
 
-const ANNOTATION_TOOL_DEFINITIONS: Array<{
-  tool: Extract<WorkflowPaletteTool, 'annotation-shape' | 'annotation-text' | 'annotation-freehand'>
-  label: string
-  description: string
-  icon: typeof Square
-}> = [
-  { tool: 'annotation-shape', label: 'Shape', description: 'Place shape annotations on the canvas.', icon: Shapes },
-  { tool: 'annotation-text', label: 'Text', description: 'Drop standalone notes on the canvas.', icon: TypeIcon },
-  {
-    tool: 'annotation-freehand',
-    label: 'Freehand',
-    description: 'Sketch directly with live collaborator previews.',
-    icon: Pencil,
-  },
-]
-
-const EDITOR_TOOL_DEFINITIONS: Array<{
-  tool: WorkflowEditorTool
-  label: string
-  description: string
-  icon: typeof Square
-}> = [
-  { tool: 'editor-rectangle', label: 'Rectangle', description: 'Create backend editor rectangles.', icon: Square },
-  { tool: 'editor-ellipse', label: 'Ellipse', description: 'Create backend editor circles and ovals.', icon: Circle },
-  { tool: 'editor-triangle', label: 'Triangle', description: 'Create backend editor polygon triangles.', icon: Triangle },
-  { tool: 'editor-line', label: 'Line', description: 'Create backend editor lines.', icon: Minus },
-  {
-    tool: 'editor-connector',
-    label: 'Connector',
-    description: 'Drag between two shapes to draw a line that follows them.',
-    icon: Waypoints,
-  },
-  { tool: 'editor-text', label: 'Text', description: 'Create backend editor text.', icon: TypeIcon },
-]
-
 const EMPTY_EDITOR_SELECTION: WorkspaceEditorSelectionSnapshot = Object.freeze({
   selectedIds: [],
   elements: [],
@@ -167,185 +132,6 @@ const EMPTY_EDITOR_SELECTION: WorkspaceEditorSelectionSnapshot = Object.freeze({
   canUndo: false,
   canRedo: false,
 })
-const WORKSPACE_EDITOR_GRID_SIZE = 8
-
-function getToolLabel(
-  tool: WorkflowPaletteTool,
-  paletteDefinitions: ReturnType<typeof useWorkflowCanvasActions>['paletteDefinitions']
-) {
-  if (tool === 'select') return 'Pointer'
-  const editorDefinition = EDITOR_TOOL_DEFINITIONS.find((definition) => definition.tool === tool)
-  if (editorDefinition) return editorDefinition.label
-  const annotationDefinition = ANNOTATION_TOOL_DEFINITIONS.find((definition) => definition.tool === tool)
-  if (annotationDefinition) return annotationDefinition.label
-  return paletteDefinitions.find((definition) => definition.tool === tool)?.label ?? tool
-}
-
-function getWorkspaceToolShortcut(event: KeyboardEvent): WorkflowPaletteTool | null {
-  if (event.ctrlKey || event.metaKey || event.altKey) return null
-  switch (event.key.toLowerCase()) {
-    case 'v':
-      return 'select'
-    case 'r':
-      return 'editor-rectangle'
-    case 'o':
-      return 'editor-ellipse'
-    case 'l':
-      return 'editor-line'
-    case 'c':
-      return 'editor-connector'
-    case 't':
-      return 'editor-text'
-    default:
-      return null
-  }
-}
-
-function getUndoRedoShortcut(event: KeyboardEvent): 'undo' | 'redo' | null {
-  if (!(event.ctrlKey || event.metaKey) || event.altKey) return null
-  const key = event.key.toLowerCase()
-  if (key === 'z') return event.shiftKey ? 'redo' : 'undo'
-  if (key === 'y') return 'redo'
-  return null
-}
-
-function normalizeFreehand(points: CanvasAnnotationPoint[]) {
-  const xs = points.map((point) => point.x)
-  const ys = points.map((point) => point.y)
-  const minX = Math.min(...xs)
-  const minY = Math.min(...ys)
-  const maxX = Math.max(...xs)
-  const maxY = Math.max(...ys)
-
-  return {
-    posX: Math.round(minX),
-    posY: Math.round(minY),
-    width: Math.max(8, Math.round(maxX - minX)),
-    height: Math.max(8, Math.round(maxY - minY)),
-    points: points.map((point) => [Math.round(point.x - minX), Math.round(point.y - minY)] as [number, number]),
-  }
-}
-
-const WORKSPACE_EDITOR_SHAPE_STYLE = {
-  fill: '#dff7ef',
-  stroke: '#0f766e',
-  strokeWidth: 1.5,
-  strokeStyle: 'solid' as const,
-  opacity: 1,
-}
-
-function createWorkspaceEditorElement(
-  tool: WorkflowEditorTool,
-  position: Vec2,
-  document: EditorDocument,
-): { element: EditorElement; nextElementSeq: number } {
-  const idPrefix = tool === 'editor-text' ? 'text' : 'shape'
-  const nextSequence = nextAvailableElementSequence(document, idPrefix)
-  const id = createElementId(nextSequence, idPrefix)
-  const order = document.elements.length + 1
-
-  switch (tool) {
-    case 'editor-rectangle':
-      return {
-        element: createRectangleElement({
-          id,
-          x: Math.round(position.x - 80),
-          y: Math.round(position.y - 48),
-          width: 160,
-          height: 96,
-          order,
-          cornerRadius: 8,
-          style: WORKSPACE_EDITOR_SHAPE_STYLE,
-        }),
-        nextElementSeq: nextSequence + 1,
-      }
-    case 'editor-ellipse':
-      return {
-        element: createEllipseElement({
-          id,
-          x: Math.round(position.x - 80),
-          y: Math.round(position.y - 48),
-          width: 160,
-          height: 96,
-          order,
-          style: {
-            ...WORKSPACE_EDITOR_SHAPE_STYLE,
-            fill: '#eef2ff',
-            stroke: '#4338ca',
-          },
-        }),
-        nextElementSeq: nextSequence + 1,
-      }
-    case 'editor-triangle':
-      return {
-        element: createTriangleElement({
-          id,
-          x: Math.round(position.x - 75),
-          y: Math.round(position.y - 60),
-          width: 150,
-          height: 120,
-          order,
-          style: {
-            ...WORKSPACE_EDITOR_SHAPE_STYLE,
-            fill: '#fff7ed',
-            stroke: '#c2410c',
-          },
-        }),
-        nextElementSeq: nextSequence + 1,
-      }
-    case 'editor-line':
-      return {
-        element: createLineElement({
-          id,
-          start: { x: Math.round(position.x - 80), y: Math.round(position.y) },
-          end: { x: Math.round(position.x + 80), y: Math.round(position.y) },
-          order,
-          style: {
-            stroke: '#7c3aed',
-            strokeWidth: 3,
-            strokeStyle: 'solid',
-            opacity: 1,
-            startArrow: 'none',
-            endArrow: 'none',
-          },
-        }),
-        nextElementSeq: nextSequence + 1,
-      }
-    case 'editor-connector':
-      // Connectors are created by dragging between two shapes' anchor points inside
-      // WorkspaceEditorLayer's own pointer handlers, not by a single pane click.
-      throw new Error('Connector elements are created via drag-to-connect, not click placement.')
-    case 'editor-text':
-      return {
-        element: createTextElement({
-          id,
-          x: Math.round(position.x - 60),
-          y: Math.round(position.y - 18),
-          width: 140,
-          height: 36,
-          order,
-          text: 'Text',
-          style: {
-            color: '#111827',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            fontSize: 16,
-            fontWeight: 600,
-            opacity: 1,
-          },
-        }),
-        nextElementSeq: nextSequence + 1,
-      }
-  }
-}
-
-function nextAvailableElementSequence(document: EditorDocument, prefix: string) {
-  const ids = new Set(document.elements.map((element) => element.id))
-  let sequence = Math.max(1, document.nextElementSeq)
-  while (ids.has(createElementId(sequence, prefix))) {
-    sequence += 1
-  }
-  return sequence
-}
 
 function CanvasFallback() {
   return <div className="workspace-loading">Loading canvas...</div>
@@ -357,188 +143,6 @@ function InspectorFallback() {
       <p>Loading inspector...</p>
     </div>
   )
-}
-
-function EditorElementInspector({
-  selection,
-  commandsRef,
-}: {
-  selection: WorkspaceEditorSelectionSnapshot
-  commandsRef: MutableRefObject<WorkspaceEditorCommandApi | null>
-}) {
-  const selectedCount = selection.elements.length
-  const firstElement = selection.elements[0] ?? null
-  const summaryLabel = selectedCount === 1 && firstElement
-    ? editorElementLabel(firstElement)
-    : `${selectedCount} editor elements`
-  const style = readEditorSelectionStyle(selection.elements)
-  const supportsFill = selection.elements.some(isShapeEditorElement)
-  const supportsStroke = selection.elements.some((element) => (
-    isShapeEditorElement(element) || element.type === 'line' || element.type === 'freehand' || element.type === 'text'
-  ))
-  const supportsText = firstElement?.type === 'text' && selectedCount === 1
-  const grouped = hasGroupedEditorSelection(selection.elements)
-
-  return (
-    <div className="inspector editor-inspector">
-      <h2 className="inspector__title">{summaryLabel}</h2>
-      <div className="editor-inspector__commands">
-        <button type="button" onClick={() => commandsRef.current?.undo()} disabled={!commandsRef.current || !selection.canUndo}>
-          Undo
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.redo()} disabled={!commandsRef.current || !selection.canRedo}>
-          Redo
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.duplicateSelected()} disabled={!commandsRef.current}>
-          Duplicate
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.deleteSelected()} disabled={!commandsRef.current}>
-          Delete
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.groupSelected()} disabled={!commandsRef.current || selectedCount < 2}>
-          Group
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.ungroupSelected()} disabled={!commandsRef.current || !grouped}>
-          Ungroup
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.sendSelectedToBack()} disabled={!commandsRef.current}>
-          Back
-        </button>
-        <button type="button" onClick={() => commandsRef.current?.bringSelectedToFront()} disabled={!commandsRef.current}>
-          Front
-        </button>
-      </div>
-      <div className="inspector__section">
-        <label className="editor-inspector__field">
-          <span>Fill</span>
-          <input
-            type="color"
-            disabled={!supportsFill}
-            value={toHexColor(style.fill, '#ffffff')}
-            onChange={(event) => commandsRef.current?.updateSelectedStyle({ fill: event.target.value })}
-          />
-        </label>
-        <label className="editor-inspector__field">
-          <span>Stroke</span>
-          <input
-            type="color"
-            disabled={!supportsStroke}
-            value={toHexColor(style.stroke, '#111827')}
-            onChange={(event) => commandsRef.current?.updateSelectedStyle({ stroke: event.target.value, color: event.target.value })}
-          />
-        </label>
-        <label className="editor-inspector__field">
-          <span>Width</span>
-          <input
-            type="number"
-            min={0}
-            max={24}
-            step={0.5}
-            disabled={!supportsStroke}
-            value={style.strokeWidth}
-            onChange={(event) => commandsRef.current?.updateSelectedStyle({ strokeWidth: Number(event.target.value) })}
-          />
-        </label>
-        <label className="editor-inspector__field">
-          <span>Opacity</span>
-          <input
-            type="range"
-            min={0.05}
-            max={1}
-            step={0.05}
-            value={style.opacity}
-            onChange={(event) => commandsRef.current?.updateSelectedStyle({ opacity: Number(event.target.value) })}
-          />
-        </label>
-        {supportsText && (
-          <>
-            <label className="editor-inspector__field">
-              <span>Text</span>
-              <input
-                type="text"
-                value={firstElement.text}
-                onChange={(event) => commandsRef.current?.updateSelectedStyle({ text: event.target.value })}
-              />
-            </label>
-            <label className="editor-inspector__field">
-              <span>Size</span>
-              <input
-                type="number"
-                min={8}
-                max={96}
-                step={1}
-                value={firstElement.style.fontSize}
-                onChange={(event) => commandsRef.current?.updateSelectedStyle({ fontSize: Number(event.target.value) })}
-              />
-            </label>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function readEditorSelectionStyle(elements: readonly EditorElement[]) {
-  const first = elements[0]
-  if (!first) {
-    return { fill: '#ffffff', stroke: '#111827', strokeWidth: 1, opacity: 1 }
-  }
-  if (isShapeEditorElement(first)) {
-    return {
-      fill: first.style.fill,
-      stroke: first.style.stroke,
-      strokeWidth: first.style.strokeWidth,
-      opacity: first.opacity,
-    }
-  }
-  if (first.type === 'line' || first.type === 'freehand') {
-    return {
-      fill: '#ffffff',
-      stroke: first.style.stroke,
-      strokeWidth: first.style.strokeWidth,
-      opacity: first.opacity,
-    }
-  }
-  if (first.type === 'text') {
-    return {
-      fill: '#ffffff',
-      stroke: first.style.color,
-      strokeWidth: 1,
-      opacity: first.opacity,
-    }
-  }
-  return { fill: '#ffffff', stroke: '#111827', strokeWidth: 1, opacity: first.opacity }
-}
-
-function isShapeEditorElement(element: EditorElement) {
-  return element.type === 'rectangle' || element.type === 'ellipse' || element.type === 'polygon'
-}
-
-function hasGroupedEditorSelection(elements: readonly EditorElement[]) {
-  return elements.some((element) => element.parentId != null)
-}
-
-function editorElementLabel(element: EditorElement) {
-  switch (element.type) {
-    case 'rectangle':
-      return 'Rectangle'
-    case 'ellipse':
-      return 'Ellipse'
-    case 'polygon':
-      return 'Polygon'
-    case 'line':
-      return 'Line'
-    case 'freehand':
-      return 'Freehand'
-    case 'text':
-      return 'Text'
-    case 'group':
-      return 'Group'
-  }
-}
-
-function toHexColor(value: string | undefined, fallback: string) {
-  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
 }
 
 export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
