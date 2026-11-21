@@ -141,3 +141,9 @@ Rate-limited endpoints:
 - `/api/auth/face/match`
 - `/api/auth/face/select`
 - `/api/auth/face/login`
+
+# License
+
+No license has been chosen yet. All rights are reserved: you may read the code here, but copying, modifying or
+redistributing it needs the owners' permission. Third-party components keep their own licenses; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
