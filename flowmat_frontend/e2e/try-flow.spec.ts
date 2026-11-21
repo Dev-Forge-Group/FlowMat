@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
+// The start typed into the panel is local time; Seoul keeps its offset (+09:00) fixed for the times below.
+test.use({ timezoneId: 'Asia/Seoul' })
+
 /**
  * Trying the flow (ADR-040 decision 7) against a mocked API: an input at the start goes through a Split and a lossy
  * connection to the end, in the browser and without asking the server; the outcome lists each step and the canvas shows
@@ -68,4 +71,63 @@ test('trying the flow follows a split and a loss to the end and shows what reach
   await expect(passport).toHaveCount(0)
   await tryIt.getByRole('button', { name: 'Line B: 4 kg (completed)' }).click()
   await expect(passport).toContainText('Semantic passport')
+})
+
+test('trying the flow with a work order says when each step could start and what it waits for', async ({ page }) => {
+  const workingTime: string[] = []
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (await answerAuth(route, url.pathname)) return
+    if (url.pathname === '/api/workflows/wf-try/canvas') {
+      return ok(route, { workflow, graphSeq: 0, processes: [node('p-in', 'Receive', 60, 160, 'input'),
+        node('p-bake', 'Bake', 320, 160, 'process'), node('p-pack', 'Pack', 600, 160, 'output')],
+      processIos: [], connections: [
+        // Half an hour of working time, then three and a half hours of all time.
+        connection('c-bake', 'p-in', 'p-bake', { delayTimeSec: 1800, delayBasis: 'working' }),
+        connection('c-pack', 'p-bake', 'p-pack', { delayTimeSec: 12600 })],
+      annotations: [], currentUserRole: 'owner' })
+    }
+    if (url.pathname === '/api/workflows/wf-try/editor-document') {
+      return ok(route, { schemaVersion: 1, camera: { x: 0, y: 0, z: 1 }, nextElementSeq: 1, version: 0, versionNonce: 0, elements: [] })
+    }
+    if (url.pathname === '/api/workflows') return ok(route, [workflow])
+    if (url.pathname === '/api/work-orders') {
+      return ok(route, [
+        { workOrderId: 'wo-1', projectId: 'prj-e2e', workflowId: 'wf-try', workOrderNumber: 'WO-1', workOrderTitle: 'Morning bake',
+          workOrderStatus: 'approved', equipmentId: 'eq-press' },
+        { workOrderId: 'wo-2', projectId: 'prj-e2e', workflowId: 'wf-try', workOrderNumber: 'WO-2', workOrderTitle: 'Done',
+          workOrderStatus: 'completed', equipmentId: null },
+        { workOrderId: 'wo-3', projectId: 'prj-e2e', workflowId: 'wf-other', workOrderNumber: 'WO-3', workOrderTitle: 'Elsewhere',
+          workOrderStatus: 'approved', equipmentId: null }])
+    }
+    if (url.pathname === '/api/work-orders/wo-1/working-time') {
+      workingTime.push(url.searchParams.get('from') ?? '')
+      return ok(route, { workOrderId: 'wo-1', from: '2026-12-21T07:00:00+09:00', until: '2026-12-28T07:00:00+09:00',
+        allTime: false, equipmentId: 'eq-press', equipmentCode: 'PRESS', crew: ['kim'],
+        stretches: [['2026-12-21T08:00:00+09:00', '2026-12-21T12:00:00+09:00'], ['2026-12-21T13:00:00+09:00', '2026-12-21T17:00:00+09:00']] })
+    }
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  await page.goto('/projects/prj-e2e/workflows/wf-try')
+  await expect(page.locator('.react-flow__node')).toHaveCount(3, { timeout: 15_000 })
+
+  await page.getByRole('button', { name: 'Try it' }).click()
+  const tryIt = page.getByRole('region', { name: 'Try the flow' })
+  // Only open orders on this workflow are offered.
+  await expect(tryIt.getByLabel('Work order').locator('option')).toHaveText(['None (amounts only)', 'WO-1 Morning bake'])
+  await tryIt.getByLabel('Work order').selectOption('wo-1')
+  await tryIt.getByLabel('Starts').fill('2026-12-21T07:00')
+  await tryIt.getByRole('button', { name: 'Run through' }).click()
+
+  await expect(tryIt.getByText('Reaches the end in 3 steps')).toBeVisible()
+  expect(workingTime).toEqual(['2026-12-21T07:00:00+09:00'])
+  // The working-time delay ends half an hour into the morning shift; the next one ends at noon, when the press and kim
+  // break, so Pack waits for the afternoon.
+  await expect(tryIt.getByRole('listitem')).toHaveText([
+    'Receive: 10 (completed)',
+    'Bake: 10 (completed) from 2026-12-21 08:30',
+    'Pack: 10 (completed) from 2026-12-21 13:00 (waits for PRESS, kim)'])
+  await expect(tryIt.getByText('Ends 2026-12-21 13:00, 6 h after the start')).toBeVisible()
 })

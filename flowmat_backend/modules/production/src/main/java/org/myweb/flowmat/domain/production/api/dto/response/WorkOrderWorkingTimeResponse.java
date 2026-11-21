@@ -9,6 +9,7 @@ import java.util.List;
  *
  * @param allTime     nothing fixes the time (no equipment and no such crew): every delay counts all time, no step waits
  * @param equipmentId the work order's equipment; null without one
+ * @param equipmentCode its code, as the production steps name what a step waits for; null without equipment
  * @param crew        the people on the crew with shifts whose time the stretches follow
  * @param stretches   {@code [from, until)} pairs, earliest first; none when the team never works together in the window
  */
@@ -18,6 +19,7 @@ public record WorkOrderWorkingTimeResponse(
     String until,
     boolean allTime,
     String equipmentId,
+    String equipmentCode,
     List<String> crew,
     List<List<String>> stretches
 ) {

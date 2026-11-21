@@ -32,6 +32,14 @@
 ## 진행
 
 - **1주차 1번 ADR-041: 끝(Accepted).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md). 결정 4는 그래프 실행이 시스템 시계를 쓴다는 것을 보고 고쳤다. 고정 입력의 답은 서버에서 실제로 돌린 시각이 아니라, 라우터와 같은 순수 함수가 낸다.
+- **3주차 1·3번 "Try it"에 작업지시: 끝(2026-11-21, 일찍).**
+  - 패널에 작업지시(이 흐름의 취소·완료되지 않은 것)와 시작 시각을 고르는 칸이 생겼다. 고르지 않으면 지금처럼 양만 따라간다.
+  - 고르면 구간 API를 시작 시각부터 7일 묻고, 커널로 따라간다.
+  - 단계마다 시작할 수 있는 때와 기다린 것을 생산 단계 화면과 같은 말로 보인다(`from 2026-12-21 13:00 (waits for PRESS, kim)`). 설비는 코드로 부른다(API의 `equipmentCode`).
+  - 전체가 언제 끝나고 얼마나 걸리는지도 보인다.
+  - 순수 함수(`startTime`, `kernelTime`, `timeNotes`, `timeSummary`, `duration`)에 단위 테스트를 붙였다.
+  - 모의 브라우저 테스트(`try-flow.spec.ts`)가 근무 시간 지연과 점심시간 기다림을 본다.
+  - 남은 것: 3주차 2번 실 API 브라우저 테스트(같은 작업지시의 생산 실행과 비교).
 - **2주차 2번 구간 읽기 API: 끝(2026-11-21, 일찍).** `GET /work-orders/{id}/working-time`([worker-calendar](../domain/worker-calendar.md) WC68). `ProductionRunWorkingTime`과 같은 계산이다. `TryItTimeIntegrationTest` 4개:
   - API가 낸 구간을 `FlowRunTiming`에 넣으면, 같은 작업지시의 생산 실행에서 라우터가 적은 `readyAt`·`scheduledAt`·기다린 설비·인력과 같다. 근무 밖 기다림과 근무 시간 지연 둘 다 본다(ADR-041 결정 4의 서버 대조).
   - 설비도 인력도 없는 작업지시는 모든 시간이다.

@@ -8,6 +8,8 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogEquipmentView;
+import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.production.api.dto.response.WorkOrderWorkingTimeResponse;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.repository.WorkOrderRepository;
@@ -35,6 +37,7 @@ public class WorkOrderWorkingTimeService {
     private final WorkOrderRepository workOrderRepository;
     private final ProjectAccess access;
     private final ProductionRunWorkingTime workingTime;
+    private final CatalogQuery catalogQuery;
 
     public WorkOrderWorkingTimeResponse workingTime(String workOrderId, String from, String until) {
         WorkOrder order = workOrderRepository.findByWorkOrderIdAndDeletedYn(workOrderId, NOT_DELETED)
@@ -53,9 +56,12 @@ public class WorkOrderWorkingTimeService {
         List<List<String>> stretches = team.map(time -> time.stretches().stream()
             .map(stretch -> List.of(TEXT.format(stretch.start().atOffset(offset)), TEXT.format(stretch.end().atOffset(offset))))
             .toList()).orElse(List.of());
+        String equipmentId = team.map(ProductionRunWorkingTime.TeamTime::equipmentId).orElse(null);
+        String equipmentCode = equipmentId == null ? null : catalogQuery.findProjectEquipment(order.getProjectId(), equipmentId)
+            .map(CatalogEquipmentView::equipmentCode)
+            .orElse(null);
         return new WorkOrderWorkingTimeResponse(order.getWorkOrderId(), TEXT.format(start), TEXT.format(end), team.isEmpty(),
-            team.map(ProductionRunWorkingTime.TeamTime::equipmentId).orElse(null),
-            team.map(ProductionRunWorkingTime.TeamTime::crew).orElse(List.of()), stretches);
+            equipmentId, equipmentCode, team.map(ProductionRunWorkingTime.TeamTime::crew).orElse(List.of()), stretches);
     }
 
     private static OffsetDateTime dateTime(String value, String name) {

@@ -64,6 +64,7 @@ class TryItTimeIntegrationTest extends IntegrationTestSupport {
         JsonNode time = data(get("/work-orders/" + order + "/working-time").param("from", ended.toString()), null);
         assertFalse(time.path("allTime").asBoolean());
         assertEquals(press, time.path("equipmentId").asText());
+        assertTrue(time.path("equipmentCode").asText().startsWith("TRY-"));
         assertEquals(List.of(lee), texts(time.path("crew")));
         assertEquals(opens.toInstant(), OffsetDateTime.parse(time.path("stretches").get(0).get(0).asText()).toInstant());
         assertEquals(7, time.path("stretches").size(), "one hour a day for the default seven days");
@@ -93,6 +94,7 @@ class TryItTimeIntegrationTest extends IntegrationTestSupport {
         OffsetDateTime ended = completeMix(run, line);
         JsonNode time = data(get("/work-orders/" + order + "/working-time").param("from", ended.toString()), null);
         assertTrue(time.path("equipmentId").isNull());
+        assertTrue(time.path("equipmentCode").isNull());
         assertEquals(List.of(kim), texts(time.path("crew")));
 
         FlowRunTiming.WorkingTime team = FlowRunTiming.stretches(stretches(time), null, List.of(kim));

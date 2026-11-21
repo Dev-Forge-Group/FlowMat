@@ -1450,6 +1450,16 @@ code {
   overflow-y: auto;
 }
 
+.try-flow__time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.try-flow__ends {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
 .try-flow__note {
   color: #991b1b;
 }
