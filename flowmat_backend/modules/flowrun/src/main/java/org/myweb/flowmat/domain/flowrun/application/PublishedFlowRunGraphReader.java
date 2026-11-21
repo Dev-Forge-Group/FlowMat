@@ -5,8 +5,8 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,9 +32,10 @@ final class PublishedFlowRunGraphReader {
             throw conflict("Published revision has no executable graph.");
         }
         Map<String, Integer> indegree = new LinkedHashMap<>();
-        Set<String> exclusiveNodes = new HashSet<>();
-        Set<String> joinNodes = new HashSet<>();
-        Set<String> splitNodes = new HashSet<>();
+        // In the order drawn, so that of several gateways a revision cannot run with, the first is the one named.
+        Set<String> exclusiveNodes = new LinkedHashSet<>();
+        Set<String> joinNodes = new LinkedHashSet<>();
+        Set<String> splitNodes = new LinkedHashSet<>();
         for (JsonNode process : processes) {
             String id = requiredText(process, "processId");
             if (indegree.putIfAbsent(id, 0) != null) {
@@ -171,6 +172,11 @@ final class PublishedFlowRunGraphReader {
             // Publishing refuses it (SPLIT_WITHOUT_INPUT); a Split with nothing to divide would start as a root.
             if (indegree.get(split) == 0) {
                 throw conflict("Published revision Split " + split + " has no incoming connection.");
+            }
+            // Publishing refuses it (SPLIT_REST_DUPLICATE); which rest takes what is left would be a guess.
+            long rests = outgoing.getOrDefault(split, List.of()).stream().filter(edge -> "rest".equals(edge.splitKind())).count();
+            if (rests > 1) {
+                throw conflict("Published revision Split " + split + " has " + rests + " rest connections.");
             }
         }
         List<String> roots = indegree.entrySet().stream()

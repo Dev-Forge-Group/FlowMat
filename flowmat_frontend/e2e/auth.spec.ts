@@ -217,6 +217,12 @@ async function mockWorkspaceApi(page: Page) {
     })
   })
 
+  // The check as drawn reads the unit catalog (docs/architecture/adr/ADR-040-flow-kernel.md decision 7).
+  await page.route('**/api/units?**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
   // The workspace reads the workflow's guided views when it opens (docs/architecture/adr/ADR-037-guided-views.md).
   await page.route('**/api/workflows/wf-e2e/guided-views', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',

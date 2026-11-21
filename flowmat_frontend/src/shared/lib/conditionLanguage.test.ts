@@ -6,10 +6,11 @@ import { conditionChecker, declaredAttributes, type ConditionChecker } from './c
 /**
  * The editor's checker against the condition language's shared fixtures (compute/condition-expression/fixtures), which
  * record what the backend's Java ConditionExpression answers: every case must come out the same through this wrapper
- * and the committed WebAssembly module.
+ * and the committed WebAssembly module the editor ships.
  */
 const fixtures = fileURLToPath(new URL('../../../../compute/condition-expression/fixtures/', import.meta.url))
-const wasm = fileURLToPath(new URL('../wasm/flowmat_condition.wasm', import.meta.url))
+// The editor's module: the flow kernel, which links the condition language in and exports it.
+const wasm = fileURLToPath(new URL('../wasm/flowmat_flow_kernel.wasm', import.meta.url))
 
 /** JSON with each number kept as written, so 12345678901234567890.123 reaches the module exactly. */
 function read(name: string): any {

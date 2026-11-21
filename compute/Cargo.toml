@@ -1,0 +1,12 @@
+# The Rust crates in compute/ build as one workspace, so Cargo hashes each crate's path relative to here and the
+# WebAssembly module comes out the same whatever directory the repository is checked out in
+# (compute/flow-kernel/wasm/build.sh --check compares it with the committed one).
+[workspace]
+resolver = "3"
+members = ["condition-expression", "flow-kernel"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

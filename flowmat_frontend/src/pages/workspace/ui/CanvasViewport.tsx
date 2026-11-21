@@ -1,19 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
-import { toBlob, toPng } from 'html-to-image'
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  useViewport,
-  getBezierPath,
-  useUpdateNodeInternals,
-  useStoreApi,
-  useOnViewportChange,
   reconnectEdge,
   ViewportPortal,
-  getNodesBounds,
-  getViewportForBounds,
-  useReactFlow,
   type NodeChange,
   type EdgeChange,
   type Connection,
@@ -24,8 +15,6 @@ import {
   type ReactFlowInstance,
   type Node,
   type Edge,
-  type Viewport,
-  type ConnectionLineComponentProps,
   applyNodeChanges,
   applyEdgeChanges,
 } from '@xyflow/react'
@@ -45,14 +34,9 @@ import {
 import type { PatchCanvasAnnotationInput } from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
 import type { CanvasReadingHighlight } from '../model/canvasReadingModel'
 import type { RunMark } from '../model/runOverlay'
-import type { ChangeMark } from '../model/revisionChanges'
-import type { LayoutLine, LayoutSnapshot } from '../model/layoutChecks'
+import type { LayoutSnapshot } from '../model/layoutChecks'
 import { CanvasNode } from './CanvasNode'
-import { CanvasEdge, CONNECTION_TYPE_STYLE } from './CanvasEdge'
-import { workflowSvg, workflowSvgParts, type SvgConnection, type SvgProcess, type SvgTheme } from '../model/workflowSvg'
-import { SHARE_CARD, shareCardSvg, type ShareCardText } from '../model/shareCard'
-import { motionMimeType, motionScene, type MotionEdgeInput } from '../model/workflowMotion'
-import { recordMotion } from './recordMotion'
+import { CanvasEdge } from './CanvasEdge'
 import { PALETTE_DRAG_MIME } from './canvasConstants'
 import { canvasNodePosition } from '../model/canvasNodePosition'
 import { lockDrag } from '../model/axisLock'
@@ -69,6 +53,14 @@ import {
   type PresenceMessage,
   type GraphChangeMessage,
 } from '../../../entities/workflow/api/useWorkflowSync'
+import { snapGuidesFor, type SnapGuide } from '../model/snapGuides'
+import { connectionMarkClass, processMarkClass, type ChangeMarks } from '../model/canvasMarks'
+import { useFreehandDrawing } from '../model/useFreehandDrawing'
+import { useCanvasViewHandles, type CanvasCamera } from './useCanvasViewHandles'
+import { connectionPayload, isNewConnection, toRfEdges, toRfProcessNodes, type RfEdge, type RfNode } from '../model/canvasFlowElements'
+import { AnnotationPreviewLayer, CustomConnectionLine, SnapGuideLayer, type AnnotationPreview } from './CanvasOverlayLayers'
+import { ExportController, type MotionExport, type PngExport, type ShareCardExport, type SvgExport } from './CanvasExportController'
+import { HandleBoundsRecovery, InternalsUpdater, loadSavedViewport, ViewportPersister, ZoomReporter } from './CanvasFlowWatchers'
 import {
   WorkspaceEditorLayer,
   type WorkspaceEditorCommandApi,
@@ -77,523 +69,6 @@ import {
 
 const nodeTypes = { flowmatNode: CanvasNode }
 const edgeTypes = { flowmatEdge: CanvasEdge }
-
-const SNAP_THRESHOLD = 8 // flow-space pixels
-
-interface SnapGuide {
-  type: 'vertical' | 'horizontal'
-  position: number
-  start: number
-  end: number
-}
-
-interface AnnotationPreview {
-  points: { x: number; y: number }[]
-  annotationType: string
-}
-
-function calculateSnapGuides(
-  dragging: { x: number; y: number; w: number; h: number },
-  others: Array<{ id: string; x: number; y: number; w: number; h: number }>
-): SnapGuide[] {
-  const dL = dragging.x
-  const dC = dragging.x + dragging.w / 2
-  const dR = dragging.x + dragging.w
-  const dT = dragging.y
-  const dM = dragging.y + dragging.h / 2
-  const dB = dragging.y + dragging.h
-
-  let bestX: { dist: number; guide: SnapGuide } | null = null
-  let bestY: { dist: number; guide: SnapGuide } | null = null
-
-  for (const o of others) {
-    const oL = o.x
-    const oC = o.x + o.w / 2
-    const oR = o.x + o.w
-    const oT = o.y
-    const oM = o.y + o.h / 2
-    const oB = o.y + o.h
-
-    for (const dPt of [dL, dC, dR]) {
-      for (const oPt of [oL, oC, oR]) {
-        const dist = Math.abs(dPt - oPt)
-        if (dist < SNAP_THRESHOLD && (!bestX || dist < bestX.dist)) {
-          const allY = [dT, dB, oT, oB]
-          bestX = {
-            dist,
-            guide: { type: 'vertical', position: oPt, start: Math.min(...allY), end: Math.max(...allY) },
-          }
-        }
-      }
-    }
-
-    for (const dPt of [dT, dM, dB]) {
-      for (const oPt of [oT, oM, oB]) {
-        const dist = Math.abs(dPt - oPt)
-        if (dist < SNAP_THRESHOLD && (!bestY || dist < bestY.dist)) {
-          const allX = [dL, dR, oL, oR]
-          bestY = {
-            dist,
-            guide: { type: 'horizontal', position: oPt, start: Math.min(...allX), end: Math.max(...allX) },
-          }
-        }
-      }
-    }
-  }
-
-  return [bestX?.guide, bestY?.guide].filter(Boolean) as SnapGuide[]
-}
-
-function CustomConnectionLine({
-  fromX,
-  fromY,
-  toX,
-  toY,
-  fromPosition,
-  toPosition,
-  connectionStatus,
-}: ConnectionLineComponentProps) {
-  const [path] = getBezierPath({
-    sourceX: fromX,
-    sourceY: fromY,
-    sourcePosition: fromPosition,
-    targetX: toX,
-    targetY: toY,
-    targetPosition: toPosition,
-  })
-
-  const stroke =
-    connectionStatus === 'valid'
-      ? '#22c55e'
-      : connectionStatus === 'invalid'
-        ? '#ef4444'
-        : '#94a3b8'
-
-  return (
-    <path
-      d={path}
-      fill="none"
-      style={{ stroke, strokeWidth: 2, strokeDasharray: '6 3' }}
-    />
-  )
-}
-
-// Renders alignment guide lines in screen space (must be inside ReactFlow for context)
-function SnapGuideLayer({ guides }: { guides: SnapGuide[] }) {
-  const { x: vpX, y: vpY, zoom } = useViewport()
-  if (guides.length === 0) return null
-
-  const toSX = (fx: number) => fx * zoom + vpX
-  const toSY = (fy: number) => fy * zoom + vpY
-
-  return (
-    <svg
-      style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 5,
-        overflow: 'visible',
-      }}
-    >
-      {guides.map((guide, i) =>
-        guide.type === 'vertical' ? (
-          <line
-            key={i}
-            x1={toSX(guide.position)}
-            y1={toSY(guide.start - 20)}
-            x2={toSX(guide.position)}
-            y2={toSY(guide.end + 20)}
-            stroke="var(--accent)"
-            strokeWidth={1}
-            strokeDasharray="4 3"
-            opacity={0.85}
-          />
-        ) : (
-          <line
-            key={i}
-            x1={toSX(guide.start - 20)}
-            y1={toSY(guide.position)}
-            x2={toSX(guide.end + 20)}
-            y2={toSY(guide.position)}
-            stroke="var(--accent)"
-            strokeWidth={1}
-            strokeDasharray="4 3"
-            opacity={0.85}
-          />
-        )
-      )}
-    </svg>
-  )
-}
-
-function buildOverlayPath(
-  points: { x: number; y: number }[],
-  toScreenX: (x: number) => number,
-  toScreenY: (y: number) => number
-) {
-  if (points.length === 0) return ''
-  return points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${toScreenX(point.x)} ${toScreenY(point.y)}`)
-    .join(' ')
-}
-
-function AnnotationPreviewLayer({
-  localDraft,
-  remotePreviews,
-}: {
-  localDraft: { x: number; y: number }[]
-  remotePreviews: ReadonlyMap<string, AnnotationPreview>
-}) {
-  const { x: vpX, y: vpY, zoom } = useViewport()
-  const toScreenX = useCallback((x: number) => x * zoom + vpX, [vpX, zoom])
-  const toScreenY = useCallback((y: number) => y * zoom + vpY, [vpY, zoom])
-
-  const remoteFreehands = [...remotePreviews.values()].filter(
-    (preview) => preview.annotationType === 'freehand' && preview.points.length > 1
-  )
-  const localPath =
-    localDraft.length > 1 ? buildOverlayPath(localDraft, toScreenX, toScreenY) : ''
-
-  if (!localPath && remoteFreehands.length === 0) return null
-
-  return (
-    <svg
-      style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 7,
-        overflow: 'visible',
-      }}
-    >
-      {remoteFreehands.map((preview, index) => (
-        <path
-          key={`remote-${index}`}
-          d={buildOverlayPath(preview.points, toScreenX, toScreenY)}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeDasharray="7 5"
-          opacity={0.55}
-        />
-      ))}
-      {localPath && (
-        <path
-          d={localPath}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={0.9}
-        />
-      )}
-    </svg>
-  )
-}
-
-/** How a picture export ended: made, nothing to draw, the browser cannot, or it failed with a message. */
-export type ExportOutcome = { kind: 'done' } | { kind: 'empty' } | { kind: 'unsupported' } | { kind: 'failed'; message: string }
-
-/** The raster picture's target: a file to save, or the clipboard (archify's "PNG to clipboard"). */
-export type PngTarget = 'download' | 'clipboard'
-export type PngExport = (filename: string, target?: PngTarget) => Promise<ExportOutcome>
-export type SvgExport = (filename: string, theme?: SvgTheme) => Promise<ExportOutcome>
-/** A share card of a reading (archify's route and reach share cards): what it says and what it draws strongly. */
-export interface ShareCardRequest {
-  text: ShareCardText
-  nodeIds: ReadonlySet<string>
-  edgeIds: ReadonlySet<string>
-  theme: 'light' | 'dark'
-}
-export type ShareCardExport = (filename: string, card: ShareCardRequest) => Promise<ExportOutcome>
-/** archify's six-second motion WebM of the workflow (workflowMotion.ts). */
-export type MotionExport = (filename: string, theme: 'light' | 'dark') => Promise<ExportOutcome>
-
-/** The card twice as large as it is drawn, so it stays sharp where it is pasted. */
-const SHARE_CARD_SCALE = 2
-
-function ExportController({ onReady, onSvgReady, onShareCardReady, onMotionReady }: {
-  onReady?: (fn: PngExport) => void
-  onSvgReady?: (fn: SvgExport) => void
-  onShareCardReady?: (fn: ShareCardExport) => void
-  onMotionReady?: (fn: MotionExport) => void
-}) {
-  const { getNodes, getEdges } = useReactFlow()
-  const getNodesRef = useRef(getNodes)
-  getNodesRef.current = getNodes
-  const getEdgesRef = useRef(getEdges)
-  getEdgesRef.current = getEdges
-
-  // The workflow as the vector pictures draw it: the boxes React Flow measured and the paths it drew, each line in its
-  // kind's own look. Null when there is no process to draw.
-  const drawn = useCallback((): { processes: SvgProcess[]; connections: SvgConnection[] } | null => {
-      const nodes = (getNodesRef.current() as unknown as RfNode[]).filter((node) => node.type === 'flowmatNode')
-      if (nodes.length === 0) return null
-      const measured = (node: RfNode) => (node as unknown as { measured?: { width?: number; height?: number } }).measured
-      const processes = nodes.map((node) => ({ id: node.id, x: node.position.x, y: node.position.y,
-        width: measured(node)?.width ?? node.width, height: measured(node)?.height ?? node.height,
-        name: node.data.name, kind: node.data.nodeType }))
-      const connections = (getEdgesRef.current() as unknown as RfEdge[]).flatMap((edge) => {
-        const path = document.querySelector<SVGPathElement>(
-          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
-        const d = path?.getAttribute('d')
-        if (!path || !d) return []
-        const look = CONNECTION_TYPE_STYLE[edge.data.connectionType] ?? { stroke: '#94a3b8' }
-        const length = typeof path.getTotalLength === 'function' ? path.getTotalLength() : 0
-        const at = (distance: number) => {
-          const point = path.getPointAtLength(distance)
-          return { x: point.x, y: point.y }
-        }
-        return [{ id: edge.id, d, stroke: look.stroke, dash: look.strokeDasharray ?? null, label: edge.data.label,
-          labelAt: length > 0 ? at(length / 2) : null, ends: length > 0 ? [at(0), at(length)] as const : null }]
-      })
-      return { processes, connections }
-  }, [])
-
-  useEffect(() => {
-    onSvgReady?.(async (filename: string, theme: SvgTheme = 'light') => {
-      const workflow = drawn()
-      if (!workflow) return { kind: 'empty' }
-      const { processes, connections } = workflow
-      const url = URL.createObjectURL(new Blob([workflowSvg(filename, processes, connections, theme)], { type: 'image/svg+xml' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = theme === 'light' ? `${filename}.svg` : `${filename}-${theme}.svg`
-      a.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 0)
-      return { kind: 'done' }
-    })
-  }, [onSvgReady, drawn])
-
-  // The share card: the workflow with the reading drawn strongly, under its badge, title and summary, as one PNG.
-  useEffect(() => {
-    onShareCardReady?.(async (filename: string, card: ShareCardRequest) => {
-      const workflow = drawn()
-      if (!workflow) return { kind: 'empty' }
-      const diagram = workflowSvgParts(workflow.processes, workflow.connections, card.theme,
-        { nodeIds: card.nodeIds, edgeIds: card.edgeIds, accent: card.text.accent })
-      const svg = shareCardSvg({ title: filename, text: card.text, diagram, theme: card.theme })
-      const source = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
-      try {
-        const image = new Image()
-        await new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve()
-          image.onerror = () => reject(new Error('The card could not be drawn.'))
-          image.src = source
-        })
-        const canvas = document.createElement('canvas')
-        canvas.width = SHARE_CARD.width * SHARE_CARD_SCALE
-        canvas.height = SHARE_CARD.height * SHARE_CARD_SCALE
-        const context = canvas.getContext('2d')
-        if (!context) return { kind: 'unsupported' }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height)
-        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-        if (!blob) return { kind: 'failed', message: 'The browser made no picture.' }
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${filename}-${card.text.suffix}.png`
-        a.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 0)
-        return { kind: 'done' }
-      } catch (error) {
-        return { kind: 'failed', message: error instanceof Error ? error.message : 'The card could not be drawn.' }
-      } finally {
-        URL.revokeObjectURL(source)
-      }
-    })
-  }, [onShareCardReady, drawn])
-
-  // The motion clip: the still vector picture with a signal running along each line in flow order, recorded as a WebM.
-  useEffect(() => {
-    onMotionReady?.(async (filename: string, theme: 'light' | 'dark') => {
-      const mimeType = motionMimeType()
-      if (!mimeType) return { kind: 'unsupported' }
-      const workflow = drawn()
-      if (!workflow) return { kind: 'empty' }
-      // Each line sampled along the path the canvas drew, every dozen canvas pixels or so.
-      const lines = (getEdgesRef.current() as unknown as RfEdge[]).flatMap((edge): MotionEdgeInput[] => {
-        const path = document.querySelector<SVGPathElement>(
-          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
-        const length = path && typeof path.getTotalLength === 'function' ? path.getTotalLength() : 0
-        if (!path || !(length > 0)) return []
-        const count = Math.max(12, Math.min(72, Math.ceil(length / 12)))
-        const points = Array.from({ length: count + 1 }, (_, index) => {
-          const point = path.getPointAtLength((length * index) / count)
-          return { x: point.x, y: point.y }
-        })
-        return [{ id: edge.id, source: edge.source, target: edge.target, points }]
-      })
-      const scene = motionScene(workflow.processes, lines)
-      if (scene.edges.length === 0) return { kind: 'empty' }
-      const view = workflowSvgParts(workflow.processes, workflow.connections, theme)
-      try {
-        const blob = await recordMotion(workflowSvg(filename, workflow.processes, workflow.connections, theme), view, scene, mimeType)
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${filename}.webm`
-        a.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 0)
-        return { kind: 'done' }
-      } catch (error) {
-        return { kind: 'failed', message: error instanceof Error ? error.message : 'The clip could not be recorded.' }
-      }
-    })
-  }, [onMotionReady, drawn])
-
-  useEffect(() => {
-    onReady?.(async (filename: string, target: PngTarget = 'download') => {
-      const nodes = getNodesRef.current() as unknown as RfNode[]
-      if (nodes.length === 0) return { kind: 'empty' }
-      // The clipboard takes a picture only where the browser can write one (archify checks the same before offering it).
-      const clipboard = target === 'clipboard'
-      if (clipboard && (typeof ClipboardItem === 'undefined' || typeof navigator.clipboard?.write !== 'function')) {
-        return { kind: 'unsupported' }
-      }
-      const bounds = getNodesBounds(nodes as unknown as Node[])
-      const W = 2400
-      const H = 1600
-      const viewport = getViewportForBounds(bounds, W, H, 0.1, 2, 0.1)
-      const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
-      if (!el) return { kind: 'empty' }
-      // The picture is the workflow itself: reading highlights and the selection stay out of it.
-      const frame = el.closest('.workspace-canvas-viewport')
-      frame?.classList.add('reading-exporting')
-      const restoreLines = plainSelectedLines(el)
-      const options = {
-        backgroundColor: '#f4f3f8',
-        width: W,
-        height: H,
-        style: {
-          width: `${W}px`,
-          height: `${H}px`,
-          transform: `translate(${viewport.x}px,${viewport.y}px) scale(${viewport.zoom})`,
-          transformOrigin: 'top left',
-        },
-      }
-      const restore = () => {
-        restoreLines()
-        frame?.classList.remove('reading-exporting')
-      }
-      try {
-        if (clipboard) {
-          // The item is made at once, with the picture to come, so the write stays inside the press that asked for it.
-          const picture = toBlob(el, options).then((blob) => {
-            if (!blob) throw new Error('the picture came out empty')
-            return blob
-          })
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': picture })])
-        } else {
-          const dataUrl = await toPng(el, options)
-          const a = document.createElement('a')
-          a.href = dataUrl
-          a.download = `${filename}.png`
-          a.click()
-        }
-        return { kind: 'done' }
-      } catch (error) {
-        return { kind: 'failed', message: error instanceof Error ? error.message : String(error) }
-      } finally {
-        restore()
-      }
-    })
-  }, [onReady])
-
-  return null
-}
-
-/**
- * The picture copies a line's markup, not its computed style, so a selected line would keep its selection colour: for
- * the export, each selected line and its arrow take the look of their kind (CanvasEdge.tsx keeps it in variables).
- * Returns what puts them back.
- */
-function plainSelectedLines(root: HTMLElement): () => void {
-  const undo: (() => void)[] = []
-  const restyle = (element: SVGElement, apply: (style: CSSStyleDeclaration, stroke: string, dash: string) => void) => {
-    const stroke = element.style.getPropertyValue('--edge-type-stroke')
-    if (!stroke) return
-    const before = element.getAttribute('style')
-    apply(element.style, stroke, element.style.getPropertyValue('--edge-type-dash'))
-    undo.push(() => (before == null ? element.removeAttribute('style') : element.setAttribute('style', before)))
-  }
-  root.querySelectorAll<SVGPathElement>('.react-flow__edge.selected path.react-flow__edge-path').forEach((path) =>
-    restyle(path, (style, stroke, dash) => {
-      style.stroke = stroke
-      style.strokeWidth = '1.5'
-      style.strokeDasharray = dash && dash !== 'none' ? dash : ''
-    }))
-  root.querySelectorAll<SVGPathElement>('.react-flow__edge.selected marker path').forEach((path) =>
-    restyle(path, (style, stroke) => { style.fill = stroke }))
-  return () => undo.forEach((restore) => restore())
-}
-
-/** Reports the zoom when the canvas first shows and after each move or zoom ends, for the view controls' percentage. */
-function ZoomReporter({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
-  const { getZoom } = useReactFlow()
-  const report = useRef(onZoomChange)
-  report.current = onZoomChange
-  useEffect(() => {
-    report.current?.(getZoom())
-    // The first fit may land after mount.
-    const timer = window.setTimeout(() => report.current?.(getZoom()), 400)
-    return () => window.clearTimeout(timer)
-  }, [getZoom])
-  useOnViewportChange({ onEnd: (viewport: Viewport) => report.current?.(viewport.zoom) })
-  return null
-}
-
-function ViewportPersister({ storageKey }: { storageKey: string }) {
-  useOnViewportChange({
-    onEnd: (viewport: Viewport) => {
-      localStorage.setItem(storageKey, JSON.stringify(viewport))
-    },
-  })
-  return null
-}
-
-/** Calls updateNodeInternals for nodes whose handle count changed. Must be inside ReactFlow. */
-function InternalsUpdater({ nodeIds }: { nodeIds: string[] }) {
-  const updateNodeInternals = useUpdateNodeInternals()
-  useEffect(() => {
-    if (nodeIds.length > 0) updateNodeInternals(nodeIds)
-  }, [nodeIds, updateNodeInternals])
-  return null
-}
-
-/**
- * Measures the nodes that still have no handle positions a frame after the nodes changed. React Flow draws no
- * connection to such a node.
- *
- * React Flow forgets a node's handle positions when it is given a new node object without `measured`, and it measures
- * the node again only after it has rendered that node as measured. When the new object arrives between the first
- * measurement and that render, the node never gets its handles back, so its connections stay missing until something
- * resizes it. On an ordinary load React Flow has measured every node by the time this looks, and it does nothing.
- * Must be inside ReactFlow.
- */
-function HandleBoundsRecovery({ nodes }: { nodes: RfNode[] }) {
-  const store = useStoreApi()
-  const updateNodeInternals = useUpdateNodeInternals()
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const stuck: string[] = []
-      for (const node of store.getState().nodeLookup.values()) {
-        if (!node.internals.handleBounds && !node.hidden) stuck.push(node.id)
-      }
-      if (stuck.length > 0) updateNodeInternals(stuck)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [nodes, store, updateNodeInternals])
-  return null
-}
 
 interface Props {
   workflowId: string
@@ -667,7 +142,7 @@ interface Props {
   /** A production run shown over the canvas: each process's mark from its latest step. View only. */
   runMarks?: ReadonlyMap<string, RunMark> | null
   /** What the draft changed since a published revision: added or changed processes and connections. View only. */
-  changeMarks?: { processes: ReadonlyMap<string, ChangeMark>; connections: ReadonlyMap<string, ChangeMark> } | null
+  changeMarks?: ChangeMarks | null
   /** A way to measure the canvas as drawn (process boxes and the lines' paths), for the layout warnings. */
   onLayoutReady?(fn: () => LayoutSnapshot): void
   /** archify's Semantic Radar: the overview map, shown only while it is open. */
@@ -685,57 +160,9 @@ interface Props {
   onRadarFocus?(processId: string): void
   onRadarClose?(): void
   /** archify's camera stepper: zoom in or out to the next 25% step (25%–300%), or back to the whole canvas. */
-  onCameraReady?(api: { zoomStep(direction: 1 | -1): void; reset(): void }): void
+  onCameraReady?(api: CanvasCamera): void
   /** The zoom when the canvas first shows and after each move ends. */
   onZoomChange?(zoom: number): void
-}
-
-type RfNode = {
-  id: string
-  type: 'flowmatNode'
-  position: { x: number; y: number }
-  width: number
-  height: number
-  selected: boolean
-  draggable?: boolean
-  dragging?: boolean
-  data: CanvasNodeViewModel
-}
-
-type RfEdge = {
-  id: string
-  type: 'flowmatEdge'
-  source: string
-  target: string
-  sourceHandle: string | null
-  targetHandle: string | null
-  selected: boolean
-  data: CanvasEdgeViewModel
-}
-
-function toRfProcessNodes(nodes: CanvasNodeViewModel[], selectedId: string | null): RfNode[] {
-  return nodes.map((n) => ({
-    id: n.id,
-    type: 'flowmatNode' as const,
-    position: n.position,
-    width: n.size.width,
-    height: n.size.height,
-    selected: n.id === selectedId,
-    data: n,
-  }))
-}
-
-function toRfEdges(edges: CanvasEdgeViewModel[], selectedId: string | null): RfEdge[] {
-  return edges.map((e) => ({
-    id: e.id,
-    type: 'flowmatEdge' as const,
-    source: e.source,
-    target: e.target,
-    sourceHandle: e.sourceHandle,
-    targetHandle: e.targetHandle,
-    selected: e.id === selectedId,
-    data: e,
-  }))
 }
 
 const NO_IDS: ReadonlySet<string> = new Set()
@@ -745,16 +172,6 @@ const INTENT_DELAY_MS = 90
 
 function finePointer() {
   return typeof window.matchMedia !== 'function' || window.matchMedia('(hover: hover) and (pointer: fine)').matches
-}
-
-function loadSavedViewport(storageKey: string): Viewport | undefined {
-  try {
-    const raw = localStorage.getItem(storageKey)
-    if (!raw) return undefined
-    return JSON.parse(raw) as Viewport
-  } catch {
-    return undefined
-  }
 }
 
 export function CanvasViewport({
@@ -873,58 +290,7 @@ export function CanvasViewport({
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const selectedEditorAnnotationIdsRef = useRef<string[]>([])
 
-  useEffect(() => {
-    if (!reactFlowInstance) return
-    onRevealReady?.((processIds) => {
-      if (processIds.length === 0) return
-      const still = motionStill()
-      const lone = processIds.length === 1
-      void reactFlowInstance.fitView({ nodes: processIds.map((id) => ({ id })), padding: lone ? 0.8 : 0.2,
-        maxZoom: lone ? 1.25 : 1, duration: still ? 0 : 300 })
-    })
-  }, [onRevealReady, reactFlowInstance])
-
-  // archify's camera stepper: 25% steps between 25% and 300%, and back to the whole canvas.
-  useEffect(() => {
-    if (!reactFlowInstance) return
-    const still = motionStill
-    onCameraReady?.({
-      zoomStep(direction) {
-        const zoom = reactFlowInstance.getZoom()
-        const next = direction > 0
-          ? Math.min(3, (Math.floor(zoom * 4 + 1e-6) + 1) / 4)
-          : Math.max(0.25, (Math.ceil(zoom * 4 - 1e-6) - 1) / 4)
-        void reactFlowInstance.zoomTo(next, { duration: still() ? 0 : 200 })
-      },
-      reset() {
-        void reactFlowInstance.fitView({ padding: 0.15, duration: still() ? 0 : 300 })
-      },
-    })
-  }, [onCameraReady, reactFlowInstance])
-
-  // The layout warnings measure what was drawn: each line's path, sampled every few canvas pixels, and each process's box.
-  useEffect(() => {
-    if (!reactFlowInstance) return
-    onLayoutReady?.(() => {
-      const boxes = reactFlowInstance.getNodes().filter((node) => node.type === 'flowmatNode').map((node) => ({
-        id: node.id, x: node.position.x, y: node.position.y,
-        width: node.measured?.width ?? node.width ?? 0, height: node.measured?.height ?? node.height ?? 0 }))
-      const lines: LayoutLine[] = []
-      for (const edge of reactFlowInstance.getEdges()) {
-        const path = document.querySelector<SVGPathElement>(
-          `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] path.react-flow__edge-path`)
-        if (!path || typeof path.getTotalLength !== 'function') continue
-        const length = path.getTotalLength()
-        const steps = Math.max(1, Math.ceil(length / 6))
-        const points = Array.from({ length: steps + 1 }, (_, index) => {
-          const point = path.getPointAtLength((length * index) / steps)
-          return { x: point.x, y: point.y }
-        })
-        lines.push({ id: edge.id, from: edge.source, to: edge.target, points })
-      }
-      return { boxes, lines }
-    })
-  }, [onLayoutReady, reactFlowInstance])
+  useCanvasViewHandles(reactFlowInstance, { onRevealReady, onCameraReady, onLayoutReady })
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -953,9 +319,6 @@ export function CanvasViewport({
   }, [reactFlowInstance, onDeleteReady, onFitViewReady, onSelectAllReady, onAnnotationSelectionReady])
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([])
   const [nodesToUpdateInternals, setNodesToUpdateInternals] = useState<string[]>([])
-  const [freehandDraft, setFreehandDraft] = useState<{ x: number; y: number }[]>([])
-  const [isFreehandDrawing, setIsFreehandDrawing] = useState(false)
-  const lastAnnotationPresenceSentAtRef = useRef(0)
 
   const handleEditAnnotationText = useCallback((annotationId: string) => {
     const annotation = annotations.find((item) => item.id === annotationId)
@@ -1086,21 +449,8 @@ export function CanvasViewport({
   }, [])
 
   const handleNodeDrag = useCallback((_event: unknown, node: Node) => {
-    const current = localNodesRef.current
-    const dragging = current.find((n) => n.id === node.id)
-    if (!dragging) return
-
-    const others = current
-      .filter((n) => n.id !== node.id)
-      .map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, w: n.width, h: n.height }))
-
-    setSnapGuides(
-      calculateSnapGuides(
-        { x: node.position.x, y: node.position.y, w: dragging.width, h: dragging.height },
-        others
-      )
-    )
-
+    if (!localNodesRef.current.some((n) => n.id === node.id)) return
+    setSnapGuides(snapGuidesFor(node.id, node.position, localNodesRef.current))
     if (node.type === 'flowmatNode') {
       sendNodeMove(node.id, node.position.x, node.position.y)
     }
@@ -1127,47 +477,19 @@ export function CanvasViewport({
   const handleReconnect: OnReconnect = useCallback(
     (oldEdge, newConnection) => {
       setLocalEdges((eds) => reconnectEdge(oldEdge, newConnection, eds as unknown as Edge[]) as unknown as RfEdge[])
-      if (onEdgeReconnect && newConnection.source && newConnection.target) {
-        onEdgeReconnect(oldEdge.id, {
-          fromProcessId: newConnection.source,
-          toProcessId: newConnection.target,
-          fromIoId: newConnection.sourceHandle ?? null,
-          toIoId: newConnection.targetHandle ?? null,
-          sourceHandle: newConnection.sourceHandle ?? 'out-default',
-          targetHandle: newConnection.targetHandle ?? 'in-default',
-        })
-      }
+      const payload = connectionPayload(newConnection)
+      if (onEdgeReconnect && payload) onEdgeReconnect(oldEdge.id, payload)
     },
     [onEdgeReconnect]
   )
 
-  const handleIsValidConnection = useCallback(
-    (connection: Connection | Edge) => {
-      if (connection.source === connection.target) return false
-      const sh = 'sourceHandle' in connection ? (connection.sourceHandle ?? null) : null
-      const th = 'targetHandle' in connection ? (connection.targetHandle ?? null) : null
-      return !localEdges.some(
-        (e) =>
-          e.source === connection.source &&
-          e.target === connection.target &&
-          e.sourceHandle === sh &&
-          e.targetHandle === th
-      )
-    },
-    [localEdges]
-  )
+  const handleIsValidConnection = useCallback((connection: Connection | Edge) => isNewConnection(connection, localEdges),
+    [localEdges])
 
   const handleConnect = useCallback(
     (connection: Connection) => {
-      if (!connection.source || !connection.target) return
-      onConnectComplete({
-        fromProcessId: connection.source,
-        toProcessId: connection.target,
-        fromIoId: connection.sourceHandle ?? null,
-        toIoId: connection.targetHandle ?? null,
-        sourceHandle: connection.sourceHandle ?? 'out-default',
-        targetHandle: connection.targetHandle ?? 'in-default',
-      })
+      const payload = connectionPayload(connection)
+      if (payload) onConnectComplete(payload)
     },
     [onConnectComplete]
   )
@@ -1275,103 +597,17 @@ export function CanvasViewport({
     [onDeleteElements]
   )
 
-  const emitFreehandPresence = useCallback(
-    (points: { x: number; y: number }[], inProgress: boolean) => {
-      const now = Date.now()
-      if (inProgress && now - lastAnnotationPresenceSentAtRef.current < 40) return
-      lastAnnotationPresenceSentAtRef.current = now
-      sendPresence({
-        type: 'ANNOTATION_DRAWING',
-        annotation: {
-          annotationType: 'freehand',
-          points: points.map((point) => [point.x, point.y]),
-          inProgress,
-        },
-      })
-    },
-    [sendPresence]
-  )
-
-  const appendFreehandPoint = useCallback(
-    (clientX: number, clientY: number) => {
-      if (!reactFlowInstance) return
-      const point = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY })
-      setFreehandDraft((prev) => {
-        const last = prev[prev.length - 1]
-        if (last && Math.hypot(last.x - point.x, last.y - point.y) < 2) {
-          return prev
-        }
-        const next = [...prev, point]
-        emitFreehandPresence(next, true)
-        return next
-      })
-    },
-    [emitFreehandPresence, reactFlowInstance]
-  )
-
-  const finishFreehandDrawing = useCallback(() => {
-    if (!isFreehandDrawing) return
-    setIsFreehandDrawing(false)
-    setFreehandDraft((prev) => {
-      if (prev.length > 1) {
-        void onCompleteFreehand(prev)
-      }
-      emitFreehandPresence([], false)
-      return []
-    })
-  }, [emitFreehandPresence, isFreehandDrawing, onCompleteFreehand])
-
-  useEffect(() => {
-    if (!isFreehandDrawing) return
-    const handleWindowMove = (event: globalThis.MouseEvent) => {
-      appendFreehandPoint(event.clientX, event.clientY)
-    }
-    const handleWindowUp = () => {
-      finishFreehandDrawing()
-    }
-
-    window.addEventListener('mousemove', handleWindowMove)
-    window.addEventListener('mouseup', handleWindowUp)
-
-    return () => {
-      window.removeEventListener('mousemove', handleWindowMove)
-      window.removeEventListener('mouseup', handleWindowUp)
-    }
-  }, [appendFreehandPoint, finishFreehandDrawing, isFreehandDrawing])
-
-  const handleFreehandPointerDown = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      if (activeTool !== 'annotation-freehand' || event.button !== 0 || !reactFlowInstance) return
-      const target = event.target as HTMLElement | null
-      if (!target?.closest('.react-flow__pane')) return
-      event.preventDefault()
-      setIsFreehandDrawing(true)
-      setFreehandDraft([])
-      appendFreehandPoint(event.clientX, event.clientY)
-    },
-    [activeTool, appendFreehandPoint, reactFlowInstance]
-  )
+  const { freehandDraft, isFreehandDrawing, finishFreehandDrawing, handleFreehandPointerDown } =
+    useFreehandDrawing({ activeTool, reactFlowInstance, sendPresence, onCompleteFreehand })
 
   // Reading marks every process and connection as part of what is read or receding (index.css "Canvas reading").
   // A run shown over the canvas adds each process's mark beside it ("run-mark run-<mark>"); a compared revision adds
   // what changed since it on the other corner ("change-mark change-<mark>") and on connections ("change-<mark>").
   const readingNodes = useMemo(() => (reading || runMarks || changeMarks
-    ? localNodes.map((node) => {
-      const read = !reading ? ''
-        : reading.nodeIds.has(node.id) ? `reading-on reading-${reading.tone}${node.id === reading.origin ? ' reading-origin' : ''}`
-          : reading.nearIds?.has(node.id) ? 'reading-near' : 'reading-dim'
-      const mark = runMarks?.get(node.id)
-      const change = changeMarks?.processes.get(node.id)
-      return { ...node, className: [read, mark ? `run-mark run-${mark}` : '', change ? `change-mark change-${change}` : '']
-        .filter(Boolean).join(' ') }
-    })
+    ? localNodes.map((node) => ({ ...node, className: processMarkClass(node.id, reading, runMarks, changeMarks) }))
     : localNodes), [localNodes, reading, runMarks, changeMarks])
   const readingEdges = useMemo(() => (reading || changeMarks
-    ? localEdges.map((edge) => {
-      const read = !reading ? '' : reading.edgeIds.has(edge.id) ? `reading-on reading-${reading.tone}` : 'reading-dim'
-      const change = changeMarks?.connections.get(edge.id)
-      return { ...edge, className: [read, change ? `change-${change}` : ''].filter(Boolean).join(' ') }
-    })
+    ? localEdges.map((edge) => ({ ...edge, className: connectionMarkClass(edge.id, reading, changeMarks) }))
     : localEdges), [localEdges, reading, changeMarks])
 
   return (

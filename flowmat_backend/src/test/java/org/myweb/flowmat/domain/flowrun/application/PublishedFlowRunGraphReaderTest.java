@@ -268,6 +268,17 @@ class PublishedFlowRunGraphReaderTest {
         assertInvalid(snapshot, "Published revision Split split has no incoming connection.");
     }
 
+    @Test
+    void refusesASplitWithMoreThanOneRest() throws Exception {
+        assertInvalid("""
+            {"processes":[{"processId":"in"},{"processId":"split","nodeType":"split"},{"processId":"a"},{"processId":"b"}],
+             "connections":[
+               {"connectionId":"in-split","fromProcessId":"in","toProcessId":"split"},
+               {"connectionId":"to-a","fromProcessId":"split","toProcessId":"a","splitKind":"rest"},
+               {"connectionId":"to-b","fromProcessId":"split","toProcessId":"b","splitKind":"rest"}]}
+            """, "Published revision Split split has 2 rest connections.");
+    }
+
     private FlowRunGraph read(String snapshot) throws Exception {
         return PublishedFlowRunGraphReader.read(json(snapshot));
     }

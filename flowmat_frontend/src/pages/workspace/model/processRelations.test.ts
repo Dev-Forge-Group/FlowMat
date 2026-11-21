@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CanvasEdgeViewModel } from '../../../entities/workflow/model/types'
-import { processRelations } from './processRelations'
+import { intentAnnouncement, processRelations, relationCount } from './processRelations'
 
 const edge = (connectionId: string, fromProcessId: string, toProcessId: string, label: string | null = null,
   connectionType = 'material_flow') => ({ connectionId, fromProcessId, toProcessId, label, connectionType }) as CanvasEdgeViewModel
@@ -19,5 +19,21 @@ describe('processRelations', () => {
 
   it('has nothing for a process without connections', () => {
     expect(processRelations([edge('c1', 'mix', 'bake')], 'pack', known)).toEqual({ out: [], in: [], loop: [] })
+  })
+})
+
+describe('the Intent Trace announcement', () => {
+  const edges = [edge('c1', 'mix', 'bake'), edge('c2', 'bake', 'cool'), edge('c3', 'bake', 'pack'), edge('c4', 'bake', 'bake')]
+
+  it('counts what leaves, enters and loops, a loop once', () => {
+    const relations = processRelations(edges, 'bake', known)
+    expect(relationCount(relations)).toBe(4)
+    expect(intentAnnouncement('Bake', relations))
+      .toBe('Bake. 2 outgoing, 1 incoming, 1 self loop. 4 connections. Press Enter for details.')
+  })
+
+  it('leaves the loop out when there is none', () => {
+    expect(intentAnnouncement('Mix', processRelations(edges, 'mix', known)))
+      .toBe('Mix. 1 outgoing, 0 incoming. 1 connections. Press Enter for details.')
   })
 })

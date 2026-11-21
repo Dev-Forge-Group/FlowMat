@@ -7,7 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunWorkingTime;
 import org.myweb.flowmat.domain.flowrun.domain.entity.FlowRun;
@@ -38,50 +39,52 @@ class FlowRunStepAvailability {
      * delay applies on the way, so the step can start at once as before.
      */
     OffsetDateTime readyAt(FlowRunGraph graph, FlowRunStep source, String connectionId) {
-        Duration delay = graph.delay(connectionId);
         OffsetDateTime carried = graph.gateway(source.getNodeId()) ? source.getScheduledAt() : null;
-        OffsetDateTime base = carried != null ? carried : source.getEndedAt();
-        if (base == null || delay == null && carried == null) {
-            return null;
-        }
-        if (delay == null) {
-            return base.truncatedTo(ChronoUnit.MICROS);
-        }
-        OffsetDateTime worked = graph.workingDelay(connectionId) ? afterWorking(source.getFlowRunId(), base, delay) : null;
-        return (worked != null ? worked : base.plus(delay)).truncatedTo(ChronoUnit.MICROS);
+        return FlowRunTiming.readyAt(source.getEndedAt(), carried, graph.delay(connectionId), graph.workingDelay(connectionId),
+            linkedTime(source.getFlowRunId()));
     }
 
-    /** For a production-linked run, when the work order's equipment and crew have worked {@code delay} since {@code from}. */
-    private OffsetDateTime afterWorking(String runId, OffsetDateTime from, Duration delay) {
-        String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
-        return productionRunId == null ? null : workingTime.afterWorking(productionRunId, from, delay)
-            .map(end -> end.at().withOffsetSameInstant(from.getOffset()))
-            .orElse(null);
+    /**
+     * The run's working time, from its production run's work order equipment and crew (ADR-015, ADR-016, ADR-022), asked only
+     * when a delay or a wait needs it; all time for a run not linked to production.
+     */
+    FlowRunTiming.WorkingTime linkedTime(String runId) {
+        return new FlowRunTiming.WorkingTime() {
+            @Override
+            public OffsetDateTime afterWorking(OffsetDateTime from, Duration working) {
+                String productionRunId = productionRunId(runId);
+                return productionRunId == null ? null : workingTime.afterWorking(productionRunId, from, working)
+                    .map(end -> end.at().withOffsetSameInstant(from.getOffset()))
+                    .orElse(null);
+            }
+
+            @Override
+            public LinkedRunWorkingTime.WorkingStart workingStart(OffsetDateTime readyAt) {
+                String productionRunId = productionRunId(runId);
+                return productionRunId == null ? null : workingTime.workingStart(productionRunId, readyAt).orElse(null);
+            }
+        };
+    }
+
+    private String productionRunId(String runId) {
+        return runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
     }
 
     /** A Join's arrivals' latest ready time once a delay applies to any of them (ADR-010 decision 4); else null. */
     OffsetDateTime joinReadyAt(FlowRunGraph graph, FlowRunStep join) {
-        OffsetDateTime latest = null;
-        boolean delayed = false;
+        List<FlowRunTiming.Arrival> arrivals = new ArrayList<>();
         for (FlowRunStepSource source : sourceRepository.findAllByStepIdOrderByArrivalNoAsc(join.getStepId())) {
             FlowRunStep from = stepRepository.findById(source.getSourceStepId()).orElse(null);
-            if (from == null) {
-                continue;
-            }
-            OffsetDateTime ready = readyAt(graph, from, source.getConnectionId());
-            delayed |= ready != null;
-            OffsetDateTime at = ready != null ? ready : from.getEndedAt();
-            if (at != null && (latest == null || at.isAfter(latest))) {
-                latest = at;
+            if (from != null) {
+                arrivals.add(new FlowRunTiming.Arrival(readyAt(graph, from, source.getConnectionId()), from.getEndedAt()));
             }
         }
-        return delayed && latest != null ? latest.truncatedTo(ChronoUnit.MICROS) : null;
+        return FlowRunTiming.joinReadyAt(arrivals);
     }
 
     /** For a production-linked run, the next time its work order's equipment and crew work, when the delay ends outside it. */
     LinkedRunWorkingTime.WorkingStart workingStart(String runId, OffsetDateTime readyAt) {
-        String productionRunId = runRepository.findById(runId).map(FlowRun::getProductionRunId).orElse(null);
-        return productionRunId == null ? null : workingTime.workingStart(productionRunId, readyAt).orElse(null);
+        return linkedTime(runId).workingStart(readyAt);
     }
 
     /**

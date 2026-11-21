@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -337,9 +336,10 @@ class FlowRunRouter {
         OffsetDateTime readyAt = source == null ? null : readyAt(graph, source, decision.connectionId());
         if (readyAt != null) {
             // Not before its input is ready (ADR-010 decisions 1, 6); a gateway keeps it as the time it received it.
-            LinkedRunWorkingTime.WorkingStart held = graph.gateway(step.getNodeId()) ? null : availability.workingStart(runId, readyAt);
-            OffsetDateTime scheduledAt = held == null ? readyAt
-                : held.at().withOffsetSameInstant(readyAt.getOffset()).truncatedTo(ChronoUnit.MICROS);
+            FlowRunTiming.Scheduled scheduled = FlowRunTiming.scheduled(readyAt, graph.gateway(step.getNodeId()),
+                availability.linkedTime(runId));
+            OffsetDateTime scheduledAt = scheduled.at();
+            LinkedRunWorkingTime.WorkingStart held = scheduled.held();
             step.setScheduledAt(scheduledAt);
             stepRepository.saveAndFlush(step);
             ObjectNode payload = objectMapper.createObjectNode()

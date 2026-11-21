@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
-import org.myweb.flowmat.domain.catalog.application.publicapi.CatalogQuery;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationIssue;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationResponse;
 import org.myweb.flowmat.domain.workflow.domain.contract.PortSchema;
@@ -60,20 +59,31 @@ public class WorkflowValidationService {
     private final ProcessIoRepository ports;
     private final ProcessConnectionRepository connections;
     private final ProcessConnectionServiceImpl connectionService;
-    private final CatalogQuery catalog;
 
     public WorkflowValidationResponse validate(String workflowId) {
         workflowAccess.requireWorkflowReadAccess(workflowId);
         List<Process> activeProcesses = processes.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, LIVE);
+        Set<String> processIds = new LinkedHashSet<>();
+        for (Process process : activeProcesses) processIds.add(process.getProcessId());
+        List<ProcessIo> activePorts = processIds.isEmpty() ? List.of()
+            : ports.findAllByProcessIdInAndDeletedYnOrderByCreatedAtAsc(processIds, LIVE);
+        List<ProcessConnection> activeConnections = connections
+            .findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, LIVE);
+        return check(activeProcesses, activePorts, activeConnections, connectionService.catalogUnits());
+    }
+
+    /**
+     * The check itself, over a workflow's live processes, ports and connections in creation order and the units it may
+     * name: no store is read, so the same graph always gives the same issues. The flow kernel's fixtures are Java's answers
+     * from here (docs/architecture/adr/ADR-040-flow-kernel.md decision 5).
+     */
+    static WorkflowValidationResponse check(List<Process> activeProcesses, List<ProcessIo> activePorts,
+                                            List<ProcessConnection> activeConnections, WorkflowUnits units) {
         Map<String, Process> processById = new LinkedHashMap<>();
         for (Process process : activeProcesses) processById.put(process.getProcessId(), process);
         Set<String> processIds = new LinkedHashSet<>(processById.keySet());
-        List<ProcessIo> activePorts = processIds.isEmpty() ? List.of()
-            : ports.findAllByProcessIdInAndDeletedYnOrderByCreatedAtAsc(processIds, LIVE);
         Map<String, ProcessIo> portById = new HashMap<>();
         for (ProcessIo port : activePorts) portById.put(port.getProcessIoId(), port);
-        List<ProcessConnection> activeConnections = connections
-            .findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(workflowId, LIVE);
         Names names = new Names(processById);
         List<Draft> issues = new ArrayList<>();
         Set<String> connectedPorts = new HashSet<>();
@@ -109,7 +119,7 @@ public class WorkflowValidationService {
                         .with("declaredAttributes", attributes(schema)));
                 }
             }
-            if (unknownUnit(port.getUnit())) {
+            if (unknownUnit(units, port.getUnit())) {
                 issues.add(issue("warning", "UNIT_UNKNOWN", port.getProcessId(), port.getProcessIoId(), null,
                     "Port unit '" + port.getUnit() + "' is not in unit_master.")
                     .with("field", "unit").with("unit", port.getUnit()));
@@ -153,7 +163,7 @@ public class WorkflowValidationService {
                 }
             }
             try {
-                connectionService.validateConnectionContract(connection, id);
+                ConnectionContract.check(connection, id, () -> activeConnections, portById::get, units, false);
             } catch (BusinessException exception) {
                 links.broken(connection, add(issues, issue("error", "CONNECTION_INCOMPATIBLE", null, null, id,
                     exception.getMessage()).ends(connection)));
@@ -170,7 +180,7 @@ public class WorkflowValidationService {
                     .with("sourceHasSchema", source.getSchemaJson() != null)
                     .with("targetHasSchema", target.getSchemaJson() != null).ends(connection));
             }
-            if (unknownUnit(connection.getUnit())) {
+            if (unknownUnit(units, connection.getUnit())) {
                 issues.add(issue("warning", "UNIT_UNKNOWN", null, null, id,
                     "Connection unit '" + connection.getUnit() + "' is not in unit_master.")
                     .with("field", "unit").with("unit", connection.getUnit()));
@@ -466,8 +476,8 @@ public class WorkflowValidationService {
         return null;
     }
 
-    private boolean unknownUnit(String unit) {
-        return text(unit) && !catalog.isKnownUnitCode(unit);
+    private static boolean unknownUnit(WorkflowUnits units, String unit) {
+        return text(unit) && !units.known(unit);
     }
 
     /**
