@@ -44,4 +44,4 @@
 
 - 통합 테스트는 실제 Postgres와 가짜 `ConnectorHttpGateway`로 한다. 품목·재고 가져오기(틀린 줄은 빠지고 나머지는 저장, 기록), 미리 보기는 아무것도 바꾸지 않음, 소유자가 아니면 403, 예약 잡기를 두 번 동시에 해도 한 번만 실행, 권한을 잃은 `run_as`, 연속 실패 멈춤, 밀기에서 다른 품목만 보내고 다시 읽어 맞음·다름·확인 불가를 남김, 보냈는지 모르는 실행.
 - 브라우저 테스트(가짜 API): 작업 만들기, 미리 보기, 지금 실행, 예약 켜기·끄기, 실행 기록(`e2e/integration-jobs.spec.ts`).
-- 남은 것: 실제 외부 서버를 둔 실 API 브라우저 테스트는 없다. 서버 쪽은 실제 Postgres와 가짜 게이트웨이로 확인한다. 연동의 참조 API(`scripts/connector-reference-api.mjs`)는 Flow Run 단계의 계약만 받으므로, 실 API로 하려면 품목·재고 목록과 수량 갱신을 받는 참조 API를 더해야 한다.
+- 실 API 브라우저 테스트(2026-11-21): `browser-e2e.yml`이 상대 시스템을 대신하는 [`scripts/integration-target.mjs`](../../../scripts/integration-target.mjs)를 러너의 사설 주소에 띄우고, 백엔드는 그 출처 하나만 사설 HTTP로 허용한다(연동은 loopback을 거절한다). `integration-jobs-live.spec.ts`가 새 프로젝트에서 화면으로 품목 가져오기(미리 보기, 실행, 기록)와 재고 보내기(다른 것만 보내고 다시 읽기, 다시 돌리면 보내지 않음), 예약 켜기·끄기를 한다.
