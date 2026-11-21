@@ -64,6 +64,16 @@
 - 같은 변경에서 `EquipmentLoadService`의 `EquipmentRepository`·`ItemRepository` 2줄을 `CatalogQuery`로 옮김(ADR-002 Stage B, 새 공개 API `findProjectEquipments`·`equipmentWindow`와 `EquipmentWindow`, 동결 86 → 84)
 - 검증: `ChangeoverOrderTest` 6건(같은 품목 모으기 75 → 30·순서 0,2,1, 같으면 제안 없음, 앞 품목 반영, 진행 중 고정, 9개 이상 가까운 품목, 전환 시간 없음). `EquipmentLoadIntegrationTest` 둘째(A 월·B 화·A 수 초안, A→B 30·B→A 45 → 계획 75, 제안 30·A1, A2, B, 다음 주 없음)와 기존 첫째 그대로. `equipmentLoadModel.test.ts` `changeoverPlanText`. 실 API E2E `e2e/equipment-changeover.spec.ts` 끝: 규칙 2 h·1 h, 작업지시 셋 → `Changeovers 3 h as planned · 1 h as <Later>, <Earlier>, <Third>`, `e2e/equipment-load.spec.ts` 그대로 통과
 
+## 순서 비교용 스냅숏 (2026-11-21, FM-AI 1단계)
+
+[ADR-039](../architecture/adr/ADR-039-work-order-sequence-optimizer.md). 마이그레이션 없음. 읽기 전용.
+
+- API: `GET /equipment-load/sequence-snapshot?projectId=&equipmentId=&from=`(읽기 권한). 창은 `from`부터 7일이고, 가용 구간은 28일까지 담는다.
+- 대상은 Q1과 같다. 진행 중인 것이 먼저 오고, 나머지는 계획 시작 순이다. 목표 수량이 없거나 시간당 산출이 없으면 `leftOut`에 남는다.
+- 작업지시마다 생산 초 = 남은 수량 × 3600 ÷ (시간당 산출 × 효율), 초 단위 올림.
+- `plan`(계획 순서)과 `currentRule`(Q3의 제안, 없으면 계획 순서)의 비용을 함께 낸다. 비용은 전환 분 + 늦어진 분 × 우선순위 가중치(urgent 4, high 2, normal 1, low 0.5)다. 늦어진 분은 새 순서의 끝이 계획 끝을 넘은 만큼이고, 분 단위로 올림한다. 순서대로 창 시작부터 가용 시간을 채워 계산한다(`SequenceCost`).
+- 검증: `SequenceCostTest` 6건(교대 사이에 걸치는 작업과 전환, 앞 품목과 가중치, 자리가 모자라 비용 없음, 시간 0인 작업, 잘못된 순서 거절, 현재 규칙 = Q3), `SequenceSnapshotIntegrationTest`(작업지시 셋과 수량 없는 하나, 달력, 계획 75분 = 비용 75, 현재 규칙 30, 잘못된 from 400, 없는 설비 404, 구성원이 아니면 403).
+
 ## 검증
 
 - 타임라인(2026-10-03): `equipmentLoadModel.test.ts` `dayLabels`·`timelineBars`(주 밖 시작은 0에서, 주 밖 주문 제외, 같은 시작은 먼저 끝나는 것부터, lane 쌓기, 승인·진행끼리만 겹침 표시, 초안 제외, 빈 목록 lane 1). 실 화면 `e2e/equipment-load.spec.ts`: 승인 두 건이 겹치는 주에 띠 항목 3개, 첫 주문 `· clashes`, 초안 `· draft`

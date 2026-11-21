@@ -261,7 +261,7 @@ public class EquipmentLoadService {
     }
 
     /** What finished runs of each order produced, the same measure as the work order list. */
-    private Map<String, BigDecimal> produced(Collection<WorkOrder> orders) {
+    Map<String, BigDecimal> produced(Collection<WorkOrder> orders) {
         if (orders.isEmpty()) {
             return Map.of();
         }
