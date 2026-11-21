@@ -172,6 +172,11 @@ final class PublishedFlowRunGraphReader {
             if (indegree.get(split) == 0) {
                 throw conflict("Published revision Split " + split + " has no incoming connection.");
             }
+            // Publishing refuses it (SPLIT_REST_DUPLICATE); which rest takes what is left would be a guess.
+            long rests = outgoing.getOrDefault(split, List.of()).stream().filter(edge -> "rest".equals(edge.splitKind())).count();
+            if (rests > 1) {
+                throw conflict("Published revision Split " + split + " has " + rests + " rest connections.");
+            }
         }
         List<String> roots = indegree.entrySet().stream()
             .filter(entry -> entry.getValue() == 0).map(Map.Entry::getKey).toList();

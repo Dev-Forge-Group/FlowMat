@@ -1,16 +1,12 @@
 package org.myweb.flowmat.domain.workflow.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.myweb.flowmat.flowkernel.FlowKernelFixtures.MAPPER;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,28 +14,27 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationResponse;
 import org.myweb.flowmat.domain.workflow.domain.entity.Process;
 import org.myweb.flowmat.domain.workflow.domain.entity.ProcessConnection;
 import org.myweb.flowmat.domain.workflow.domain.entity.ProcessIo;
+import org.myweb.flowmat.flowkernel.FlowKernelFixtures;
 
 /**
- * The flow kernel's validation fixtures (docs/architecture/adr/ADR-040-flow-kernel.md decision 5): graphs from a fixed
- * seed and what {@link WorkflowValidationService#check} says of each. Rust and its WebAssembly build must answer every
- * graph the same way. Every one of the check's issue codes is hit, so a rule the kernel gets wrong cannot hide. After a
- * deliberate change to the check, rewrite the answers with
- * {@code ./gradlew test --tests '*FlowKernelFixtureTest' -Dflow.fixtures.update=true} and read the diff.
+ * The flow kernel's validation fixtures (docs/architecture/adr/ADR-040-flow-kernel.md decision 5): hand-picked graphs and
+ * graphs from a fixed seed, and what {@link WorkflowValidationService#check} says of each. Rust and its WebAssembly build
+ * must answer every graph the same way. Every one of the check's issue codes is hit, so a rule the kernel gets wrong
+ * cannot hide. After a deliberate change to the check, rewrite the answers with
+ * {@code ./gradlew test --tests '*FlowKernel*' -Dflow.fixtures.update=true} and read the diff.
  */
 class FlowKernelFixtureTest {
 
-    private static final Path FIXTURES = locate(Path.of("compute", "flow-kernel", "fixtures"));
-    private static final boolean UPDATE = Boolean.getBoolean("flow.fixtures.update");
+    private static final String FILE = "validation.json";
     private static final long SEED = 20261123L;
     private static final int GRAPHS = 160;
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-        .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     /** The units a graph may name, by type; anything else is unknown. */
     static final Map<String, String> KNOWN_UNITS = Map.of("kg", "mass", "g", "mass", "ea", "count", "l", "volume", "m", "length");
@@ -54,54 +49,36 @@ class FlowKernelFixtureTest {
         "SPLIT_WITHOUT_INPUT", "UNEXPECTED_ROOT", "UNEXPECTED_TERMINAL", "UNIT_UNKNOWN");
 
     @Test
-    void javasAnswersAreTheFixturesAndEveryRuleIsHit() throws IOException {
-        Path file = FIXTURES.resolve("validation.json");
-        // Hand-picked graphs first (cases.json), then the seeded ones: made afresh on an update, read back otherwise.
-        Map<String, JsonNode> graphs = new LinkedHashMap<>();
-        MAPPER.readTree(Files.readString(FIXTURES.resolve("cases.json"))).get("cases")
-            .forEach(entry -> graphs.put(entry.get("id").asText(), entry.get("graph")));
-        if (UPDATE) {
-            Generator generator = new Generator(new Random(SEED));
-            for (int index = 0; index < GRAPHS; index++) graphs.put("g" + index, generator.graph(index));
-        } else {
-            MAPPER.readTree(Files.readString(file)).get("cases").forEach(entry -> {
-                String id = entry.get("id").asText();
-                if (id.matches("g\\d+")) graphs.put(id, entry.get("graph"));
-            });
-        }
-        Map<String, Integer> hits = new LinkedHashMap<>();
-        StringBuilder text = new StringBuilder();
-        text.append("{\"seed\":").append(SEED).append(",\"context\":").append(MAPPER.writeValueAsString(context()))
-            .append(",\n\"cases\":[\n");
-        int index = 0;
-        for (Map.Entry<String, JsonNode> named : graphs.entrySet()) {
-            JsonNode graph = named.getValue();
+    void javasAnswersAreTheFixturesAndEveryRuleIsHit() {
+        Map<String, JsonNode> graphs = FlowKernelFixtures.handPicked();
+        Generator generator = new Generator(new Random(SEED));
+        graphs.putAll(FlowKernelFixtures.seeded(FILE, GRAPHS, generator::graph, entry -> entry.get("graph")));
+        Map<String, Integer> hits = new TreeMap<>();
+        Map<String, ObjectNode> entries = new LinkedHashMap<>();
+        graphs.forEach((id, graph) -> {
             WorkflowValidationResponse answer = answer(graph);
             answer.issues().forEach(issue -> hits.merge(issue.code(), 1, Integer::sum));
             ObjectNode entry = MAPPER.createObjectNode();
-            entry.put("id", named.getKey());
             entry.set("graph", graph);
             entry.set("expected", MAPPER.valueToTree(answer));
-            text.append(MAPPER.writeValueAsString(entry)).append(++index < graphs.size() ? ",\n" : "\n");
-        }
-        text.append("]}\n");
-        if (UPDATE) {
-            Files.createDirectories(FIXTURES);
-            Files.writeString(file, text.toString());
-            System.out.printf("validation.json: %d graphs, issues by code %s%n", graphs.size(), new java.util.TreeMap<>(hits));
-        }
-        assertThat(Files.readString(file)).isEqualTo(text.toString());
+            entries.put(id, entry);
+        });
+        ObjectNode header = MAPPER.createObjectNode();
+        header.put("seed", SEED);
+        header.set("context", context());
+        if (FlowKernelFixtures.UPDATE) System.out.printf("%s: %d graphs, issues by code %s%n", FILE, graphs.size(), hits);
+        FlowKernelFixtures.writeOrCheck(FILE, header, entries);
         assertThat(hits.keySet()).as("every issue code is hit by some graph").containsAll(CODES);
     }
 
-    /** What the server's check says of a graph given as the kernel takes it. */
+    /** What the server's check says of a graph given as the kernel takes it, in the server's response shape. */
     static WorkflowValidationResponse answer(JsonNode graph) {
         List<Process> processes = new ArrayList<>();
         graph.get("processes").forEach(node -> processes.add(MAPPER.convertValue(node, Process.class)));
         List<ProcessIo> ports = new ArrayList<>();
-        graph.get("ports").forEach(node -> ports.add(MAPPER.convertValue(node, ProcessIo.class)));
+        graph.get("ports").forEach(node -> ports.add(MAPPER.convertValue(stored(node), ProcessIo.class)));
         List<ProcessConnection> connections = new ArrayList<>();
-        graph.get("connections").forEach(node -> connections.add(MAPPER.convertValue(node, ProcessConnection.class)));
+        graph.get("connections").forEach(node -> connections.add(MAPPER.convertValue(stored(node), ProcessConnection.class)));
         return WorkflowValidationService.check(processes, ports, connections, new WorkflowUnits() {
             @Override
             public boolean known(String code) {
@@ -115,18 +92,21 @@ class FlowKernelFixtureTest {
         });
     }
 
+    /** A port or connection as stored: the schema as text and the default route as Y or N. */
+    private static ObjectNode stored(JsonNode response) {
+        ObjectNode row = response.deepCopy();
+        JsonNode schema = row.remove("schemaJson");
+        if (schema != null && !schema.isNull()) row.put("schemaJson", FlowKernelFixtures.json(schema));
+        JsonNode defaultRoute = row.remove("defaultRoute");
+        if (defaultRoute != null) row.put("defaultRouteYn", defaultRoute.asBoolean() ? "Y" : "N");
+        return row;
+    }
+
     private static ObjectNode context() {
         ObjectNode context = MAPPER.createObjectNode();
         ObjectNode units = context.putObject("knownUnits");
         new TreeSet<>(KNOWN_UNITS.keySet()).forEach(code -> units.put(code, KNOWN_UNITS.get(code)));
         return context;
-    }
-
-    private static Path locate(Path relative) {
-        for (Path directory = Path.of("").toAbsolutePath(); directory != null; directory = directory.getParent()) {
-            if (Files.isDirectory(directory.resolve(relative.getParent()))) return directory.resolve(relative);
-        }
-        throw new IllegalStateException(relative + " was not found above " + Path.of("").toAbsolutePath());
     }
 
     /**
@@ -202,7 +182,7 @@ class FlowKernelFixtureTest {
                     }
                     port.put("requiredYn", random.nextInt(40) == 0 ? "X" : random.nextInt(3) == 0 ? "Y" : "N");
                     port.put("allowShortageYn", random.nextBoolean() ? "N" : "Y");
-                    if (random.nextInt(5) < 3) port.put("schemaJson", pick(SCHEMAS.length - 2, SCHEMAS, 25));
+                    if (random.nextInt(5) < 3) port.set("schemaJson", schema(pick(SCHEMAS.length - 2, SCHEMAS, 25)));
                     if (random.nextInt(6) == 0) port.put("validationRule", pick(RULES));
                     allPorts.add(portId);
                     if ("output".equals(direction)) outputs.get(id).add(portId);
@@ -232,7 +212,7 @@ class FlowKernelFixtureTest {
                 int loss = random.nextInt(20);
                 if (loss < 4) connection.put("lossRate", new BigDecimal(new String[] {"0.05", "1.5", "-0.2", "5"}[loss]));
                 if (random.nextInt(3) == 0) connection.put("priority", random.nextInt(3));
-                connection.put("defaultRouteYn", random.nextInt(6) == 0 ? "Y" : "N");
+                connection.put("defaultRoute", random.nextInt(6) == 0);
                 int share = random.nextInt(6);
                 if (share < 3) {
                     String kind = new String[] {"share", "rest", "fixed"}[share];
@@ -251,6 +231,14 @@ class FlowKernelFixtureTest {
             if (roll == 1 && !all.isEmpty()) return all.get(random.nextInt(all.size()));
             if (roll < 6 || fitting.isEmpty()) return null;
             return fitting.get(random.nextInt(fitting.size()));
+        }
+
+        private static JsonNode schema(String text) {
+            try {
+                return MAPPER.readTree(text);
+            } catch (java.io.IOException exception) {
+                throw new IllegalStateException(exception);
+            }
         }
 
         private String pick(String[] values) {
