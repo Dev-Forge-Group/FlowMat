@@ -4,7 +4,7 @@ import { motionMimeType } from './workflowMotion'
 import { shareCardText } from './shareCard'
 import { workflowJson } from './workflowJson'
 import type { ExportChoice, MotionAvailability } from '../ui/ExportMenu'
-import type { ExportOutcome, MotionExport, PngExport, ShareCardExport, SvgExport } from '../ui/CanvasViewport'
+import type { ExportOutcome, MotionExport, PngExport, ShareCardExport, SvgExport } from '../ui/CanvasExportController'
 
 type ReadingView = Parameters<typeof shareCardText>[0]
 
