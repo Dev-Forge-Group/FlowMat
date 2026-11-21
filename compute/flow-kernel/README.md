@@ -2,7 +2,30 @@
 
 FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../../docs/architecture/adr/ADR-040-flow-kernel.md)). 포트 호환, 조건식, 검증 31규칙, 경로 계산을 맡는다. 편집기는 WebAssembly로 그리는 즉시 검증하고 돌려 본다. 서버가 쓸지는 4주차에 잰다(결정 6). 그때까지 Java가 정본이다.
 
-지금(1주차)은 Java가 답을 적은 고정 입력만 있다. Rust 코드는 2주차에 들어온다([월간 계획](../../docs/status/MONTH-PLAN-2026-11-23.md)).
+## 지금 하는 것
+
+검증과 경로 계산 둘 다 Java와 같은 답을 낸다. `cargo test`가 고정 입력의 모든 그래프를 맞춘다.
+
+| 모듈 | Java 원본 | 하는 일 |
+|---|---|---|
+| `validation` | `WorkflowValidationService.check`, `ConnectionContract` | 초안 검증 31규칙. 이슈의 코드·대상·메시지·근거·고치는 법·숨기는 경고·순서가 같다 |
+| `routing` | `PublishedFlowRunGraphReader`, `FlowRunGraph`, `FlowRunPortContracts` | 발행된 판 읽기, 출력 하나가 나가는 연결마다 하는 일(이유·양·손실), 합류에 아직 올 수 있는 연결 수 |
+| `schema` | `PortSchema` | 포트 스키마 읽기와 호환 |
+| `ports` | `ProcessIoServiceImpl.validatePortValues`, `ResourceTypes` | 포트 값과 표준 자원 종류 |
+| `decimal` | `BigDecimal` | 자리수(scale)를 지키는 십진수. 반올림은 HALF_UP, 출력은 `toPlainString`이다 |
+| `graph` | Jackson 바인딩, Java 문자열 규칙 | 서버 응답 모양의 그래프 읽기. `trim`·`isBlank`·`equalsIgnoreCase`가 Java와 같다 |
+
+- 조건식은 아직 `compute/condition-expression` 크레이트를 경로 의존성으로 쓴다. 이 크레이트로 흡수하는 것은 [월간 계획](../../docs/status/MONTH-PLAN-2026-11-23.md) 2주차 3번이다.
+- 노드 실행 정책(`nodePolicies`)과 실행 바인딩은 경로와 상관없으므로 읽지 않는다.
+- 아직 없는 것: WebAssembly로 내보내는 함수, 편집기 연결(2주차 2번), "돌려 보기"의 반복(3주차 2번).
+
+```bash
+cd compute/flow-kernel
+```
+
+```bash
+cargo test
+```
 
 ## 고정 입력
 

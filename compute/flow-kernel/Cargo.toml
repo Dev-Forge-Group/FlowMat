@@ -1,0 +1,24 @@
+[package]
+name = "flowmat-flow-kernel"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "FlowMat's flow meaning in one place: port contracts, the 31 validation rules and routing, answering as the backend's Java does (ADR-040)"
+publish = false
+
+[lib]
+# rlib for the tests, cdylib for the WebAssembly build.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# The condition language, until it moves into this crate (month plan 11-23, week 2).
+flowmat-condition = { path = "../condition-expression" }
+# arbitrary_precision keeps a number's text, so 2.50 stays 2.50 as Java's BigDecimal keeps its scale; preserve_order
+# reads an object's fields in the order written, as Jackson does.
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
