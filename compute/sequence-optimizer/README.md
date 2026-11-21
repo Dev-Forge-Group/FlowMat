@@ -40,6 +40,12 @@ python -m pytest -q tests
 python -m sequence_optimizer.evaluate
 ```
 
+실제 프로젝트의 스냅숏도 같은 방법으로 평가한다. 개발 서버에서 `GET /api/equipment-load/sequence-snapshot?projectId=…&equipmentId=…&from=…`의 응답을 `real/` 아래에 저장한다. 그리고 아래 명령을 돌린다. 기준값은 스냅숏 안의 `plan`·`currentRule`을 쓰고, 거울과 맞는지 먼저 확인한다. 실제 작업지시가 들어 있으므로 `real/`은 git에 넣지 않는다(`.gitignore`).
+
+```bash
+python -m sequence_optimizer.evaluate --snapshots real/*.json --out real/results
+```
+
 사례를 바꿨으면 묶음을 다시 만들고, 백엔드가 기준값을 다시 쓰게 한 뒤 평가를 다시 돌린다. 백엔드 명령은 저장소 루트의 `flowmat_backend`에서 돌린다.
 
 ```bash
@@ -61,7 +67,7 @@ CI는 `.github/workflows/sequence-optimizer.yml`이다. `baselines.json`이 백�
 - 오늘의 최선 48,195
 - 풀이기 33,352.5
 
-풀이기는 오늘의 최선보다 30.8% 적고, 나빠진 사례가 없다. 그래서 ADR-039 결정 4의 기준을 채운다. 34개는 최적을 증명했고 6개(작업 16~20개)는 10초 제한에서 찾은 가장 나은 답이다.
+풀이기는 오늘의 최선보다 30.8% 적고, 나빠진 사례가 없다. 그래서 ADR-039 결정 4의 기준을 채운다. 34개는 최적을 증명했고 6개(작업 16~20개)는 10초 제한에서 찾은 가장 나은 답이다. 이 6개는 여러 작업자가 함께 찾으므로 돌릴 때마다 조금 다를 수 있다(다시 돌렸을 때 합 33,532.5, 30.4%).
 
 Q3는 전환 시간만 줄이고 계획 끝을 보지 않는다. 그래서 이 비용으로는 계획 순서의 13배였다. 부하표의 전환 순서 제안을 그대로 따르면 많이 늦어질 수 있다는 뜻이다.
 

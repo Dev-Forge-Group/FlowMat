@@ -1,2 +1,4 @@
 __pycache__/
 .pytest_cache/
+# Real project snapshots and their results stay on the machine that fetched them.
+real/
