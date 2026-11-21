@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use flowmat_flow_kernel::{Graph, RunGraph, Units, published, validate, walk};
+use flowmat_flow_kernel::{Graph, RunGraph, Units, published, try_flow, validate, walk};
 use serde_json::{Value as Json, json};
 
 fn read(name: &str) -> Json {
@@ -123,4 +123,26 @@ fn walks_match_the_servers_runs() {
         cases(&file).len(),
         failures.join("\n")
     );
+}
+
+#[test]
+fn times_match_javas() {
+    let file = read("time.json");
+    let version = file["context"]["schemaVersion"].as_i64().unwrap();
+    assert!(cases(&file).len() > 50);
+    let mut held = 0;
+    for entry in cases(&file) {
+        let id = entry["id"].as_str().unwrap();
+        let runtime =
+            RunGraph::read(&published(&entry["graph"], version)).unwrap_or_else(|refusal| panic!("{id}: {refusal:?}"));
+        let answer = try_flow(&runtime, &entry["input"], Some(entry));
+        assert_eq!(answer["times"], entry["expected"]["steps"], "{id}");
+        held += entry["expected"]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|step| step.get("held").is_some())
+            .count();
+    }
+    assert!(held > 0, "some steps wait for working time");
 }

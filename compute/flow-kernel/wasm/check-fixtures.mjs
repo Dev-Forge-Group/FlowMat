@@ -68,3 +68,13 @@ compare('routing.json', routing.cases, (entry) =>
 const walks = read('walk.json')
 compare('walk.json', walks.cases, (entry) =>
   call(walk, { graph: entry.graph, input: entry.input, schemaVersion: walks.context.schemaVersion }))
+
+const times = read('time.json')
+compare('time.json', times.cases, (entry) => ({
+  steps: call(walk, {
+    graph: entry.graph,
+    input: entry.input,
+    schemaVersion: times.context.schemaVersion,
+    time: { start: entry.start, stretches: entry.stretches, equipmentId: entry.equipmentId, crew: entry.crew },
+  }).times,
+}))

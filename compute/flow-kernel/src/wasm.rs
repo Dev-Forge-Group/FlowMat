@@ -4,7 +4,7 @@
 
 use serde_json::{Value as Json, json};
 
-use crate::{Graph, RunGraph, Units, published, validate as check, walk as try_flow};
+use crate::{Graph, RunGraph, Units, published, try_flow, validate as check};
 
 /// The check's answer for `{graph, knownUnits}`: `{errors, warnings, issues}` as the server sends it, or
 /// `{"requestError": "…"}` when the request is not JSON.
@@ -74,8 +74,9 @@ pub unsafe extern "C" fn route(request: *const u8, length: usize) -> u64 {
     result(json!({"roots": runtime.roots(), "delays": delays, "joins": joins, "probes": probes}))
 }
 
-/// Trying the flow, `{graph, input, schemaVersion}`: `{error}` when the graph cannot run as a published revision, else
-/// the run from start to end as `fixtures/walk.json` records the server's (status, failure, steps, events).
+/// Trying the flow, `{graph, input, schemaVersion, time?}`: `{error}` when the graph cannot run as a published revision,
+/// else the run from start to end as `fixtures/walk.json` records the server's (status, failure, steps, events), and
+/// with a work order's `time` each step's times as `fixtures/time.json` records Java's (`times`).
 ///
 /// # Safety
 /// `request` points at `length` bytes written by the host.
@@ -87,7 +88,7 @@ pub unsafe extern "C" fn walk(request: *const u8, length: usize) -> u64 {
     };
     let version = request["schemaVersion"].as_i64().unwrap_or(3);
     match RunGraph::read(&published(&request["graph"], version)) {
-        Ok(runtime) => result(try_flow(&runtime, &request["input"])),
+        Ok(runtime) => result(try_flow(&runtime, &request["input"], request.get("time"))),
         Err(refusal) => result(json!({"error": refusal.to_json()})),
     }
 }

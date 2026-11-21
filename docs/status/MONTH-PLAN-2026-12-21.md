@@ -31,7 +31,12 @@
 
 ## 진행
 
-- **1주차 1번 ADR-041: 초안(Proposed).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md).
+- **1주차 1번 ADR-041: 끝(Accepted).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md). 결정 4는 그래프 실행이 시스템 시계를 쓴다는 것을 보고 고쳤다. 고정 입력의 답은 서버에서 실제로 돌린 시각이 아니라, 라우터와 같은 순수 함수가 낸다.
+- **2주차 1번 Rust `schedule`: 끝(2026-11-21, 일찍).**
+  - `time.rs`: 오프셋이 붙은 시각의 읽기·쓰기(`ISO_OFFSET_DATE_TIME`), 마이크로초 자르기. 시간대 데이터베이스는 들이지 않았다.
+  - `schedule.rs`: `walk`의 답 위에 `FlowRunTiming`과 같은 규칙으로 시각을 매긴다.
+  - `walk` 요청에 `time`을 주면 답에 `times`가 붙는다.
+  - `time.json` 67개가 Rust, WASM(`check-fixtures`), TypeScript(`flowKernel.test.ts`)에서 모두 Java와 같다. 모듈은 611KB에서 635KB(+3.9%, gzip 189KB)가 됐다.
 - **1주차 3번 고정 입력: 끝(2026-11-21, 일찍).**
   - 라우터의 시각 규칙을 순수 함수 `FlowRunTiming`으로 뗐다(지연, 근무 시간 지연, 합류, 근무 밖 기다림, 마이크로초). 라우터와 `FlowRunStepAvailability`가 이것을 부르므로, 돌려 보기와 서버가 같은 규칙을 쓴다. `WorkingStretches`는 `flowrun`의 공개 계약으로 옮겼다(ADR-041 결정 3). 단위 테스트 9개를 붙였고, 백엔드 전체 3,376개가 통과한다.
   - `time.json`(`FlowKernelTimeFixtureTest`, 서버를 띄우지 않는 단위 테스트): 지연이 있는 흐름 67개.

@@ -35,6 +35,16 @@ describe('the flow kernel in the editor', () => {
     }
   })
 
+  it('times every tried flow as the router\'s rules do', () => {
+    const file = read('time.json')
+    expect(file.cases.length).toBeGreaterThan(50)
+    for (const entry of file.cases) {
+      const time = { start: entry.start, stretches: entry.stretches, equipmentId: entry.equipmentId, crew: entry.crew }
+      const tried = kernel.walk(entry.graph, entry.input, file.context.schemaVersion, time)
+      expect('times' in tried ? tried.times : tried, entry.id).toEqual(entry.expected.steps)
+    }
+  })
+
   it('routes every recorded graph as Java does', () => {
     const file = read('routing.json')
     expect(file.cases.length).toBeGreaterThan(100)

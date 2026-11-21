@@ -80,8 +80,30 @@ export interface KernelWalkEvent {
 }
 
 /**
+ * A work order's time to try a flow against (docs/architecture/adr/ADR-041-try-it-time.md): when it starts and the
+ * stretches its equipment and crew work together, as the server works them out. Times are ISO with an offset, such as
+ * `2026-12-21T09:00:00+09:00`. Without stretches every delay counts all time and nothing waits.
+ */
+export interface KernelTime {
+  start: string
+  stretches: [string, string][]
+  equipmentId: string | null
+  crew: string[]
+}
+
+/** When a tried step was ready, was scheduled, ended, and who it waited for; by place in {@link KernelWalk.steps}. */
+export interface KernelStepTime {
+  nodeId: string
+  readyAt?: string
+  scheduledAt?: string
+  endedAt?: string
+  held?: { equipmentId: string | null; crew: string[] }
+}
+
+/**
  * A flow tried from its start nodes to the end, as the server would run it with every reported step passing on what it
- * received: finished, failed (a gateway with no route) or running (a report refused or a Join still waiting).
+ * received: finished, failed (a gateway with no route) or running (a report refused or a Join still waiting). With a
+ * work order's time, `times` says when each step could start, as a production run would schedule it.
  */
 export type KernelWalk =
   | { error: KernelRefusal }
@@ -90,6 +112,8 @@ export type KernelWalk =
       failure?: KernelRefusal
       steps: KernelWalkStep[]
       events: KernelWalkEvent[]
+      times?: KernelStepTime[]
+      timeError?: string
     }
 
 export interface FlowKernel {
@@ -97,8 +121,8 @@ export interface FlowKernel {
   validate(graph: KernelGraph, knownUnits: Record<string, string>): KernelValidation
   /** Routing the graph as a published revision would be routed. */
   route(graph: KernelGraph, probes: KernelProbe[], schemaVersion?: number): KernelRouting
-  /** Trying the flow with one input at its start nodes. */
-  walk(graph: KernelGraph, input: Record<string, unknown>, schemaVersion?: number): KernelWalk
+  /** Trying the flow with one input at its start nodes, and with a work order's time when it is given. */
+  walk(graph: KernelGraph, input: Record<string, unknown>, schemaVersion?: number, time?: KernelTime): KernelWalk
 }
 
 interface KernelExports {
@@ -137,8 +161,8 @@ export function flowKernel(exports: WebAssembly.Exports): FlowKernel {
     route(graph, probes, schemaVersion = 3) {
       return call(module.route, JSON.stringify({ graph, probes, schemaVersion })) as KernelRouting
     },
-    walk(graph, input, schemaVersion = 3) {
-      return call(module.walk, JSON.stringify({ graph, input, schemaVersion })) as KernelWalk
+    walk(graph, input, schemaVersion = 3, time) {
+      return call(module.walk, JSON.stringify({ graph, input, schemaVersion, time })) as KernelWalk
     },
   }
 }

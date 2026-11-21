@@ -159,6 +159,23 @@ impl Decimal {
         }
     }
 
+    /// `movePointRight(places).longValue()`: the whole part after moving the point, toward zero, as a connection's delay
+    /// in seconds becomes nanoseconds (`Duration.ofNanos`). Saturates far beyond any delay.
+    pub fn whole_after_moving_right(&self, places: i64) -> i128 {
+        let shift = places - self.scale;
+        let mut digits: Vec<u8> = self.digits.clone();
+        if shift >= 0 {
+            digits.extend(std::iter::repeat_n(0, shift as usize));
+        } else {
+            digits.truncate(digits.len().saturating_sub((-shift) as usize));
+        }
+        let mut whole: i128 = 0;
+        for digit in digits {
+            whole = whole.saturating_mul(10).saturating_add(digit as i128);
+        }
+        if self.negative { -whole } else { whole }
+    }
+
     /// `stripTrailingZeros()`: zero becomes plain 0, as on Java 8 and later.
     pub fn strip_trailing_zeros(&self) -> Decimal {
         if self.digits.is_empty() {
@@ -276,6 +293,16 @@ fn subtract_digits(left: &[u8], right: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::Decimal;
+
+    #[test]
+    fn delay_seconds_become_nanoseconds_as_java_takes_them() {
+        let nanos = |text: &str| Decimal::parse(text).unwrap().whole_after_moving_right(9);
+        assert_eq!(nanos("1.2345678919"), 1_234_567_891);
+        assert_eq!(nanos("0.0000000001"), 0);
+        assert_eq!(nanos("3600"), 3_600_000_000_000);
+        assert_eq!(nanos("0.5"), 500_000_000);
+        assert_eq!(nanos("-1.0000000009"), -1_000_000_000);
+    }
 
     fn d(text: &str) -> Decimal {
         Decimal::parse(text).unwrap()

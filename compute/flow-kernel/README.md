@@ -28,9 +28,20 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
   - 손실·걸러진 연결·게이트웨이 경로 기록.
 - 커널의 `walk`가 같은 일을 서버 없이 한다. 한 번의 완료는 서버처럼 한꺼번에 일어나고, 거절되면 그 완료는 없던 일이 된다.
 
+돌려 보기의 시각(`time.json`의 `expected`, `schedule`·`time` 모듈, [ADR-041](../../docs/architecture/adr/ADR-041-try-it-time.md)):
+
+- 작업지시의 시간을 주면(`time`: 시작, 함께 일하는 구간, 설비·인력) 단계마다 `readyAt`, `scheduledAt`, `endedAt`, 기다리게 한 설비·인력(`held`)을 낸다.
+- 규칙은 서버 라우터의 `FlowRunTiming`과 같다.
+  - 지연은 끝난 때부터 센다. 게이트웨이를 지났으면 게이트웨이가 받은 때부터다.
+  - 근무 시간 지연은 구간을 쌓는다. 구간이 모자라면 모든 시간으로 센다.
+  - 근무 밖이면 다음 구간까지 기다린다. 합류는 가장 늦은 도착을 기다린다.
+  - 시각은 마이크로초로 자른다.
+- 걷기에서 단계는 시작할 수 있는 때 바로 끝난다. 게이트웨이는 바로 지나가고, 합류는 마지막 도착에 지나간다.
+- 커널은 달력·시간대를 계산하지 않는다. 구간은 오프셋이 붙은 시각으로 받고, 시각은 `ISO_OFFSET_DATE_TIME`으로 쓴다.
+
 ## 편집기에서
 
-편집기는 이 크레이트의 WebAssembly 모듈 `flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm` 하나를 싣는다. 크기는 611KB, gzip으로 179KB다. 작업 화면을 처음 열 때 늦게 싣는다.
+편집기는 이 크레이트의 WebAssembly 모듈 `flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm` 하나를 싣는다. 크기는 635KB, gzip으로 189KB다(시각을 더하기 전 611KB). 작업 화면을 처음 열 때 늦게 싣는다.
 
 - 이 모듈은 조건식 크레이트를 링크하므로 `check`·`evaluate`도 내보낸다. 조건식 입력칸의 검사(`conditionLanguage.ts`)도 같은 인스턴스를 쓴다.
 - **그리는 대로 검사**(`useLiveValidation`, `LiveValidation.tsx`): 캔버스가 150ms 멈추면 검사한다.
@@ -48,7 +59,7 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
 |---|---|---|
 | `validate` | `{graph, knownUnits}` | `{errors, warnings, issues}`(서버 응답과 같음) |
 | `route` | `{graph, probes: [{nodeId, output}], schemaVersion}` | `{error}` 또는 `{roots, delays, joins, probes: [{decisions} 또는 {error}]}` |
-| `walk` | `{graph, input, schemaVersion}` | `{error}` 또는 `{status, failure, steps, events}`(`walk.json`과 같음) |
+| `walk` | `{graph, input, schemaVersion, time?}` | `{error}` 또는 `{status, failure, steps, events}`(`walk.json`과 같음). `time`을 주면 `times`(`time.json`과 같음), 읽을 수 없으면 `timeError` |
 | `check`, `evaluate` | 조건식 크레이트와 같음 | 조건식 크레이트와 같음 |
 
 호스트가 `alloc`으로 받은 메모리에 UTF-8 JSON을 쓰고, 답은 JSON 텍스트의 포인터(상위 32비트)와 길이(하위 32비트)로 받아 `dealloc`으로 돌려준다.
@@ -82,6 +93,7 @@ cargo test
 | `fixtures/validation.json` | 위의 그래프와 고정 시드(`20261123`)로 만든 그래프 160개, 각각에 `WorkflowValidationService`가 낸 답(`errors`, `warnings`, `issues`의 순서·근거·고치는 법·숨기는 경고), 알려진 단위(`context.knownUnits`) | `FlowKernelFixtureTest` |
 | `fixtures/routing.json` | 위의 그래프와 고정 시드(`20261124`)로 만든 그래프 120개, 노드마다 보낼 출력, 실행 그래프(`FlowRunGraph`)의 답 | `FlowKernelRouteFixtureTest` |
 | `fixtures/walk.json` | `routing.json`에서 판으로 읽히는 그래프 94개(지연은 뺀다)와 입력 하나씩. 서버가 실제로 돌린 그래프 실행의 결과다 | `FlowKernelWalkFixtureTest`(통합 테스트, 약 50초) |
+| `fixtures/time.json` | `walk.json` 중 원래 그래프에 지연이 있는 67개. 시드(`20261221`)로 만든 시작 시각·구간·설비·인력과, 단계마다 `FlowRunTiming`이 낸 시각 | `FlowKernelTimeFixtureTest`(단위 테스트) |
 
 - 그래프 하나는 `{processes, ports, connections}`이고, 필드 이름은 서버의 공정·포트·연결과 같다. 알려진 단위는 파일의 `context.knownUnits` 하나다. 표준 자원 종류는 커널에 고정한다(`ResourceTypes`와 같은 목록).
 - 백엔드 테스트 `FlowKernelFixtureTest`가 Java의 지금 답이 파일과 같은지, 31규칙이 각각 한 번 이상 걸리는지 본다. 백엔드 CI는 이 폴더가 바뀌어도 돈다.
