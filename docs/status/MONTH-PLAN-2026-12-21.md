@@ -32,7 +32,13 @@
 ## 진행
 
 - **1주차 1번 ADR-041: 초안(Proposed).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md).
-- **1주차 3번 고정 입력: 절반.** 라우터의 시각 규칙을 순수 함수 `FlowRunTiming`(지연, 근무 시간 지연, 합류, 근무 밖 기다림, 마이크로초)으로 뗐다. 라우터와 `FlowRunStepAvailability`가 이것을 부르므로 돌려 보기와 서버가 같은 규칙을 쓴다. `WorkingStretches`는 `flowrun`의 공개 계약으로 옮겼다(ADR-041 결정 3). 단위 테스트 9개를 붙였다. 남은 것은 `time.json`을 쓰는 테스트다: 지연을 뺀 판을 서버에서 돌려 단계와 도착을 얻고, 그 위에 `FlowRunTiming`으로 시각을 매긴다.
+- **1주차 3번 고정 입력: 끝(2026-11-21, 일찍).**
+  - 라우터의 시각 규칙을 순수 함수 `FlowRunTiming`으로 뗐다(지연, 근무 시간 지연, 합류, 근무 밖 기다림, 마이크로초). 라우터와 `FlowRunStepAvailability`가 이것을 부르므로, 돌려 보기와 서버가 같은 규칙을 쓴다. `WorkingStretches`는 `flowrun`의 공개 계약으로 옮겼다(ADR-041 결정 3). 단위 테스트 9개를 붙였고, 백엔드 전체 3,376개가 통과한다.
+  - `time.json`(`FlowKernelTimeFixtureTest`, 서버를 띄우지 않는 단위 테스트): 지연이 있는 흐름 67개.
+    - 단계와 합류의 도착은 `walk.json`(서버가 지연을 뺀 판으로 돌린 것)에서 가져온다. 지연은 `routing.json`의 원래 그래프에서 가져온다.
+    - 시작 시각, 함께 일하는 구간, 설비·인력은 시드로 만든다.
+    - 걸리는 것: 지연 34, 근무 시간 지연 8, 그 대신 모든 시간 1, 근무 밖 기다림 7, 지연이 있는 합류 5, 게이트웨이가 넘긴 시각 10, 구간 없음 7, 오프셋이 바뀌는 구간 15, 소수 초 시작 17.
+    - 시각은 `ISO_OFFSET_DATE_TIME`으로 쓴다(초는 늘 쓰고, 소수는 필요한 자리만).
 - **1주차 2번 Java 구간 계산의 순수 함수: 끝(2026-11-21, 일찍).** `WorkingStretches`(`firstStart`, `afterWorking`, `intersect`)를 `ProductionRunWorkingTime`에서 뗐다. 단위 테스트 9개를 붙였다. 근무 시간·지연·합류 테스트 9클래스 94개(통합 8클래스, `FlowRunStepAvailabilityTest`)가 그대로 통과한다.
 
 ## 한 달 뒤 목표
