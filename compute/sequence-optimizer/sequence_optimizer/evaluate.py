@@ -6,6 +6,13 @@ much later). The rule for putting the solver into FlowMat: over the whole set it
 and no case is worse than it.
 
     python -m sequence_optimizer.evaluate [--time-limit 10]
+
+Real snapshots, saved from GET /api/equipment-load/sequence-snapshot (the API's envelope or its data), can be evaluated
+the same way; their plan and current-rule costs come in the snapshot itself, and the mirror is checked against them:
+
+    python -m sequence_optimizer.evaluate --snapshots real/*.json --out real/results
+
+Real snapshots hold a project's work orders; keep them and their results out of git (real/ is ignored).
 """
 from __future__ import annotations
 
@@ -20,12 +27,34 @@ ROOT = Path(__file__).resolve().parent.parent
 THRESHOLD = Decimal("0.05")
 
 
-def evaluate(time_limit: float) -> dict:
+def fixture_cases() -> list[tuple[dict, dict]]:
     snapshots = {case["id"]: case for case in json.loads((ROOT / "fixtures" / "snapshots.json").read_text())["cases"]}
-    baselines = json.loads((ROOT / "fixtures" / "baselines.json").read_text())["cases"]
+    return [(snapshots[entry["id"]], entry) for entry in json.loads((ROOT / "fixtures" / "baselines.json").read_text())["cases"]]
+
+
+def snapshot_cases(paths: list[Path]) -> list[tuple[dict, dict]]:
+    """Saved API answers: the baselines are the snapshot's own, checked against the mirror."""
+    found = []
+    for path in paths:
+        body = json.loads(path.read_text())
+        snapshot = body.get("data", body) if isinstance(body, dict) else body
+        if not snapshot.get("jobs"):
+            continue
+        entry = {"id": path.stem}
+        for name in ("plan", "currentRule"):
+            given = snapshot[name]
+            mirror = cost.of(snapshot, given["order"])
+            if given["objective"] is None or mirror.objective != Decimal(str(given["objective"])):
+                raise AssertionError(f"{path}: the {name} cost {given['objective']} is not the mirror's {mirror.objective}")
+            entry[name] = {"order": given["order"], "objective": str(given["objective"]),
+                           "changeoverMinutes": given["changeoverMinutes"], "lateMinutes": given["lateMinutes"]}
+        found.append(({"id": path.stem, "calendar": "real", "snapshot": snapshot}, entry))
+    return found
+
+
+def evaluate(time_limit: float, cases: list[tuple[dict, dict]] | None = None) -> dict:
     rows = []
-    for entry in baselines:
-        case = snapshots[entry["id"]]
+    for case, entry in (fixture_cases() if cases is None else cases):
         snapshot = case["snapshot"]
         plan = Decimal(entry["plan"]["objective"])
         rule = Decimal(entry["currentRule"]["objective"])
@@ -101,11 +130,13 @@ def markdown(result: dict) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--time-limit", type=float, default=solver.TIME_LIMIT_SECONDS)
+    parser.add_argument("--snapshots", nargs="*", type=Path, help="saved sequence-snapshot answers instead of the fixtures")
+    parser.add_argument("--out", type=Path, default=ROOT / "results")
     arguments = parser.parse_args()
-    result = evaluate(arguments.time_limit)
-    (ROOT / "results").mkdir(exist_ok=True)
-    (ROOT / "results" / "evaluation.json").write_text(json.dumps(result, indent=1) + "\n")
-    (ROOT / "results" / "evaluation.md").write_text(markdown(result))
+    result = evaluate(arguments.time_limit, snapshot_cases(arguments.snapshots) if arguments.snapshots else None)
+    arguments.out.mkdir(parents=True, exist_ok=True)
+    (arguments.out / "evaluation.json").write_text(json.dumps(result, indent=1) + "\n")
+    (arguments.out / "evaluation.md").write_text(markdown(result))
     print(json.dumps(result["totals"]), "meets the rule:", result["meetsTheRule"], "worse:", result["worse"])
 
 
