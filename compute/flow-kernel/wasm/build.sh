@@ -7,15 +7,17 @@
 set -euo pipefail
 
 CRATE=$(cd "$(dirname "$0")/.." && pwd)
-ROOT=$(cd "$CRATE/../.." && pwd)
-CONDITION="$ROOT/compute/condition-expression"
+COMPUTE=$(cd "$CRATE/.." && pwd)
+ROOT=$(cd "$COMPUTE/.." && pwd)
 COMMITTED="$ROOT/flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm"
 CARGO_DIR=${CARGO_HOME:-$HOME/.cargo}
-export RUSTFLAGS="--remap-path-prefix=$CARGO_DIR=/cargo --remap-path-prefix=$CRATE=/flowmat-flow-kernel --remap-path-prefix=$CONDITION=/flowmat-condition"
+# compute/ is one Cargo workspace, so both crates' paths are hashed relative to it; the remaps keep absolute paths out
+# of the module's panic locations.
+export RUSTFLAGS="--remap-path-prefix=$CARGO_DIR=/cargo --remap-path-prefix=$COMPUTE=/compute"
 
 cd "$CRATE"
 cargo build --locked --release --lib --target wasm32-unknown-unknown
-BUILT="$CRATE/target/wasm32-unknown-unknown/release/flowmat_flow_kernel.wasm"
+BUILT="$COMPUTE/target/wasm32-unknown-unknown/release/flowmat_flow_kernel.wasm"
 
 if [ "${1:-}" = "--check" ]; then
   if ! cmp -s "$BUILT" "$COMMITTED"; then

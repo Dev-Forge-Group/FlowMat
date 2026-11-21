@@ -13,9 +13,3 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 # arbitrary_precision keeps a number's text, so a snapshot's 12345678901234567890.123 stays exact as it does in Java.
 serde_json = { version = "1", features = ["arbitrary_precision"] }
-
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"

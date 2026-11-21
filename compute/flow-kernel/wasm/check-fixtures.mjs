@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const module = process.argv[2] ?? join(root, 'target/wasm32-unknown-unknown/release/flowmat_flow_kernel.wasm')
+const module = process.argv[2] ?? join(root, '../target/wasm32-unknown-unknown/release/flowmat_flow_kernel.wasm')
 const { instance } = await WebAssembly.instantiate(readFileSync(module))
 const { memory, alloc, dealloc, validate, route, walk } = instance.exports
 const encoder = new TextEncoder()

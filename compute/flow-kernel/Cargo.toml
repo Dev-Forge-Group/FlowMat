@@ -16,9 +16,3 @@ flowmat-condition = { path = "../condition-expression" }
 # arbitrary_precision keeps a number's text, so 2.50 stays 2.50 as Java's BigDecimal keeps its scale; preserve_order
 # reads an object's fields in the order written, as Jackson does.
 serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
-
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"
