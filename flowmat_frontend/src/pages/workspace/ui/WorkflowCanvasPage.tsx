@@ -1,53 +1,41 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useIsMutating, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import type {
-  CanvasAnnotationPoint,
   ConnectCompletePayload,
   ConnectStartPayload,
   WorkflowCanvasViewModel,
 } from '../../../entities/workflow/model/types'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
-import { validationSelection } from '../model/validationPanelModel'
-import { ValidationIssueList } from './ValidationIssueList'
-import { LiveValidation, LiveValidationButton } from './LiveValidation'
-import { TryFlowPanel } from './TryFlowPanel'
+import { WorkspaceChecks } from './WorkspaceChecks'
+import { WorkspaceInspector } from './WorkspaceInspector'
+import { WorkspaceTopbar } from './WorkspaceTopbar'
+import { ReadingPanels, type ReadingPanel } from './ReadingPanels'
+import { RemoteCursors } from './RemoteCursors'
+import { useCanvasRequests } from '../model/useCanvasRequests'
+import { useEditorDocumentActions } from '../model/useEditorDocumentActions'
+import { useWorkspaceAnnotations } from '../model/useWorkspaceAnnotations'
 import { useWorkspaceExport } from '../model/useWorkspaceExport'
 import { workspaceRibbonTabs } from './workspaceRibbon'
 import { useWorkspaceCollaboration } from '../model/useWorkspaceCollaboration'
 import { useWorkspaceKeyboard } from '../model/useWorkspaceKeyboard'
-import { EditorElementInspector } from './EditorElementInspector'
-import { getToolLabel } from '../model/workspaceTools'
-import { createWorkspaceEditorElement, normalizeFreehand, WORKSPACE_EDITOR_GRID_SIZE } from '../model/workspaceEditorElements'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
-import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
 import { useAutoLayout } from '../model/useAutoLayout'
 import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQuery'
 import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpdateWorkflowMutation'
-import { useWorkflowValidationQuery, workflowValidationQueryKey, type WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
-import { useLiveValidation } from '../../../entities/workflow/api/useLiveValidation'
-import { issueMarks, NO_MARKS, useIssueMarksStore } from '../model/issueMarks'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { NodePaletteSidebar } from './NodePaletteSidebar'
-import { EditorPublish } from './EditorPublish'
 import { SemanticPassport, type PassportPosition } from './SemanticPassport'
 import { RouteProbe } from './RouteProbe'
 import { DiagramNav } from './DiagramNav'
 import { ReadingReceipts } from './ReadingReceipts'
 import './archifyReading.css'
-import { SemanticLens } from './SemanticLens'
-import { ProcessFinder, type FinderContext } from './ProcessFinder'
-import { DiagramGuide } from './DiagramGuide'
-import { RunPicker } from './RunPicker'
-import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, type CanvasPreset } from './StylePresetMenu'
 import { ExportMenu } from './ExportMenu'
-import { ProcessIndex } from './ProcessIndex'
-import { GuidedViewsPanel } from './GuidedViewsPanel'
 import { useGuidedViewsQuery } from '../../../entities/workflow/api/useGuidedViews'
-import type { GuidedChapter } from '../model/guidedViews'
-import { LayoutWarningList } from './LayoutWarningList'
-import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
+import { inReadingOrder, type GuidedChapter } from '../model/guidedViews'
+import { intentAnnouncement } from '../model/processRelations'
+import type { LayoutSnapshot } from '../model/layoutChecks'
 import { useRevisionChanges } from '../model/useRevisionChanges'
 import { useCanvasReading } from '../model/useCanvasReading'
 import { useRunOverlay } from '../model/useRunOverlay'
@@ -56,43 +44,12 @@ import type {
   WorkspaceEditorCommandApi,
   WorkspaceEditorSelectionSnapshot,
 } from './WorkspaceEditorLayer'
-import {
-  useBatchCanvasAnnotationMutation,
-  useCreateCanvasAnnotationMutation,
-  useDeleteCanvasAnnotationMutation,
-  usePatchCanvasAnnotationMutation,
-  type PatchCanvasAnnotationInput,
-} from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
-import {
-  editorDocumentQueryKey,
-  fetchEditorDocument,
-  saveEditorDocument,
-} from '../../../entities/editor-document/api/editorDocumentApi'
-import {
-  preloadCanvasViewport,
-  preloadConnectionInspector,
-  preloadNodeInspector,
-  preloadNodePickerPopup,
-} from './workspacePreload'
-import {
-  isWorkflowEditorTool,
-  type WorkflowEditorTool,
-} from '../../../entities/workflow/model/nodeCatalog'
+import { preloadCanvasViewport, preloadNodePickerPopup } from './workspacePreload'
+import { isWorkflowEditorTool } from '../../../entities/workflow/model/nodeCatalog'
 import { Ribbon } from '../../../widgets/canvas-toolbar/ui/Ribbon'
-import {
-  insertElement,
-  snapPoint,
-  type Vec2,
-} from '../../../lib/flowmat-editor'
 
 const CanvasViewport = lazy(() =>
   preloadCanvasViewport().then((module) => ({ default: module.CanvasViewport }))
-)
-const ConnectionInspector = lazy(() =>
-  preloadConnectionInspector().then((module) => ({ default: module.ConnectionInspector }))
-)
-const NodeInspector = lazy(() =>
-  preloadNodeInspector().then((module) => ({ default: module.NodeInspector }))
 )
 const NodePickerPopup = lazy(() =>
   preloadNodePickerPopup().then((module) => ({ default: module.NodePickerPopup }))
@@ -119,53 +76,18 @@ function CanvasFallback() {
   return <div className="workspace-loading">Loading canvas...</div>
 }
 
-function InspectorFallback() {
-  return (
-    <div className="inspector-summary">
-      <p>Loading inspector...</p>
-    </div>
-  )
-}
-
 export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const selectedProcessId = useWorkspaceStore((s) => s.selectedProcessId)
   const selectedConnectionId = useWorkspaceStore((s) => s.selectedConnectionId)
-  const selectedPortId = useWorkspaceStore((s) => s.selectedPortId)
-  const inspectorMode = useWorkspaceStore((s) => s.inspectorMode)
   const selectNode = useWorkspaceStore((s) => s.selectNode)
   const selectEdge = useWorkspaceStore((s) => s.selectEdge)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
-  const pendingRename = useWorkspaceStore((s) => s.pendingRename)
-  const clearPendingRename = useWorkspaceStore((s) => s.clearPendingRename)
   const inlineEditingNodeId = useWorkspaceStore((s) => s.inlineEditingNodeId)
-  const inlineEditingEdgeId = useWorkspaceStore((s) => s.inlineEditingEdgeId)
-  const stopInlineEditEdge = useWorkspaceStore((s) => s.stopInlineEditEdge)
   const panelWidths = useWorkspaceStore((s) => s.panelWidths)
 
-  const panelWidthRef = useRef(panelWidths)
-  panelWidthRef.current = panelWidths
   const [localPanelWidths, setLocalPanelWidths] = useState(panelWidths)
 
   const [activeRibbonTabId, setActiveRibbonTabId] = useState('home')
-  const [showValidation, setShowValidation] = useState(false)
-  const validationQuery = useWorkflowValidationQuery(canvas.workflow.workflowId, showValidation)
-  const liveValidation = useLiveValidation(canvas)
-  const [liveOpen, setLiveOpen] = useState(false)
-  const [tryOpen, setTryOpen] = useState(false)
-  // The canvas marks each process and connection the check as drawn has something to say about.
-  useEffect(() => {
-    useIssueMarksStore.getState().setMarks(issueMarks(liveValidation))
-  }, [liveValidation])
-  useEffect(() => () => useIssueMarksStore.getState().setMarks(NO_MARKS), [])
-  /** An issue's button selects what it is about, from the server's check or the check as drawn. */
-  const selectIssue = useCallback((issue: WorkflowValidationIssue) => {
-    const target = validationSelection(issue)
-    if (target?.kind === 'connection') selectEdge(target.id)
-    else if (target?.kind === 'process') {
-      selectNode(target.id)
-      if (target.ioId) useWorkspaceStore.getState().selectPort(target.ioId)
-    }
-  }, [selectEdge, selectNode])
   const [editorSelection, setEditorSelection] = useState<WorkspaceEditorSelectionSnapshot>(EMPTY_EDITOR_SELECTION)
   const editorCommandApiRef = useRef<WorkspaceEditorCommandApi | null>(null)
 
@@ -218,17 +140,19 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const navigate = useNavigate()
   const updateWorkflowMutation = useUpdateWorkflowMutation()
   const workflowsQuery = useWorkflowsQuery(canvas.workflow.projectId)
-  const createAnnotationMutation = useCreateCanvasAnnotationMutation(canvas.workflow.workflowId)
-  const patchAnnotationMutation = usePatchCanvasAnnotationMutation(canvas.workflow.workflowId)
-  const deleteAnnotationMutation = useDeleteCanvasAnnotationMutation(canvas.workflow.workflowId)
-  const batchAnnotationMutation = useBatchCanvasAnnotationMutation(canvas.workflow.workflowId)
   const canEditAnnotations =
     canvas.workflow.currentUserRole === 'editor' || canvas.workflow.currentUserRole === 'owner'
 
+  const {
+    batchAnnotationMutation,
+    handleCreateShapeAnnotation,
+    handleCreateTextAnnotation,
+    handleCompleteFreehand,
+    handleUpdateAnnotation,
+    handleDeleteAnnotations,
+  } = useWorkspaceAnnotations(canvas.workflow.workflowId)
+
   const queryClient = useQueryClient()
-  useEffect(() => {
-    void queryClient.invalidateQueries({ queryKey: workflowValidationQueryKey(canvas.workflow.workflowId) })
-  }, [canvas.nodes, canvas.edges, canvas.workflow.workflowId, queryClient])
   // Declared before collaboration, which holds back a rename's change while the name is being edited.
   const editingWorkflowNameRef = useRef(false)
   const {
@@ -243,42 +167,6 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   } = useWorkspaceCollaboration({ canvas, queryClient, inlineEditingNodeId, selectedProcessId, editingWorkflowNameRef })
 
   const workflows = workflowsQuery.data ?? []
-  const [editingWorkflowName, setEditingWorkflowName] = useState(false)
-  const [draftWorkflowName, setDraftWorkflowName] = useState(canvas.workflow.workflowName)
-  const workflowNameInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    editingWorkflowNameRef.current = editingWorkflowName
-  }, [editingWorkflowName])
-
-  useEffect(() => {
-    if (editingWorkflowName) workflowNameInputRef.current?.select()
-  }, [editingWorkflowName])
-
-  async function commitWorkflowName() {
-    setEditingWorkflowName(false)
-    const trimmed = draftWorkflowName.trim()
-    if (!trimmed || trimmed === canvas.workflow.workflowName) return
-    await updateWorkflowMutation.mutateAsync({
-      workflowId: canvas.workflow.workflowId,
-      workflowName: trimmed,
-    })
-  }
-
-  const isMutating = useIsMutating()
-  const [savedLabel, setSavedLabel] = useState<'saving' | 'saved' | null>(null)
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (isMutating > 0) {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      setSavedLabel('saving')
-    } else if (savedLabel === 'saving') {
-      setSavedLabel('saved')
-      savedTimerRef.current = setTimeout(() => setSavedLabel(null), 2000)
-    }
-  }, [isMutating, savedLabel])
-
   const { applyLayout } = useAutoLayout({
     nodes: canvas.nodes,
     edges: canvas.edges,
@@ -286,68 +174,10 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     onFitView: () => fitViewRef.current(),
   })
 
-  function markEditorDocumentSaved() {
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    setSavedLabel('saved')
-    savedTimerRef.current = setTimeout(() => setSavedLabel(null), 2000)
-  }
-
-  async function loadEditorDocument() {
-    return fetchEditorDocument(canvas.workflow.workflowId)
-  }
-
-  async function handleSaveEditorDocument() {
-    if (!canEditAnnotations) return
-    setWorkspaceMessage(null)
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    setSavedLabel('saving')
-
-    try {
-      const editorDocument = await loadEditorDocument()
-      const savedDocument = await saveEditorDocument(canvas.workflow.workflowId, editorDocument)
-      queryClient.setQueryData(editorDocumentQueryKey(canvas.workflow.workflowId), savedDocument)
-      markEditorDocumentSaved()
-    } catch (error) {
-      setSavedLabel(null)
-      setWorkspaceMessage(error instanceof Error ? error.message : 'Failed to save editor document.')
-    }
-  }
-
-  async function handleReloadEditorDocument() {
-    editorCommandApiRef.current?.resetHistory()
-    setEditorSelection(EMPTY_EDITOR_SELECTION)
-    await queryClient.invalidateQueries({
-      queryKey: editorDocumentQueryKey(canvas.workflow.workflowId),
-    })
-  }
-
-  async function handleCreateEditorElement(tool: WorkflowEditorTool, position: Vec2) {
-    if (!canEditAnnotations) return
-    // Connectors are drawn by dragging between two shapes inside WorkspaceEditorLayer;
-    // a plain pane click has no second anchor to bind to, so it's a no-op here.
-    if (tool === 'editor-connector') return
-    setWorkspaceMessage(null)
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    setSavedLabel('saving')
-
-    try {
-      const editorDocument = await loadEditorDocument()
-      const snappedPosition = snapPoint(position, { enabled: true, gridSize: WORKSPACE_EDITOR_GRID_SIZE })
-      const { element, nextElementSeq } = createWorkspaceEditorElement(tool, snappedPosition, editorDocument)
-      const nextDocument = {
-        ...insertElement(editorDocument, element),
-        nextElementSeq,
-      }
-      const savedDocument = await saveEditorDocument(canvas.workflow.workflowId, nextDocument)
-      editorCommandApiRef.current?.recordBackendSnapshot(editorDocument, [])
-      queryClient.setQueryData(editorDocumentQueryKey(canvas.workflow.workflowId), savedDocument)
-      markEditorDocumentSaved()
-      setActiveTool('select')
-    } catch (error) {
-      setSavedLabel(null)
-      setWorkspaceMessage(error instanceof Error ? error.message : 'Failed to create editor element.')
-    }
-  }
+  const clearEditorSelection = useCallback(() => setEditorSelection(EMPTY_EDITOR_SELECTION), [])
+  const { savedLabel, handleSaveEditorDocument, handleReloadEditorDocument, handleCreateEditorElement } =
+    useEditorDocumentActions({ workflowId: canvas.workflow.workflowId, canEdit: canEditAnnotations, editorCommandApiRef,
+      clearEditorSelection, setWorkspaceMessage, setActiveTool })
 
   const handleEditorSelectionChange = useCallback((snapshot: WorkspaceEditorSelectionSnapshot) => {
     setEditorSelection(snapshot)
@@ -363,13 +193,6 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const nodePicker = useCanvasInteractionStore((s) => s.nodePicker)
   const openNodePicker = useCanvasInteractionStore((s) => s.openNodePicker)
   const closeNodePicker = useCanvasInteractionStore((s) => s.closeNodePicker)
-  const pendingDeleteNodeId = useCanvasInteractionStore((s) => s.pendingDeleteNodeId)
-  const pendingDeleteEdgeId = useCanvasInteractionStore((s) => s.pendingDeleteEdgeId)
-  const clearDeleteRequest = useCanvasInteractionStore((s) => s.clearDeleteRequest)
-  const pendingDuplicateNodeId = useCanvasInteractionStore((s) => s.pendingDuplicateNodeId)
-  const clearDuplicateRequest = useCanvasInteractionStore((s) => s.clearDuplicateRequest)
-  const pendingColorChange = useCanvasInteractionStore((s) => s.pendingColorChange)
-  const clearColorChange = useCanvasInteractionStore((s) => s.clearColorChange)
 
   const { past, future, undo, redo } = commandHistory
   const hasWorkflowSelection = Boolean(selectedProcessId || selectedConnectionId)
@@ -393,22 +216,14 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   // The canvas as drawn, measured when the workflow is checked (layout warnings; never part of publishing).
   const layoutRef = useRef<(() => LayoutSnapshot) | null>(null)
   const handleLayoutReady = useCallback((fn: () => LayoutSnapshot) => { layoutRef.current = fn }, [])
-  const [layoutFound, setLayoutFound] = useState<LayoutWarning[] | null>(null)
-  const checkLayout = useCallback(() => {
-    const measure = layoutRef.current
-    setLayoutFound(measure ? layoutWarnings(measure()) : null)
-  }, [])
+  const measureLayout = useCallback(() => layoutRef.current?.() ?? null, [])
   // archify's guided views: the workflow's chapters, stored with it (ADR-037). Until they load, a `#view=` link waits.
   const guidedViews = useGuidedViewsQuery(canvas.workflow.workflowId)
   const chapters = useMemo((): GuidedChapter[] => (guidedViews.data ?? []).map((view) => ({ id: view.guidedViewId,
     label: view.label, note: view.note, focus: view.focusProcessIds, version: view.version })), [guidedViews.data])
   // The processes selected on the canvas, in reading order (top to bottom, then left to right), for a new chapter.
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([])
-  const selectedInOrder = useMemo(() => {
-    const at = new Map(canvas.nodes.map((node) => [node.processId, node.position]))
-    return selectedProcessIds.filter((id) => at.has(id)).sort((a, b) =>
-      (at.get(a)!.y - at.get(b)!.y) || (at.get(a)!.x - at.get(b)!.x))
-  }, [canvas.nodes, selectedProcessIds])
+  const selectedInOrder = useMemo(() => inReadingOrder(canvas.nodes, selectedProcessIds), [canvas.nodes, selectedProcessIds])
   const handleProcessSelection = useCallback((ids: string[]) => {
     setSelectedProcessIds((current) => (current.length === ids.length && current.every((id, index) => id === ids[index])
       ? current : ids))
@@ -418,8 +233,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   readingRef.current = reading
   // A production run shown over the canvas (address `run=`): each process's mark from its latest step; view only.
   const canvasProcessIds = useMemo(() => new Set(canvas.nodes.map((node) => node.processId)), [canvas.nodes])
-  // archify keeps one reading panel open at a time: the finder, the lens, the guide, or FlowMat's run and revision pickers.
-  const [panel, setPanel] = useState<'finder' | 'lens' | 'guide' | 'runs' | 'changes' | 'index' | 'views' | null>(null)
+  const [panel, setPanel] = useState<ReadingPanel | null>(null)
   const runView = useRunOverlay(canvas.workflow.workflowId, reading.run.id, canvasProcessIds, panel === 'runs')
   const changesView = useRevisionChanges(canvas.workflow.workflowId, reading.changes.id, canvas)
   // archify's view controls: the semantic radar (overview map), the camera stepper and the zoom it shows.
@@ -490,12 +304,23 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const focusedProcessId = reading.state?.kind === 'focus' ? reading.state.processId : null
   const radarActiveIds = useMemo(() => new Set([selectedProcessId, focusedProcessId].filter((id): id is string => Boolean(id))),
     [focusedProcessId, selectedProcessId])
-  const focusFromRadar = useCallback((processId: string) => {
+  /** A process selected on the canvas's behalf: the editor elements' selection is let go first. */
+  const selectProcess = useCallback((processId: string) => {
     editorCommandApiRef.current?.clearSelection()
     setEditorSelection(EMPTY_EDITOR_SELECTION)
     selectNode(processId)
-    if (!readingRef.current.pick(processId)) readingRef.current.focus(processId)
   }, [selectNode])
+  const focusFromRadar = useCallback((processId: string) => {
+    selectProcess(processId)
+    if (!readingRef.current.pick(processId)) readingRef.current.focus(processId)
+  }, [selectProcess])
+  /** A process chosen in the index or the finder: read, or named as a route's start (brought into view) or end. */
+  const chooseProcess = (processId: string) => {
+    selectProcess(processId)
+    const naming = reading.picking?.from === null
+    if (!reading.pick(processId)) reading.focus(processId)
+    else if (naming) reading.reveal([processId])
+  }
   const closeMap = useCallback(() => setMapOpen(false), [])
   // archify's Intent Trace: the process pointed at or focused, with its neighbours, while nothing is read, picked,
   // previewed or selected and the guide is closed. The keyboard's preview is announced with its connections.
@@ -506,14 +331,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   }, [])
   const intentShown = !reading.highlight && !selectedProcessId && panel !== 'guide' ? reading.intent : null
   const canvasHighlight = reading.highlight ?? intentShown?.highlight ?? null
-  const intentStatus = (() => {
-    if (!intentShown?.id || !intentByKeyboard) return ''
-    const relations = reading.relationsOf(intentShown.id)
-    const total = relations.out.length + relations.in.length + relations.loop.length
-    const loops = relations.loop.length > 0 ? `, ${relations.loop.length} self loop` : ''
-    return `${reading.nameOf(intentShown.id)}. ${relations.out.length} outgoing, ${relations.in.length} incoming${loops}. `
-      + `${total} connections. Press Enter for details.`
-  })()
+  const intentStatus = intentShown?.id && intentByKeyboard
+    ? intentAnnouncement(reading.nameOf(intentShown.id), reading.relationsOf(intentShown.id)) : ''
   // archify's route begin: the process in the passport is the start, else the start is picked first; the panels close.
   const beginRoute = () => {
     setPanel(null)
@@ -525,125 +344,15 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     else if (reading.state?.kind === 'route') reading.clear()
     else beginRoute()
   }
-  const finderContext: FinderContext = !reading.picking ? { kind: 'focus' }
-    : reading.picking.from == null ? { kind: 'route-source', badges: reading.picking.choices }
-      : { kind: 'route-target', fromName: reading.nameOf(reading.picking.from), badges: reading.picking.choices }
-  const linksOf = (processId: string) => {
-    const relations = reading.relationsOf(processId)
-    return relations.out.length + relations.in.length + relations.loop.length
-  }
 
-  const deleteApiRef = useRef<{
-    deleteSelection(): Promise<void>
-    deleteNode(nodeId: string): Promise<void>
-    deleteEdge(edgeId: string): Promise<void>
-  }>({
-    deleteSelection: async () => {},
-    deleteNode: async () => {},
-    deleteEdge: async () => {},
-  })
-
-  const handleBeforeDelete = useCallback(
-    async ({ nodeIds, edgeIds }: { nodeIds: string[]; edgeIds: string[] }) => {
-      if (nodeIds.length === 0) return true
-
-      const connectedEdgeIds = new Set<string>()
-      for (const nodeId of nodeIds) {
-        for (const edgeId of getRelatedConnectionIds(canvasRef.current.edges, nodeId)) {
-          connectedEdgeIds.add(edgeId)
-        }
-      }
-
-      const connectedCount = connectedEdgeIds.size
-      if (connectedCount === 0) return true
-
-      const extraEdgeCount = [...connectedEdgeIds].filter((edgeId) => !edgeIds.includes(edgeId)).length
-      const message =
-        nodeIds.length === 1
-          ? `Deleting this node will also remove ${connectedCount} connected connection${connectedCount === 1 ? '' : 's'}. Continue?`
-          : `Deleting ${nodeIds.length} nodes will also remove ${connectedCount} connected connections${extraEdgeCount > 0 ? ` (${extraEdgeCount} implicit)` : ''}. Continue?`
-
-      return window.confirm(message)
-    },
-    []
-  )
-
-  const handleDeleteElements = useCallback(
-    async ({ nodeIds, edgeIds }: { nodeIds: string[]; edgeIds: string[] }) => {
-      if (nodeIds.length === 0 && edgeIds.length === 0) return
-
-      if (nodeIds.length === 0) {
-        if (edgeIds.length === 1) {
-          await deleteConnection(edgeIds[0])
-          return
-        }
-
-        await deleteElements({ nodeIds, edgeIds })
-        return
-      }
-
-      if (nodeIds.length === 1) {
-        const relatedEdgeIds = new Set(getRelatedConnectionIds(canvasRef.current.edges, nodeIds[0]))
-        const hasStandaloneEdges = edgeIds.some((edgeId) => !relatedEdgeIds.has(edgeId))
-        if (!hasStandaloneEdges) {
-          await deleteNode(nodeIds[0])
-          return
-        }
-      }
-
-      await deleteElements({ nodeIds, edgeIds })
-    },
-    [deleteConnection, deleteElements, deleteNode]
-  )
+  const { deleteApiRef, handleBeforeDelete, handleDeleteElements } = useCanvasRequests(canvasRef,
+    { deleteConnection, deleteElements, deleteNode, duplicateNode, updateNode })
   useWorkspaceKeyboard({
     canEditAnnotations, activeTool, setActiveTool, editorCommandApiRef, editorSelection, setEditorSelection,
     emptySelection: EMPTY_EDITOR_SELECTION, clearSelection, setPanel, mapOpen, setMapOpen, toggleMap, setStyleOpen,
     setExportOpen, presenting, setPresenting, togglePresenting, setPreset, cameraRef, readingRef, selectedProcessId,
     selectedConnectionId, isEditorCommandContext, deleteApiRef, duplicateNode, selectAllRef, undo, redo,
   })
-
-
-  useEffect(() => {
-    if (pendingDeleteNodeId) {
-      clearDeleteRequest()
-      void deleteApiRef.current.deleteNode(pendingDeleteNodeId)
-    }
-  }, [pendingDeleteNodeId, clearDeleteRequest])
-
-  useEffect(() => {
-    if (pendingDeleteEdgeId) {
-      clearDeleteRequest()
-      void deleteApiRef.current.deleteEdge(pendingDeleteEdgeId)
-    }
-  }, [pendingDeleteEdgeId, clearDeleteRequest])
-
-  useEffect(() => {
-    if (pendingDuplicateNodeId) {
-      clearDuplicateRequest()
-      void duplicateNode(pendingDuplicateNodeId)
-    }
-  }, [pendingDuplicateNodeId, clearDuplicateRequest, duplicateNode])
-
-  useEffect(() => {
-    if (pendingColorChange) {
-      clearColorChange()
-      void updateNode({ processId: pendingColorChange.nodeId, colorScheme: pendingColorChange.colorScheme })
-    }
-  }, [pendingColorChange, clearColorChange, updateNode])
-
-  useEffect(() => {
-    if (pendingRename) {
-      clearPendingRename()
-      void updateNode({ processId: pendingRename.nodeId, processName: pendingRename.name })
-    }
-  }, [pendingRename, clearPendingRename, updateNode])
-
-  const selectedNode = selectedProcessId ? canvas.nodeMap[selectedProcessId] ?? null : null
-  const selectedEdge = selectedConnectionId
-    ? canvas.edges.find((edge) => edge.id === selectedConnectionId) ?? null
-    : null
-  const selectedPort = selectedPortId ? canvas.portMap[selectedPortId] ?? null : null
-  const activeInspectorMode = editorSelection.elements.length > 0 ? 'editor' : inspectorMode
 
   async function handleNodeDragEnd(processId: string, x: number, y: number) {
     await saveNodePosition(processId, x, y)
@@ -659,63 +368,6 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
 
   async function handleConnectComplete(payload: ConnectCompletePayload) {
     await createConnection(payload)
-  }
-
-  async function handleCreateShapeAnnotation(position: { x: number; y: number }) {
-    await createAnnotationMutation.mutateAsync({
-      annotationType: 'shape',
-      shapeKind: 'rectangle',
-      posX: Math.round(position.x - 80),
-      posY: Math.round(position.y - 48),
-      width: 160,
-      height: 96,
-      style: {
-        stroke: 'var(--text-h)',
-        strokeWidth: 2,
-        fill: 'transparent',
-      },
-    })
-  }
-
-  async function handleCreateTextAnnotation(position: { x: number; y: number }) {
-    await createAnnotationMutation.mutateAsync({
-      annotationType: 'text',
-      posX: Math.round(position.x - 110),
-      posY: Math.round(position.y - 28),
-      width: 220,
-      height: 56,
-      textContent: 'New note',
-      style: {
-        stroke: 'var(--text-h)',
-        strokeWidth: 1,
-        fill: 'rgba(255,255,255,0.72)',
-      },
-    })
-  }
-
-  async function handleCompleteFreehand(points: CanvasAnnotationPoint[]) {
-    if (points.length < 2) return
-    const normalized = normalizeFreehand(points)
-    await createAnnotationMutation.mutateAsync({
-      annotationType: 'freehand',
-      posX: normalized.posX,
-      posY: normalized.posY,
-      width: normalized.width,
-      height: normalized.height,
-      points: normalized.points,
-      style: {
-        stroke: 'var(--accent)',
-        strokeWidth: 2,
-      },
-    })
-  }
-
-  async function handleUpdateAnnotation(annotationId: string, input: PatchCanvasAnnotationInput) {
-    await patchAnnotationMutation.mutateAsync({ annotationId, input })
-  }
-
-  async function handleDeleteAnnotations(annotationIds: string[]) {
-    await Promise.all(annotationIds.map((annotationId) => deleteAnnotationMutation.mutateAsync(annotationId)))
   }
 
   async function handleNodePick(tool: Parameters<typeof createNodeFromTool>[0]) {
@@ -737,112 +389,14 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
 
   return (
     <div className="workspace-layout" data-present={presenting ? 'true' : undefined}>
-      <header className="workspace-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Link to="/" className="topbar-home-link" title="Back to home">Home</Link>
-          <div style={{ display: 'grid', gap: '4px' }}>
-            {editingWorkflowName ? (
-              <input
-                ref={workflowNameInputRef}
-                className="workspace-topbar__name-input"
-                value={draftWorkflowName}
-                onChange={(e) => setDraftWorkflowName(e.target.value)}
-                onBlur={() => void commitWorkflowName()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void commitWorkflowName()
-                  if (e.key === 'Escape') {
-                    setDraftWorkflowName(canvas.workflow.workflowName)
-                    setEditingWorkflowName(false)
-                  }
-                }}
-              />
-            ) : (
-              <span
-                className="workspace-topbar__project"
-                title="Double-click to rename workflow"
-                onDoubleClick={() => {
-                  setDraftWorkflowName(canvas.workflow.workflowName)
-                  setEditingWorkflowName(true)
-                }}
-              >
-                {canvas.workflow.workflowName}
-              </span>
-            )}
-            <span className="workspace-topbar__status">
-              {canvas.workflow.workflowStatus} | {canvas.workflow.workflowType}
-            </span>
-          </div>
-          {/* Workflow switcher select moved to Ribbon Collaborate tab > Workflow group (step 4). */}
-        </div>
-        {/* Save status label moved to Ribbon Collaborate tab > Status group (step 4). */}
-        {/* Presence avatars moved to Ribbon Collaborate tab > Presence group (step 4). */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '12px',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-end',
-          }}
-        >
-          {/* Pointer/annotation tool buttons and Undo/Redo/Layout/Export moved to the Ribbon (Home/Annotate tabs). */}
-            <span style={{ fontSize: '13px', opacity: 0.8 }}>
-            Current tool: {getToolLabel(activeTool, paletteDefinitions)}.{' '}
-            {activeTool === 'annotation-freehand'
-              ? 'Drag on empty canvas to sketch. Collaborators see a live preview before the final stroke is saved.'
-              : activeTool === 'annotation-shape'
-                ? 'Click empty canvas to drop a shape annotation.'
-                : activeTool === 'annotation-text'
-                  ? 'Click empty canvas to drop a text annotation.'
-                  : activeTool.startsWith('editor-')
-                    ? 'Click empty canvas to create a backend editor element.'
-                    : 'Click the canvas to place a node, then drag between handles to connect.'}
-          </span>
-        </div>
-      </header>
+      <WorkspaceTopbar workflow={canvas.workflow} activeTool={activeTool} paletteDefinitions={paletteDefinitions}
+        editingRef={editingWorkflowNameRef}
+        onRename={(workflowName) => updateWorkflowMutation.mutateAsync({ workflowId: canvas.workflow.workflowId, workflowName })} />
 
       <Ribbon tabs={ribbonTabs} activeTabId={activeRibbonTabId} onTabChange={setActiveRibbonTabId} />
 
-      <section aria-label="Workflow validation" style={{ margin: '12px 16px 0' }}>
-        <button type="button" onClick={() => {
-          checkLayout()
-          if (showValidation) void validationQuery.refetch()
-          else setShowValidation(true)
-        }}>Check workflow</button>
-        <EditorPublish workflowId={canvas.workflow.workflowId} projectId={canvas.workflow.projectId} editable={canEditAnnotations}
-          onRefused={() => {
-            checkLayout()
-            if (showValidation) void validationQuery.refetch()
-            else setShowValidation(true)
-          }} />
-        <LiveValidationButton report={liveValidation} open={liveOpen} onToggle={() => setLiveOpen((open) => !open)} />
-        <button type="button" aria-expanded={tryOpen} onClick={() => setTryOpen((open) => !open)}>Try it</button>
-        {showValidation && (
-          <div role="status" style={{ marginTop: 8 }}>
-            {validationQuery.isPending && <p>Checking workflow...</p>}
-            {validationQuery.isError && <p role="alert">{validationQuery.error.message}</p>}
-            {validationQuery.data && (
-              <>
-                <p>{validationQuery.data.errors} errors, {validationQuery.data.warnings} warnings</p>
-                {validationQuery.data.issues.length === 0 && <p>No issues found.</p>}
-                <ValidationIssueList issues={validationQuery.data.issues} nameOf={reading.nameOf} onSelect={selectIssue} />
-              </>
-            )}
-            <LayoutWarningList warnings={layoutFound} nameOf={reading.nameOf} onSelect={(warning) => {
-              if (warning.code === 'LINE_OVER_PROCESS') {
-                reading.reveal([warning.from, warning.to, warning.processId])
-                selectEdge(warning.connectionId)
-              } else {
-                reading.reveal([...new Set(warning.ends.flat())])
-                selectEdge(warning.connectionIds[0])
-              }
-            }} />
-          </div>
-        )}
-      </section>
-
-      {liveOpen && <LiveValidation report={liveValidation} nameOf={reading.nameOf} onSelect={selectIssue} />}
-      {tryOpen && <TryFlowPanel canvas={canvas} nameOf={reading.nameOf} onSelectProcess={selectNode} />}
+      <WorkspaceChecks canvas={canvas} editable={canEditAnnotations} measureLayout={measureLayout} nameOf={reading.nameOf}
+        reveal={reading.reveal} />
 
       {workspaceMessage && (
         <div
@@ -882,9 +436,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               onNodeSelect={(processId) => {
                 // While a route is being picked, the click also names its start or end.
                 readingRef.current.pick(processId)
-                editorCommandApiRef.current?.clearSelection()
-                setEditorSelection(EMPTY_EDITOR_SELECTION)
-                selectNode(processId)
+                selectProcess(processId)
               }}
               onEdgeSelect={(connectionId) => {
                 editorCommandApiRef.current?.clearSelection()
@@ -973,9 +525,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               }}
               onFollow={(processId) => {
                 // Walks the graph: the process at the other end is selected and brought into view.
-                editorCommandApiRef.current?.clearSelection()
-                setEditorSelection(EMPTY_EDITOR_SELECTION)
-                selectNode(processId)
+                selectProcess(processId)
                 reading.reveal([processId])
               }} />
           )}
@@ -1018,145 +568,30 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           {exportOpen && <ExportMenu shareCard={shareCard?.variant ?? null} motion={motionAvailability} onChoose={runExport}
             onClose={closeExport} />}
           <span className="export-status" role="status" aria-live="polite">{exportStatus}</span>
-          {panel === 'runs' && (
-            <RunPicker runs={runView.runs} loading={runView.loading} shownId={reading.run.id} onShow={reading.run.show}
-              onClose={() => setPanel(null)} />
-          )}
-          {panel === 'changes' && (
-            <ChangesPicker revisions={changesView.revisions} loading={changesView.loading} shownId={reading.changes.id}
-              changes={changesView.changes} nameOf={reading.nameOf} onShow={reading.changes.show}
-              onReveal={(processId) => reading.reveal([processId])} onClose={() => setPanel(null)} />
-          )}
-          {panel === 'lens' && (
-            <SemanticLens kinds={reading.lens.kinds} chosen={reading.lens.chosen}
-              status={reading.state?.kind === 'lens' ? reading.view?.text ?? null : null}
-              onToggle={reading.lens.toggle} onClear={reading.clear} onClose={() => setPanel(null)} />
-          )}
-          {panel === 'views' && (
-            <GuidedViewsPanel workflowId={canvas.workflow.workflowId} chapters={chapters} activeId={reading.guide.viewId}
-              beat={reading.guide.beat} known={reading.knows} nameOf={reading.nameOf} canEdit={canEditAnnotations}
-              selectedProcessIds={selectedInOrder} onShow={reading.guide.show} onClear={reading.clear}
-              onClose={() => setPanel(null)} />
-          )}
-          {panel === 'index' && (
-            <ProcessIndex nodes={canvas.nodes} currentId={passportProcessId} previewId={intentShown?.id ?? null}
-              onRename={canEditAnnotations ? (processId, name) => void updateNode({ processId, processName: name }) : undefined}
-              onPreview={(processId) => readingRef.current.intent.show(processId)}
-              onClose={() => setPanel(null)}
-              onChoose={(processId) => {
-                // As the finder does, but the index stays open to go on from one process to the next (archify).
-                editorCommandApiRef.current?.clearSelection()
-                setEditorSelection(EMPTY_EDITOR_SELECTION)
-                selectNode(processId)
-                const naming = reading.picking?.from === null
-                if (!reading.pick(processId)) reading.focus(processId)
-                else if (naming) reading.reveal([processId])
-              }} />
-          )}
-          {panel === 'finder' && (
-            <ProcessFinder
-              nodes={canvas.nodes}
-              context={finderContext}
-              linksOf={linksOf}
-              onClose={() => setPanel(null)}
-              onPick={(processId) => {
+          <ReadingPanels panel={panel} onClose={() => setPanel(null)} canvas={canvas} reading={reading} runView={runView}
+            changesView={changesView} chapters={chapters} selectedInOrder={selectedInOrder} canEdit={canEditAnnotations}
+            currentProcessId={passportProcessId} previewId={intentShown?.id ?? null}
+            onRename={(processId, name) => void updateNode({ processId, processName: name })}
+            onChoose={chooseProcess}
+            onGuideAction={(action) => {
+              if (action === 'route') beginRoute()
+              else if (action === 'present') {
                 setPanel(null)
-                editorCommandApiRef.current?.clearSelection()
-                setEditorSelection(EMPTY_EDITOR_SELECTION)
-                selectNode(processId)
-                // While a route is picked the finder names its start (brought into view) or its end; else it reads the process.
-                const naming = reading.picking?.from === null
-                if (!reading.pick(processId)) reading.focus(processId)
-                else if (naming) reading.reveal([processId])
-              }}
-            />
-          )}
-          {panel === 'guide' && (
-            <DiagramGuide processes={canvas.nodes.length} connections={canvas.edges.length} onClose={() => setPanel(null)}
-              onAction={(action) => {
-                if (action === 'route') beginRoute()
-                else if (action === 'present') {
-                  setPanel(null)
-                  setPresenting(true)
-                } else if (action === 'map') {
-                  setPanel(null)
-                  setMapOpen(true)
-                } else setPanel(action === 'find' ? 'finder' : action)
-              }} />
-          )}
-          {/* Remote cursor overlay: cursor coordinates are window-relative, so subtract the canvas rect. */}
-          {(() => {
-            const rect = canvasContainerRef.current?.getBoundingClientRect()
-            if (!rect) return null
-            return [...remoteCursors.entries()]
-              .filter(([uid]) => uid !== syncUserId)
-              .map(([uid, cursor]) => (
-                <div
-                  key={uid}
-                  className="remote-cursor"
-                  style={{ left: cursor.x - rect.left, top: cursor.y - rect.top }}
-                >
-                  <div className="remote-cursor__dot" />
-                  <span className="remote-cursor__label">{uid.slice(0, 8)}</span>
-                </div>
-              ))
-          })()}
+                setPresenting(true)
+              } else if (action === 'map') {
+                setPanel(null)
+                setMapOpen(true)
+              } else setPanel(action === 'find' ? 'finder' : action)
+            }} />
+          <RemoteCursors cursors={remoteCursors} selfId={syncUserId} containerRef={canvasContainerRef} />
         </main>
 
         <div className="panel-resize-handle" onMouseDown={makeResizeHandler('right')} />
         <aside className="workspace-panel workspace-panel--right" style={{ width: localPanelWidths.right }}>
-          {activeInspectorMode === 'editor' && (
-            <EditorElementInspector
-              selection={editorSelection}
-              commandsRef={editorCommandApiRef}
-            />
-          )}
-          {activeInspectorMode === 'node' && (
-            <Suspense fallback={<InspectorFallback />}>
-              <NodeInspector
-                node={selectedNode}
-                selectedPort={selectedPort}
-                rules={[]}
-                onNodeSubmit={updateNode}
-                onNodeDelete={(processId) => deleteApiRef.current.deleteNode(processId)}
-                onPortCreate={createPort}
-                onPortUpdate={updatePort}
-                onPortDelete={deletePort}
-                onOpenRuleBuilder={() => {}}
-              />
-            </Suspense>
-          )}
-          {activeInspectorMode === 'connection' && (
-            <Suspense fallback={<InspectorFallback />}>
-              <ConnectionInspector
-                edge={selectedEdge}
-                rules={[]}
-                onSubmit={async (input) => { stopInlineEditEdge(); await updateConnection(input) }}
-                focusLabel={inlineEditingEdgeId === selectedEdge?.id}
-                sourceIsExclusive={selectedEdge ? canvas.nodeMap[selectedEdge.fromProcessId]?.nodeType === 'exclusive' : false}
-                sourceIsSplit={selectedEdge ? canvas.nodeMap[selectedEdge.fromProcessId]?.nodeType === 'split' : false}
-                sourceSchema={selectedEdge?.fromIoId ? canvas.portMap[selectedEdge.fromIoId]?.schemaJson ?? null : null}
-                onDelete={(connectionId) => deleteApiRef.current.deleteEdge(connectionId)}
-                onOpenRuleBuilder={() => {}}
-              />
-            </Suspense>
-          )}
-          {activeInspectorMode === 'multi' && (
-            <div className="inspector-summary">
-              <p>Multiple nodes selected</p>
-              <p className="inspector-hint">
-                Shift+click or drag to multi-select. Bulk delete is not fully supported in the inspector yet.
-              </p>
-            </div>
-          )}
-          {activeInspectorMode === 'none' && (
-            <div className="inspector-summary">
-              <p>
-                {canvas.nodes.length} nodes | {canvas.edges.length} connections
-              </p>
-              <p className="inspector-hint">Click a node or connection to inspect it.</p>
-            </div>
-          )}
+          <WorkspaceInspector canvas={canvas} editorSelection={editorSelection} editorCommandsRef={editorCommandApiRef}
+            onNodeSubmit={updateNode} onNodeDelete={(processId) => deleteApiRef.current.deleteNode(processId)}
+            onPortCreate={createPort} onPortUpdate={updatePort} onPortDelete={deletePort}
+            onConnectionSubmit={updateConnection} onConnectionDelete={(connectionId) => deleteApiRef.current.deleteEdge(connectionId)} />
         </aside>
       </div>
     </div>

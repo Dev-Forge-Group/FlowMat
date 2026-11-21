@@ -33,3 +33,15 @@ export function processRelations(edges: CanvasEdgeViewModel[], processId: string
   }
   return relations
 }
+
+/** How many connections a process has, each loop once. */
+export function relationCount(relations: ProcessRelations): number {
+  return relations.out.length + relations.in.length + relations.loop.length
+}
+
+/** What archify's Intent Trace announces for a process previewed from the keyboard. */
+export function intentAnnouncement(name: string, relations: ProcessRelations): string {
+  const loops = relations.loop.length > 0 ? `, ${relations.loop.length} self loop` : ''
+  return `${name}. ${relations.out.length} outgoing, ${relations.in.length} incoming${loops}. `
+    + `${relationCount(relations)} connections. Press Enter for details.`
+}

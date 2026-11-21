@@ -48,10 +48,13 @@ describe('Workspace editor keyboard integration', () => {
 
   it('keeps editor document undo/redo routed through the workspace editor command api', () => {
     const pageSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // A new editor element is saved by the page's editor document hook, which records it for undo.
+    const documentSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'useEditorDocumentActions.ts'), 'utf8')
     const layerSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkspaceEditorLayer.tsx'), 'utf8')
 
     expect(pageSource).toContain('isEditorCommandContext')
-    expect(pageSource).toContain('editorCommandApiRef.current?.recordBackendSnapshot')
+    expect(pageSource).toContain('useEditorDocumentActions(')
+    expect(documentSource).toContain('editorCommandApiRef.current?.recordBackendSnapshot')
     expect(layerSource).toContain('recordBackendSnapshot(document: EditorDocument')
     expect(layerSource).toContain('split.annotationIds.length === 0')
     expect(layerSource).toContain('persistDocument(selectElements(target.document, target.selectedIds))')

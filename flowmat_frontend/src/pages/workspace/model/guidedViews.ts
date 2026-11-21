@@ -47,3 +47,13 @@ export function neighbourChapter(chapters: readonly GuidedChapter[], viewId: str
   const index = chapters.findIndex((chapter) => chapter.id === viewId)
   return index < 0 ? null : chapters[index + step] ?? null
 }
+
+/**
+ * The processes selected for a new chapter in reading order: top to bottom, then left to right. Ids not on the canvas
+ * are left out.
+ */
+export function inReadingOrder(nodes: readonly { processId: string; position: { x: number; y: number } }[],
+  processIds: readonly string[]): string[] {
+  const at = new Map(nodes.map((node) => [node.processId, node.position]))
+  return processIds.filter((id) => at.has(id)).sort((a, b) => (at.get(a)!.y - at.get(b)!.y) || (at.get(a)!.x - at.get(b)!.x))
+}
