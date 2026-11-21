@@ -18,7 +18,7 @@
 > 1. `main` 브랜치 보호(1주차 6번): 저장소 Settings에서 직접 push 금지와 `Commit Attribution` 필수.
 > 2. 개발 DB(5434)에 V133–V137 적용(3주차 2번): 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db ALLOW_DROPPED="cad_import_job payment_discount project_activity_log project_comment project_export project_file project_permission resource_types resource_usage resources simulation_run simulation_step" scripts/ops/upgrade-rehearsal.sh`가 통과한 뒤 같은 jar로 적용한다([절차](../operations/backup-restore.md) §5).
 > 3. 릴리스 후보 태그(4주차 3번): 이름(권장 `v0.9.0-rc.1`)과 라이선스 표기를 정하면 [점검표](RELEASE-CHECKLIST.md)를 그 커밋에서 돌리고 태그를 단다.
-> 4. 편집기 패키지 전환(4주차 1번)에 필요한 `read:packages` 토큰, `.github` 저장소의 첫 커밋(4주차 2번), uniplace-ai의 AWS 신뢰 정책.
+> 4. 편집기 패키지 전환(4주차 1번)에 필요한 `read:packages` 토큰, uniplace-ai의 AWS 신뢰 정책. (`.github` 저장소의 첫 커밋은 11-21에 사용자가 SSH로 push했다. `main` = `4e5a52b`. HTTPS로는 저장된 토큰이 그 저장소에 쓰지 못해 403이었다.)
 > 5. FM-AI 3단계 전([ADR-039](../architecture/adr/ADR-039-work-order-sequence-optimizer.md)): 개발 서버에서 설비 몇 개의 `sequence-snapshot`을 받아 `compute/sequence-optimizer/real/`에 두고 `python -m sequence_optimizer.evaluate --snapshots real/*.json --out real/results`로 같은 표를 만든다. 그리고 풀이기(Python 서비스)를 어디서 돌릴지 정한다.
 
 > 2026-11-14 리드: 11-16부터 한 달 계획은 [월간 개발 계획](MONTH-PLAN-2026-11-16.md)이다. 11-07 ~ 11-14에 `main`에 들어간 일은 PR #75–#95(모듈 분리, 공개 계약, 편집기 추출, 설정 검증, 모듈 카탈로그, CI 경로 조건, 캔버스 연결선 수정, release-validation 합치기)이고, 각 PR 본문이 기록이다. 아래 11-02 항목은 그 전의 기록이다.
