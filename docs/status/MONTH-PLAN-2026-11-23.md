@@ -63,6 +63,15 @@
   - Chicory 1.7.5로 같은 모듈을 JVM에서 돌렸다. 170개 모두 같은 답이다.
   - 한 번 검사가 Java 103µs(p95 244µs)인데, 컴파일된 모듈은 1.9ms(4.1ms), 해석기는 101ms다.
   - 기준(2배 이하)을 넘지 못했으므로 서버는 Java를 둔다. 고정 입력 대조를 CI에 남긴다([성능 기준선 §6](../operations/performance-baseline.md)).
+- **4주차 2번 큰 화면 나누기: 진행 중.**
+  - `WorkflowCanvasPage`를 2,201줄에서 1,169줄로 줄였다.
+  - 빼낸 것:
+    - 도구 정의·단축키(`workspaceTools`).
+    - 편집기 요소(`workspaceEditorElements`), 요소 검사기(`EditorElementInspector`).
+    - 협업(`useWorkspaceCollaboration`), 키보드(`useWorkspaceKeyboard`).
+    - 리본(`workspaceRibbon`), 내보내기(`useWorkspaceExport`, `workflowJson`).
+  - 빼낸 순수 함수에는 단위 테스트를 붙였다. 매번 모의 브라우저 전체(489개, preview 빌드)가 통과했다.
+  - 남은 것: 머리줄·캔버스 위 패널·검사기 화면을 컴포넌트로 나눠 800줄 이하로. `CanvasViewport`(1,537줄)와 `WorkspaceEditorLayer`(1,475줄)도.
 - **고정 입력이 찾은 Java 결함 셋.** 고쳤고, 각각 테스트가 있다.
   - 나머지 연결이 둘인 분할이 판에 있으면 경로 계산이 NPE(500)를 냈다. 이제 409로 거절한다.
   - 포트 스키마의 이름 순서가 JVM을 띄울 때마다 달랐다. 그래서 둘 이상 어긋날 때 오류가 가리키는 이름이 서버를 다시 띄울 때마다 바뀔 수 있었다. 이제 이름 순서다.

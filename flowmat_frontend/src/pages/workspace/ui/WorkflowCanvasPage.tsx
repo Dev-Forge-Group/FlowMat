@@ -12,17 +12,14 @@ import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
 import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { TryFlowPanel } from './TryFlowPanel'
+import { useWorkspaceExport } from '../model/useWorkspaceExport'
+import { workspaceRibbonTabs } from './workspaceRibbon'
 import { useWorkspaceCollaboration } from '../model/useWorkspaceCollaboration'
 import { useWorkspaceKeyboard } from '../model/useWorkspaceKeyboard'
 import { EditorElementInspector } from './EditorElementInspector'
-import {
-  ANNOTATION_TOOL_DEFINITIONS,
-  EDITOR_TOOL_DEFINITIONS,
-  getToolLabel,
-} from '../model/workspaceTools'
+import { getToolLabel } from '../model/workspaceTools'
 import { createWorkspaceEditorElement, normalizeFreehand, WORKSPACE_EDITOR_GRID_SIZE } from '../model/workspaceEditorElements'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
-import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
 import { useAutoLayout } from '../model/useAutoLayout'
 import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQuery'
@@ -44,14 +41,11 @@ import { DiagramGuide } from './DiagramGuide'
 import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
 import { StylePresetMenu, type CanvasPreset } from './StylePresetMenu'
-import { ExportMenu, type ExportChoice, type MotionAvailability } from './ExportMenu'
+import { ExportMenu } from './ExportMenu'
 import { ProcessIndex } from './ProcessIndex'
 import { GuidedViewsPanel } from './GuidedViewsPanel'
 import { useGuidedViewsQuery } from '../../../entities/workflow/api/useGuidedViews'
 import type { GuidedChapter } from '../model/guidedViews'
-import type { ExportOutcome, MotionExport, PngExport, ShareCardExport, SvgExport } from './CanvasViewport'
-import { motionMimeType } from '../model/workflowMotion'
-import { shareCardText } from '../model/shareCard'
 import { LayoutWarningList } from './LayoutWarningList'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
 import { useRevisionChanges } from '../model/useRevisionChanges'
@@ -85,13 +79,6 @@ import {
   type WorkflowEditorTool,
 } from '../../../entities/workflow/model/nodeCatalog'
 import { Ribbon } from '../../../widgets/canvas-toolbar/ui/Ribbon'
-import {
-  buildRibbonTabs,
-  type RibbonButtonHandlers,
-  type RibbonDynamicButtons,
-  type RibbonGroupContent,
-} from '../../../widgets/canvas-toolbar/config/ribbonConfig'
-import { Shapes } from 'lucide-react'
 import {
   insertElement,
   snapPoint,
@@ -399,10 +386,6 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const canvasContainerRef = useRef<HTMLElement>(null)
   const fitViewRef = useRef<() => void>(() => {})
   const selectAllRef = useRef<() => void>(() => {})
-  const exportPngRef = useRef<PngExport>(async () => ({ kind: 'empty' }))
-  const exportSvgRef = useRef<SvgExport>(async () => ({ kind: 'empty' }))
-  const exportShareCardRef = useRef<ShareCardExport>(async () => ({ kind: 'empty' }))
-  const exportMotionRef = useRef<MotionExport>(async () => ({ kind: 'empty' }))
   // Reading the canvas (focus, upstream, downstream, route, find); view only, kept in the address hash.
   const revealRef = useRef<(processIds: string[]) => void>(() => {})
   const handleRevealReady = useCallback((fn: (processIds: string[]) => void) => { revealRef.current = fn }, [])
@@ -453,74 +436,17 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   // archify's export menu (E) and what the last export said, shown for a moment as archify's toast is.
   const [exportOpen, setExportOpen] = useState(false)
   const closeExport = useCallback(() => setExportOpen(false), [])
-  const [exportStatus, setExportStatus] = useState<string | null>(null)
-  // A motion clip takes its six seconds to record; its note stays until the clip is saved.
-  const recordingRef = useRef(false)
-  useEffect(() => {
-    if (!exportStatus || recordingRef.current) return
-    const timer = window.setTimeout(() => setExportStatus(null), 4000)
-    return () => window.clearTimeout(timer)
-  }, [exportStatus])
-  // archify's share cards: one for the route being read, one for an upstream or downstream trace; none for other readings.
-  const shareCard = useMemo(
-    () => shareCardText(reading.view, (processId) => canvas.nodeMap[processId]?.name ?? processId),
-    [reading.view, canvas.nodeMap],
-  )
-  const shareCardRef = useRef({ text: shareCard, view: reading.view })
-  shareCardRef.current = { text: shareCard, view: reading.view }
-  const motionAvailability: MotionAvailability = useMemo(
-    () => (canvas.edges.length === 0 ? 'no-connections' : motionMimeType() ? 'ready' : 'unsupported'),
-    [canvas.edges.length],
-  )
-  // Called inside the press that chose it, so the clipboard accepts the picture.
-  const runExport = useCallback((choice: ExportChoice) => {
-    const name = canvas.workflow.workflowName
-    if (choice.kind === 'webm') {
-      if (recordingRef.current) {
-        setExportStatus('Already recording a motion clip')
-        return
-      }
-      recordingRef.current = true
-      setExportStatus('Recording 6 seconds of motion…')
-      void exportMotionRef.current(name, document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
-        .then((result: ExportOutcome) => {
-          recordingRef.current = false
-          setExportStatus(result.kind === 'done' ? 'Downloaded WebM'
-            : result.kind === 'empty' ? 'Nothing to record: connect two processes first'
-              : result.kind === 'unsupported' ? 'This browser cannot record video'
-                : `Export failed: ${result.message}`)
-        })
-      return
-    }
-    if (choice.kind === 'share-card') {
-      const { text, view } = shareCardRef.current
-      if (!text || text.variant !== choice.variant || !view?.highlight) {
-        setExportStatus(choice.variant === 'route' ? 'Read a route first, then export its card'
-          : 'Trace upstream or downstream of a process first, then export its card')
-        return
-      }
-      void exportShareCardRef.current(name, { text, nodeIds: view.highlight.nodeIds, edgeIds: view.highlight.edgeIds,
-        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' }).then((result: ExportOutcome) => {
-        setExportStatus(result.kind === 'done' ? `Downloaded ${choice.variant} share card`
-          : result.kind === 'empty' ? 'Nothing to export: add a process first'
-            : result.kind === 'unsupported' ? 'This browser cannot draw the share card'
-              : `Export failed: ${result.message}`)
-      })
-      return
-    }
-    const done = choice.kind === 'png-clipboard' ? 'Copied PNG to clipboard'
-      : choice.kind === 'png' ? 'Downloaded PNG'
-        : `Downloaded SVG · ${choice.theme[0].toUpperCase()}${choice.theme.slice(1)}`
-    const outcome = choice.kind === 'svg'
-      ? exportSvgRef.current(name, choice.theme)
-      : exportPngRef.current(name, choice.kind === 'png-clipboard' ? 'clipboard' : 'download')
-    void outcome.then((result: ExportOutcome) => {
-      setExportStatus(result.kind === 'done' ? done
-        : result.kind === 'empty' ? 'Nothing to export: add a process first'
-          : result.kind === 'unsupported' ? 'Clipboard image write not supported by this browser'
-            : `Export failed: ${result.message}`)
-    })
-  }, [canvas.workflow.workflowName])
+  const {
+    shareCard,
+    exportPngRef,
+    exportSvgRef,
+    exportShareCardRef,
+    exportMotionRef,
+    exportStatus,
+    motionAvailability,
+    runExport,
+    exportJson,
+  } = useWorkspaceExport(canvas, reading.view)
   // Where the reader moved the Semantic Passport; it stays there from one process to the next.
   const [passportPosition, setPassportPosition] = useState<PassportPosition | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -719,61 +645,6 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const selectedPort = selectedPortId ? canvas.portMap[selectedPortId] ?? null : null
   const activeInspectorMode = editorSelection.elements.length > 0 ? 'editor' : inspectorMode
 
-  function exportJson() {
-    const payload = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      workflow: { id: canvas.workflow.workflowId, name: canvas.workflow.workflowName },
-      nodes: canvas.nodes.map((n) => ({
-        id: n.id,
-        name: n.name,
-        nodeType: n.nodeType,
-        processType: n.processType,
-        colorScheme: n.colorScheme,
-        posX: Math.round(n.position.x),
-        posY: Math.round(n.position.y),
-        width: n.size.width,
-        height: n.size.height,
-        description: n.description,
-        inputs: n.inputs.map((p) => ({ name: p.name, ioType: p.ioType, direction: p.direction, quantity: p.quantity, unit: p.unit, colorScheme: p.colorScheme })),
-        outputs: n.outputs.map((p) => ({ name: p.name, ioType: p.ioType, direction: p.direction, quantity: p.quantity, unit: p.unit, colorScheme: p.colorScheme })),
-      })),
-      edges: canvas.edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        connectionType: e.connectionType,
-        label: e.label,
-        flowRate: e.flowRate,
-        unit: e.unit,
-        delayTimeSec: e.delayTimeSec,
-        lossRate: e.lossRate,
-        priority: e.priority,
-      })),
-      annotations: canvas.annotations.map((annotation) => ({
-        id: annotation.id,
-        annotationType: annotation.annotationType,
-        shapeKind: annotation.shapeKind,
-        posX: Math.round(annotation.position.x),
-        posY: Math.round(annotation.position.y),
-        width: annotation.size.width,
-        height: annotation.size.height,
-        rotation: annotation.rotation,
-        points: annotation.points.map((point) => ({ x: point.x, y: point.y })),
-        textContent: annotation.textContent,
-        style: annotation.style,
-        zIndex: annotation.zIndex,
-        groupId: annotation.groupId,
-      })),
-    }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${canvas.workflow.workflowName}.flowmat.json`
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
-
   async function handleNodeDragEnd(processId: string, x: number, y: number) {
     await saveNodePosition(processId, x, y)
   }
@@ -857,175 +728,12 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     }
   }
 
-  const ribbonHandlers: RibbonButtonHandlers = {
-    ...createWorkspaceSelectionCommands({
-      selection: editorSelection,
-      editable: canEditAnnotations,
-      editorApi: editorCommandApiRef.current,
-      annotations: canvas.annotations,
-      batchAnnotations: (input) => batchAnnotationMutation.mutateAsync(input),
-      onError: setWorkspaceMessage,
-    }),
-    'select-pointer': { onClick: () => setActiveTool('select'), active: activeTool === 'select' },
-    'add-node': { onClick: () => void addNode() },
-    undo: {
-      onClick: () => {
-        if (isEditorCommandContext) {
-          editorCommandApiRef.current?.undo()
-          return
-        }
-        void undo()
-      },
-      disabled: isEditorCommandContext ? !editorSelection.canUndo : past.length === 0,
-      title: isEditorCommandContext
-        ? (editorSelection.canUndo ? 'Undo editor document change' : 'Nothing to undo')
-        : (past.length > 0 ? `Undo: ${past[past.length - 1].label}` : 'Nothing to undo'),
-    },
-    redo: {
-      onClick: () => {
-        if (isEditorCommandContext) {
-          editorCommandApiRef.current?.redo()
-          return
-        }
-        void redo()
-      },
-      disabled: isEditorCommandContext ? !editorSelection.canRedo : future.length === 0,
-      title: isEditorCommandContext
-        ? (editorSelection.canRedo ? 'Redo editor document change' : 'Nothing to redo')
-        : (future.length > 0 ? `Redo: ${future[0].label}` : 'Nothing to redo'),
-    },
-    'layout-tb': {
-      onClick: () => void applyLayout('TB'),
-      disabled: canvas.nodes.length === 0,
-      title: 'Auto layout top to bottom',
-    },
-    'layout-lr': {
-      onClick: () => void applyLayout('LR'),
-      disabled: canvas.nodes.length === 0,
-      title: 'Auto layout left to right',
-    },
-    'export-json': { onClick: exportJson, disabled: canvas.nodes.length === 0, title: 'Export as JSON' },
-    'export-png': {
-      onClick: () => runExport({ kind: 'png' }),
-      disabled: canvas.nodes.length === 0,
-      title: 'Export as PNG',
-    },
-    'export-svg': {
-      onClick: () => runExport({ kind: 'svg', theme: 'light' }),
-      disabled: canvas.nodes.length === 0,
-      title: 'Export as SVG (vector, the workflow only)',
-    },
-    'save-editor-document': {
-      onClick: () => void handleSaveEditorDocument(),
-      disabled: !canEditAnnotations,
-      title: canEditAnnotations ? 'Save editor document elements' : 'Viewers cannot save editor elements',
-    },
-    'reload-editor-document': {
-      onClick: () => void handleReloadEditorDocument(),
-      title: 'Reload editor document elements',
-    },
-    'duplicate-selected': {
-      onClick: () => editorCommandApiRef.current?.duplicateSelected(),
-      disabled: !editorCommandApiRef.current || editorSelection.elements.length === 0,
-      title: 'Duplicate selected shapes',
-    },
-    'delete-selected': {
-      onClick: () => editorCommandApiRef.current?.deleteSelected(),
-      disabled: !editorCommandApiRef.current || editorSelection.elements.length === 0,
-      title: 'Delete selected shapes',
-    },
-    'bring-to-front': {
-      onClick: () => editorCommandApiRef.current?.bringSelectedToFront(),
-      disabled: !editorCommandApiRef.current || editorSelection.elements.length === 0,
-      title: 'Bring to front',
-    },
-    'send-to-back': {
-      onClick: () => editorCommandApiRef.current?.sendSelectedToBack(),
-      disabled: !editorCommandApiRef.current || editorSelection.elements.length === 0,
-      title: 'Send to back',
-    },
-    'fit-view': {
-      onClick: () => fitViewRef.current(),
-      title: 'Fit view',
-    },
-    'select-all': {
-      onClick: () => selectAllRef.current(),
-      title: 'Select all',
-    },
-  }
-
-  const ribbonDynamicButtons: RibbonDynamicButtons = {
-    tools: paletteDefinitions.map((definition) => ({
-      id: `tool-${definition.tool}`,
-      icon: Shapes,
-      label: definition.label,
-      onClick: () => setActiveTool(definition.tool),
-      active: activeTool === definition.tool,
-    })),
-    draw: [
-      ...ANNOTATION_TOOL_DEFINITIONS.map((definition) => ({
-        id: `tool-${definition.tool}`,
-        icon: definition.icon,
-        label: definition.label,
-        onClick: () => setActiveTool(definition.tool),
-        active: activeTool === definition.tool,
-        disabled: !canEditAnnotations,
-        title: canEditAnnotations ? definition.description : 'Viewers cannot create annotations',
-      })),
-      ...EDITOR_TOOL_DEFINITIONS.map((definition) => ({
-        id: `tool-${definition.tool}`,
-        icon: definition.icon,
-        label: definition.label,
-        onClick: () => setActiveTool(definition.tool),
-        active: activeTool === definition.tool,
-        disabled: !canEditAnnotations,
-        title: canEditAnnotations ? definition.description : 'Viewers cannot create editor elements',
-      })),
-    ],
-  }
-
-  // Collaborate tab (step 4, migration plan §4): same state/logic as before, only the
-  // render location moves off the title bar and into the Collaborate tab's groups.
-  const ribbonGroupContent: RibbonGroupContent = {
-    presence: remoteCursors.size > 0 && (
-      <div className="presence-avatars" title={`${remoteCursors.size} collaborators online`}>
-        {[...remoteCursors.keys()]
-          .filter((uid) => uid !== syncUserId)
-          .slice(0, 5)
-          .map((uid) => (
-            <span key={uid} className="presence-avatar" title={uid}>
-              {uid.slice(0, 2).toUpperCase()}
-            </span>
-          ))}
-        {remoteCursors.size > 5 && (
-          <span className="presence-avatar presence-avatar--overflow">+{remoteCursors.size - 5}</span>
-        )}
-      </div>
-    ),
-    status: savedLabel && (
-      <span className={`save-status save-status--${savedLabel}`}>
-        {savedLabel === 'saving' ? 'Saving...' : 'Saved'}
-      </span>
-    ),
-    workflow: workflows.length > 1 && (
-      <select
-        className="workflow-switcher"
-        value={canvas.workflow.workflowId}
-        onChange={(e) => {
-          navigate(`/projects/${canvas.workflow.projectId}/workflows/${e.target.value}`)
-        }}
-        title="Switch workflow"
-      >
-        {workflows.map((wf) => (
-          <option key={wf.workflowId} value={wf.workflowId}>
-            {wf.workflowName}
-          </option>
-        ))}
-      </select>
-    ),
-  }
-
-  const ribbonTabs = buildRibbonTabs(ribbonHandlers, ribbonDynamicButtons, ribbonGroupContent)
+  const ribbonTabs = workspaceRibbonTabs({
+    editorSelection, canEditAnnotations, editorCommandApiRef, canvas, batchAnnotationMutation, setWorkspaceMessage, activeTool,
+    setActiveTool, addNode, isEditorCommandContext, undo, redo, past, future, applyLayout, exportJson, runExport,
+    handleSaveEditorDocument, handleReloadEditorDocument, fitViewRef, selectAllRef, paletteDefinitions, remoteCursors,
+    syncUserId, savedLabel, workflows, navigate,
+  })
 
   return (
     <div className="workspace-layout" data-present={presenting ? 'true' : undefined}>

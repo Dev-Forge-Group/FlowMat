@@ -58,12 +58,13 @@ describe('Workspace editor keyboard integration', () => {
   })
 
   it('keeps legacy annotation toolbar commands backed by svg editor selection', () => {
-    const pageSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // The ribbon's commands are built in workspaceRibbon.tsx from the page's state.
+    const ribbonSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'workspaceRibbon.tsx'), 'utf8')
     const viewportSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'CanvasViewport.tsx'), 'utf8')
 
     expect(viewportSource).toContain('selectedEditorAnnotationIdsRef.current')
     expect(viewportSource).toContain('onAnnotationSelectionReady?.(() => selectedEditorAnnotationIdsRef.current)')
     expect(viewportSource).toContain('filter((id) => annotationIds.has(id))')
-    expect(pageSource).toContain('batchAnnotations: (input) => batchAnnotationMutation.mutateAsync(input)')
+    expect(ribbonSource).toContain('batchAnnotations: (input) => k.batchAnnotationMutation.mutateAsync(input)')
   })
 })
