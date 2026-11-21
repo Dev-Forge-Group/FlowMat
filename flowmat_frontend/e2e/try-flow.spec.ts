@@ -47,8 +47,8 @@ test('trying the flow follows a split and a loss to the end and shows what reach
   await page.goto('/projects/prj-e2e/workflows/wf-try')
   await expect(page.locator('.react-flow__node')).toHaveCount(4, { timeout: 15_000 })
 
+  await page.getByRole('button', { name: 'Try it' }).click()
   const tryIt = page.getByRole('region', { name: 'Try the flow' })
-  await tryIt.getByRole('button', { name: 'Try it' }).click()
   await tryIt.getByLabel('Quantity').fill('10')
   await tryIt.getByLabel('Unit').fill('kg')
   const before = requests.length

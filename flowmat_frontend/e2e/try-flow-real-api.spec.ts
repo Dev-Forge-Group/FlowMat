@@ -63,8 +63,8 @@ test('trying a flow in the editor gives what the server run of the same revision
     // The editor's try of the same flow and input.
     await page.goto(`/projects/prj_demo_main/workflows/${workflowId}`)
     await expect(page.locator('.react-flow__node')).toHaveCount(4)
+    await page.getByRole('button', { name: 'Try it' }).click()
     const tryIt = page.getByRole('region', { name: 'Try the flow' })
-    await tryIt.getByRole('button', { name: 'Try it' }).click()
     await tryIt.getByLabel('Quantity').fill('10')
     await tryIt.getByLabel('Unit').fill('kg')
     await tryIt.getByRole('button', { name: 'Run through' }).click()

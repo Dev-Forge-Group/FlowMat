@@ -13,7 +13,7 @@ import { useWorkspaceStore } from '../model/workspaceStore'
 import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
 import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
-import { LiveValidation } from './LiveValidation'
+import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { TryFlowPanel } from './TryFlowPanel'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
@@ -564,6 +564,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const [showValidation, setShowValidation] = useState(false)
   const validationQuery = useWorkflowValidationQuery(canvas.workflow.workflowId, showValidation)
   const liveValidation = useLiveValidation(canvas)
+  const [liveOpen, setLiveOpen] = useState(false)
+  const [tryOpen, setTryOpen] = useState(false)
   // The canvas marks each process and connection the check as drawn has something to say about.
   useEffect(() => {
     useIssueMarksStore.getState().setMarks(issueMarks(liveValidation))
@@ -1845,6 +1847,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
             if (showValidation) void validationQuery.refetch()
             else setShowValidation(true)
           }} />
+        <LiveValidationButton report={liveValidation} open={liveOpen} onToggle={() => setLiveOpen((open) => !open)} />
+        <button type="button" aria-expanded={tryOpen} onClick={() => setTryOpen((open) => !open)}>Try it</button>
         {showValidation && (
           <div role="status" style={{ marginTop: 8 }}>
             {validationQuery.isPending && <p>Checking workflow...</p>}
@@ -1869,8 +1873,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
         )}
       </section>
 
-      <LiveValidation report={liveValidation} nameOf={reading.nameOf} onSelect={selectIssue} />
-      <TryFlowPanel canvas={canvas} nameOf={reading.nameOf} onSelectProcess={selectNode} />
+      {liveOpen && <LiveValidation report={liveValidation} nameOf={reading.nameOf} onSelect={selectIssue} />}
+      {tryOpen && <TryFlowPanel canvas={canvas} nameOf={reading.nameOf} onSelectProcess={selectNode} />}
 
       {workspaceMessage && (
         <div

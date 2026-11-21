@@ -111,8 +111,8 @@ test('the check as drawn agrees with the server check on a saved workflow', asyn
     const server = await counts.textContent()
     expect(server).not.toBe('0 errors, 0 warnings')
 
+    const summary = check.getByRole('button', { name: /^As drawn:/ })
     const live = page.getByRole('region', { name: 'Check as drawn' })
-    const summary = live.getByRole('button', { name: /^As drawn:/ })
     await expect(summary).toHaveText(`As drawn: ${server}`)
     await summary.click()
     const issues = (region: typeof check) => region.locator('.validation-issues > li > button').allTextContents()

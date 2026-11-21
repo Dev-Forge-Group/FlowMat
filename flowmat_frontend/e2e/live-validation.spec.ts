@@ -59,8 +59,8 @@ test('the check as drawn finds and marks an issue without asking the server and 
   const mark = page.getByRole('img', { name: '1 error as drawn: CONNECTION_INCOMPATIBLE' })
   await expect(mark).toBeVisible()
 
+  const summary = page.getByRole('button', { name: /^As drawn:/ })
   const live = page.getByRole('region', { name: 'Check as drawn' })
-  const summary = live.getByRole('button', { name: /^As drawn:/ })
   await expect(summary).toHaveText('As drawn: 1 errors, 0 warnings')
   await summary.click()
   const issue = live.getByRole('button', { name: /^error: CONNECTION_INCOMPATIBLE/ })

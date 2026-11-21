@@ -7,14 +7,14 @@ import { connectionFlows, summarizeWalk, tryInput, useTryFlowStore, walkRows } f
 /**
  * Trying the flow as drawn (ADR-040 decision 7): an input at the start nodes, followed to the end by the flow kernel as
  * the server would run it, every step passing on what it received. What reaches each connection shows on the canvas.
- * Nothing is saved, published or run.
+ * Nothing is saved, published or run. It is open below the check row while "Try it" is pressed; closing it clears the
+ * canvas.
  */
 export function TryFlowPanel({ canvas, nameOf, onSelectProcess }: {
   canvas: Pick<WorkflowCanvasViewModel, 'nodes' | 'edges'>
   nameOf: (id: string) => string
   onSelectProcess: (processId: string) => void
 }) {
-  const [open, setOpen] = useState(false)
   const [quantity, setQuantity] = useState('10')
   const [unit, setUnit] = useState('')
   const [attributes, setAttributes] = useState('')
@@ -49,19 +49,16 @@ export function TryFlowPanel({ canvas, nameOf, onSelectProcess }: {
   const summary = walk ? summarizeWalk(walk, nameOf) : null
   return (
     <section aria-label="Try the flow" className="try-flow">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>Try it</button>
-      {open && (
-        <form className="try-flow__form" onSubmit={(event) => { event.preventDefault(); void run() }}>
-          <label>Quantity <input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" /></label>
-          <label>Unit <input value={unit} onChange={(event) => setUnit(event.target.value)} /></label>
-          <label>Attributes <input value={attributes} placeholder='{"lot": "A"}'
-            onChange={(event) => setAttributes(event.target.value)} /></label>
-          <button type="submit">Run through</button>
-          <span className="inspector-hint">Each step passes on what it receives; gateways, Joins and connections act as in a run.</span>
-        </form>
-      )}
-      {open && problem && <p role="alert">{problem}</p>}
-      {open && walk && summary && (
+      <form className="try-flow__form" onSubmit={(event) => { event.preventDefault(); void run() }}>
+        <label>Quantity <input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" /></label>
+        <label>Unit <input value={unit} onChange={(event) => setUnit(event.target.value)} /></label>
+        <label>Attributes <input value={attributes} placeholder='{"lot": "A"}'
+          onChange={(event) => setAttributes(event.target.value)} /></label>
+        <button type="submit">Run through</button>
+        <span className="inspector-hint">Each step passes on what it receives; gateways, Joins and connections act as in a run.</span>
+      </form>
+      {problem && <p role="alert">{problem}</p>}
+      {walk && summary && (
         <div role="status">
           <p className={`try-flow__summary try-flow__summary--${summary.tone}`}>{summary.headline}</p>
           <ol className="try-flow__steps">
