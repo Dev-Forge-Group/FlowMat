@@ -120,8 +120,11 @@ tasks.named('test') {
 	inputs.files(file('settings.gradle'), fileTree('modules') { include '*/build.gradle' }).withPropertyName('moduleBuildFiles')
 	// The condition language's fixtures, shared with the Rust implementation in compute/condition-expression.
 	inputs.dir(file('../compute/condition-expression/fixtures')).withPropertyName('conditionFixtures')
-	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison.
-	['condition.fixtures.update', 'condition.bench'].each { name ->
+	// The sequence optimizer's evaluation set, whose baselines SequenceFixtureTest checks (compute/sequence-optimizer).
+	inputs.dir(file('../compute/sequence-optimizer/fixtures')).withPropertyName('sequenceFixtures')
+	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison;
+	// -Dsequence.fixtures.update=true rewrites the sequence optimizer's baselines.
+	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update'].each { name ->
 		def value = providers.systemProperty(name).orNull
 		if (value != null) systemProperty name, value
 	}
