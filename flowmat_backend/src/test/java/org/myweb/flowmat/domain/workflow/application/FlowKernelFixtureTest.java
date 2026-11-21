@@ -171,7 +171,7 @@ class FlowKernelFixtureTest {
                     port.put("direction", direction);
                     if (random.nextInt(3) > 0) port.put("ioName", "port " + portIndex);
                     String resource = random.nextInt(4) == 0 ? pick(RESOURCES) : random.nextBoolean() ? "data" : "generic";
-                    port.put("resourceType", resource);
+                    if (random.nextInt(40) > 0) port.put("resourceType", random.nextInt(60) == 0 ? " " : resource);
                     if (random.nextInt(6) == 0) port.put("itemId", random.nextBoolean() ? "item-a" : "item-b");
                     boolean measured = "material".equals(resource) || "product".equals(resource) || port.has("itemId");
                     if (measured ? random.nextInt(12) > 0 : random.nextInt(4) == 0) {

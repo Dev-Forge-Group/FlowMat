@@ -4,21 +4,27 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import org.myweb.flowmat.global.exception.BusinessException;
 import org.myweb.flowmat.global.exception.ErrorCode;
 
-/** The small interoperable subset of schemaJson supported by workflow ports. */
+/**
+ * The small interoperable subset of schemaJson supported by workflow ports. Properties and required names are kept in name
+ * order, so a check that stops at the first mismatch names the same one every time, here and in the flow kernel (ADR-040).
+ */
 public record PortSchema(Map<String, String> properties, Set<String> required) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Set<String> TYPES = Set.of("string", "number", "boolean");
 
     public PortSchema {
-        properties = Map.copyOf(properties);
-        required = Set.copyOf(required);
+        properties = Collections.unmodifiableMap(new TreeMap<>(properties));
+        required = Collections.unmodifiableSet(new TreeSet<>(required));
     }
 
     public static PortSchema parse(JsonNode json) {

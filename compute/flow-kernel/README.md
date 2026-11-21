@@ -8,7 +8,7 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
 
 | 파일 | 내용 | 누가 쓰나 |
 |---|---|---|
-| `fixtures/cases.json` | 손으로 고른 그래프 9개: 문제없는 줄·게이트웨이·분할과 합류, 기본 경로 둘, 분할 몫 초과, 스키마 불일치, 순환, 반올림으로 다 잃는 손실, 빈 흐름. 몇 개는 보낼 출력(`probes`)도 있다 | 사람 |
+| `fixtures/cases.json` | 손으로 고른 그래프 10개: 문제없는 줄·게이트웨이·분할과 합류, 기본 경로 둘, 분할 몫 초과, 스키마 불일치(하나, 둘), 순환, 반올림으로 다 잃는 손실, 빈 흐름. 몇 개는 보낼 출력(`probes`)도 있다 | 사람 |
 | `fixtures/validation.json` | 위의 그래프와 고정 시드(`20261123`)로 만든 그래프 160개, 각각에 `WorkflowValidationService`가 낸 답(`errors`, `warnings`, `issues`의 순서·근거·고치는 법·숨기는 경고), 알려진 단위(`context.knownUnits`) | `FlowKernelFixtureTest` |
 | `fixtures/routing.json` | 위의 그래프와 고정 시드(`20261124`)로 만든 그래프 120개, 노드마다 보낼 출력, 실행 그래프(`FlowRunGraph`)의 답 | `FlowKernelRouteFixtureTest` |
 

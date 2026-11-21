@@ -27,6 +27,19 @@ class FlowRunPortContractsTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
+    void namesTheFirstMissingOrMistypedAttributeByName() throws Exception {
+        FlowRunPortContracts contracts = new FlowRunPortContracts(Map.of(), Map.of("port",
+            new PortSchema(Map.of("zone", "string", "lot", "string", "batch", "number"), Set.of("zone", "lot"))));
+
+        BusinessException missing = assertThrows(BusinessException.class,
+            () -> contracts.requireSchema("port", mapper.readTree("{\"attrs\":{}}")));
+        assertEquals("Port port requires outputSnapshot.attrs.lot.", missing.getMessage());
+        BusinessException mistyped = assertThrows(BusinessException.class, () -> contracts.requireSchema("port",
+            mapper.readTree("{\"attrs\":{\"zone\":1,\"lot\":2,\"batch\":\"x\"}}")));
+        assertEquals("Port port outputSnapshot.attrs.batch must be number.", mistyped.getMessage());
+    }
+
+    @Test
     void absentPortsOrContractsReturnBeforeInspectingTheirPayloads() {
         FlowRunPortContracts contracts = new FlowRunPortContracts(
             Map.of("rule-only", ConditionExpression.compile("quantity > 0")),

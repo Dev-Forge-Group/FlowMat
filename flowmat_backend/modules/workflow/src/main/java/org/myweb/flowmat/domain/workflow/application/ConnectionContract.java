@@ -3,6 +3,7 @@ package org.myweb.flowmat.domain.workflow.application;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -85,7 +86,8 @@ final class ConnectionContract {
         if (source != null && target != null) {
             String sourceType = defaultIfBlank(source.getResourceType(), source.getIoType());
             String targetType = defaultIfBlank(target.getResourceType(), target.getIoType());
-            if (!sourceType.equals(targetType)) {
+            // Both blank with no old ioType read as the same (none), not as a failure of the check itself.
+            if (!Objects.equals(sourceType, targetType)) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "Connected ports resourceType must match.");
             }
             PortSchema targetSchema = PortSchema.parseStored(target.getSchemaJson());

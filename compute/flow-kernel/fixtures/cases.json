@@ -132,6 +132,22 @@
         {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "out", "lossRate": 0.75, "defaultRoute": false}
       ]
     }},
+    {"id": "schema-two-needs", "note": "An input needing zone and batch from an output that has neither as its type: the first by name is reported. At run time, an output missing both is refused for the first by name too.", "probes": [
+        {"nodeId": "in", "output": {"quantity": 1, "attrs": {}}},
+        {"nodeId": "in", "output": {"quantity": 1, "attrs": {"zone": 3, "batch": "b"}}}
+      ], "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}
+      ],
+      "ports": [
+        {"processIoId": "in_o", "processId": "in", "direction": "output", "resourceType": "data", "requiredYn": "N", "allowShortageYn": "N", "schemaJson": {"type": "object", "properties": {"zone": {"type": "string"}, "batch": {"type": "number"}}, "required": ["zone", "batch"]}},
+        {"processIoId": "out_i", "processId": "out", "direction": "input", "resourceType": "data", "requiredYn": "Y", "allowShortageYn": "N", "schemaJson": {"type": "object", "properties": {"zone": {"type": "number"}, "batch": {"type": "string"}}, "required": ["zone", "batch"]}}
+      ],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "out", "fromIoId": "in_o", "toIoId": "out_i", "defaultRoute": false}
+      ]
+    }},
     {"id": "empty", "note": "A workflow with nothing in it.", "graph": {
       "processes": [],
       "ports": [],
