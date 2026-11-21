@@ -6,35 +6,30 @@ import type {
   ConnectStartPayload,
   WorkflowCanvasViewModel,
 } from '../../../entities/workflow/model/types'
-import { fetchWorkflowGraphChanges } from '../../../entities/workflow/api/workflowGraphChanges'
-import { fetchWorkflowPresenceSnapshot } from '../../../entities/workflow/api/workflowPresenceSnapshot'
-import { applyGraphChangesToCanvas } from '../../../entities/workflow/model/applyGraphChangesToCanvas'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
 import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
 import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { TryFlowPanel } from './TryFlowPanel'
+import { useWorkspaceCollaboration } from '../model/useWorkspaceCollaboration'
+import { useWorkspaceKeyboard } from '../model/useWorkspaceKeyboard'
 import { EditorElementInspector } from './EditorElementInspector'
 import {
   ANNOTATION_TOOL_DEFINITIONS,
   EDITOR_TOOL_DEFINITIONS,
   getToolLabel,
-  getUndoRedoShortcut,
-  getWorkspaceToolShortcut,
 } from '../model/workspaceTools'
 import { createWorkspaceEditorElement, normalizeFreehand, WORKSPACE_EDITOR_GRID_SIZE } from '../model/workspaceEditorElements'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
 import { useAutoLayout } from '../model/useAutoLayout'
-import { CANVAS_ACTIONS } from '../model/canvasActions'
 import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQuery'
 import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpdateWorkflowMutation'
 import { useWorkflowValidationQuery, workflowValidationQueryKey, type WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import { useLiveValidation } from '../../../entities/workflow/api/useLiveValidation'
 import { issueMarks, NO_MARKS, useIssueMarksStore } from '../model/issueMarks'
-import type { PresenceMessage, GraphChangeMessage } from '../../../entities/workflow/api/useWorkflowSync'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { NodePaletteSidebar } from './NodePaletteSidebar'
 import { EditorPublish } from './EditorPublish'
@@ -48,7 +43,7 @@ import { ProcessFinder, type FinderContext } from './ProcessFinder'
 import { DiagramGuide } from './DiagramGuide'
 import { RunPicker } from './RunPicker'
 import { ChangesPicker } from './ChangesPicker'
-import { StylePresetMenu, nextPreset, type CanvasPreset } from './StylePresetMenu'
+import { StylePresetMenu, type CanvasPreset } from './StylePresetMenu'
 import { ExportMenu, type ExportChoice, type MotionAvailability } from './ExportMenu'
 import { ProcessIndex } from './ProcessIndex'
 import { GuidedViewsPanel } from './GuidedViewsPanel'
@@ -243,234 +238,27 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const canEditAnnotations =
     canvas.workflow.currentUserRole === 'editor' || canvas.workflow.currentUserRole === 'owner'
 
-  // Presence: remote cursor + node-editing state
-  const [remoteCursors, setRemoteCursors] = useState<
-    Map<string, { x: number; y: number; type: string }>
-  >(new Map())
-  const [editingPresence, setEditingPresence] = useState<ReadonlyMap<string, string>>(new Map())
-  const [remoteAnnotationPreviews, setRemoteAnnotationPreviews] = useState<
-    ReadonlyMap<string, { points: CanvasAnnotationPoint[]; annotationType: string }>
-  >(new Map())
-  const [syncUserId, setSyncUserId] = useState<string | null>(null)
-  const sendPresenceRef = useRef<
-    (msg: Omit<PresenceMessage, 'userId' | 'clientId' | 'workflowId' | 'timestamp'>) => void
-  >(() => {})
-
-  const handlePresence = useCallback((msg: PresenceMessage) => {
-    if (!msg.userId) return
-    const uid = msg.userId
-
-    setRemoteCursors((prev) => {
-      const next = new Map(prev)
-      if (msg.type === 'LEAVE') {
-        next.delete(uid)
-      } else if (msg.type === 'CURSOR_MOVED' && msg.cursorX != null && msg.cursorY != null) {
-        next.set(uid, { x: msg.cursorX, y: msg.cursorY, type: msg.type })
-      } else if (msg.type === 'JOIN' || msg.type === 'NODE_EDITING') {
-        next.set(uid, { x: 0, y: 0, type: msg.type })
-      }
-      return next
-    })
-
-    if (msg.type === 'ANNOTATION_DRAWING' || msg.type === 'LEAVE') {
-      setRemoteAnnotationPreviews((prev) => {
-        const next = new Map(prev)
-        if (msg.type === 'LEAVE' || !msg.annotation?.inProgress) {
-          next.delete(uid)
-          return next
-        }
-        next.set(uid, {
-          annotationType: msg.annotation.annotationType,
-          points: msg.annotation.points.map(([x, y]) => ({ x, y })),
-        })
-        return next
-      })
-    }
-
-    if (msg.type === 'NODE_EDITING' || msg.type === 'LEAVE') {
-      setEditingPresence((prev) => {
-        const next = new Map(prev)
-        for (const [nodeId, editUid] of next) {
-          if (editUid === uid) next.delete(nodeId)
-        }
-        if (msg.type === 'NODE_EDITING' && msg.editingProcessId) {
-          next.set(msg.editingProcessId, uid)
-        }
-        return next
-      })
-    }
-  }, [])
-
   const queryClient = useQueryClient()
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: workflowValidationQueryKey(canvas.workflow.workflowId) })
   }, [canvas.nodes, canvas.edges, canvas.workflow.workflowId, queryClient])
-  const graphSeqRef = useRef(canvas.graphSeq)
-  const deferredGraphResyncFromRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    graphSeqRef.current = canvas.graphSeq
-    deferredGraphResyncFromRef.current = null
-  }, [canvas.workflow.workflowId, canvas.graphSeq])
-
-  const invalidateEditorDocument = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: editorDocumentQueryKey(canvas.workflow.workflowId),
-    })
-  }, [canvas.workflow.workflowId, queryClient])
-
-  const applyGraphChanges = useCallback((changes: GraphChangeMessage[]) => {
-    if (changes.length === 0) return
-
-    const maxSeq = changes.reduce((max, change) => Math.max(max, change.seq), graphSeqRef.current)
-    let deferredFromSeq: number | null = null
-
-    queryClient.setQueryData<WorkflowCanvasViewModel>(
-      ['workflow-canvas', canvas.workflow.workflowId],
-      (current) => {
-        if (!current) return current
-
-        const applicableChanges = changes.filter((change) => {
-          const state = useWorkspaceStore.getState()
-          const shouldSkip =
-            (change.changeType === 'NODE_UPDATED' && change.entityId === state.inlineEditingNodeId) ||
-            (change.changeType === 'CONNECTION_UPDATED' && change.entityId === state.inlineEditingEdgeId) ||
-            (change.changeType === 'WORKFLOW_UPDATED' && editingWorkflowNameRef.current)
-          if (!shouldSkip) return true
-          const candidate = Math.max(0, change.seq - 1)
-          deferredFromSeq = deferredFromSeq == null ? candidate : Math.min(deferredFromSeq, candidate)
-          return false
-        })
-
-        if (applicableChanges.length === 0) {
-          return { ...current, graphSeq: maxSeq }
-        }
-
-        return applyGraphChangesToCanvas(current, applicableChanges)
-      }
-    )
-
-    graphSeqRef.current = maxSeq
-    if (deferredFromSeq != null) {
-      deferredGraphResyncFromRef.current =
-        deferredGraphResyncFromRef.current == null
-          ? deferredFromSeq
-          : Math.min(deferredGraphResyncFromRef.current, deferredFromSeq)
-    }
-    invalidateEditorDocument()
-  }, [invalidateEditorDocument, queryClient, canvas.workflow.workflowId])
-
-  const resyncGraphChanges = useCallback(async (sinceSeq: number) => {
-    try {
-      const data = await fetchWorkflowGraphChanges(canvas.workflow.workflowId, sinceSeq)
-      if (data.resetRequired) {
-        await queryClient.invalidateQueries({
-          queryKey: ['workflow-canvas', canvas.workflow.workflowId],
-        })
-        invalidateEditorDocument()
-        return
-      }
-      if (data.changes.length > 0) {
-        applyGraphChanges(data.changes)
-        return
-      }
-      if (data.currentSeq <= graphSeqRef.current) return
-      graphSeqRef.current = data.currentSeq
-      queryClient.setQueryData<WorkflowCanvasViewModel>(
-        ['workflow-canvas', canvas.workflow.workflowId],
-        (current) => (current ? { ...current, graphSeq: data.currentSeq } : current)
-      )
-    } catch {
-      await queryClient.invalidateQueries({
-        queryKey: ['workflow-canvas', canvas.workflow.workflowId],
-      })
-      invalidateEditorDocument()
-    }
-  }, [applyGraphChanges, invalidateEditorDocument, queryClient, canvas.workflow.workflowId])
-
-  const loadPresenceSnapshot = useCallback(async (ownUserId: string | null) => {
-    try {
-      const snapshot = await fetchWorkflowPresenceSnapshot(canvas.workflow.workflowId)
-      const cursorMap = new Map<string, { x: number; y: number; type: string }>()
-      const editingMap = new Map<string, string>()
-      for (const entry of snapshot) {
-        if (!entry.userId || entry.userId === ownUserId) continue
-        if (entry.cursorX != null && entry.cursorY != null) {
-          cursorMap.set(entry.userId, { x: entry.cursorX, y: entry.cursorY, type: entry.type })
-        } else {
-          cursorMap.set(entry.userId, { x: 0, y: 0, type: entry.type })
-        }
-        if (entry.editingProcessId) {
-          editingMap.set(entry.editingProcessId, entry.userId)
-        }
-      }
-      setRemoteCursors(cursorMap)
-      setEditingPresence(editingMap)
-    } catch {
-      // Ignore snapshot failures; live presence stream will continue to work.
-    }
-  }, [canvas.workflow.workflowId])
-
-  const handleGraphChange = useCallback((msg: GraphChangeMessage) => {
-    if (msg.changeType === 'RESET_REQUIRED') {
-      void queryClient.invalidateQueries({ queryKey: ['workflow-canvas', canvas.workflow.workflowId] })
-      invalidateEditorDocument()
-      return
-    }
-    if (msg.seq <= graphSeqRef.current) return
-    if (msg.seq === graphSeqRef.current + 1) {
-      applyGraphChanges([msg])
-      return
-    }
-    void resyncGraphChanges(graphSeqRef.current)
-  }, [applyGraphChanges, canvas.workflow.workflowId, invalidateEditorDocument, queryClient, resyncGraphChanges])
-
-  const handleReconnect = useCallback((forceSnapshot: boolean) => {
-    if (forceSnapshot) {
-      void queryClient.invalidateQueries({ queryKey: ['workflow-canvas', canvas.workflow.workflowId] })
-    } else {
-      void resyncGraphChanges(graphSeqRef.current)
-    }
-    invalidateEditorDocument()
-    void loadPresenceSnapshot(syncUserId)
-  }, [canvas.workflow.workflowId, invalidateEditorDocument, loadPresenceSnapshot, queryClient, resyncGraphChanges, syncUserId])
-
-  useEffect(() => {
-    if (inlineEditingNodeId || deferredGraphResyncFromRef.current == null) return
-    const sinceSeq = deferredGraphResyncFromRef.current
-    deferredGraphResyncFromRef.current = null
-    void resyncGraphChanges(sinceSeq)
-  }, [inlineEditingNodeId, resyncGraphChanges])
-
-  const handleSyncReady = useCallback((api: {
-    sendPresence: (msg: Omit<PresenceMessage, 'userId' | 'clientId' | 'workflowId' | 'timestamp'>) => void
-    clientId: string
-    ownUserId: string | null
-  }) => {
-    sendPresenceRef.current = api.sendPresence
-    setSyncUserId(api.ownUserId)
-    void loadPresenceSnapshot(api.ownUserId)
-  }, [loadPresenceSnapshot])
-
-  useEffect(() => {
-    sendPresenceRef.current({ type: 'NODE_EDITING', editingProcessId: selectedProcessId ?? undefined })
-  }, [selectedProcessId])
-
-  // Item I: broadcast LEAVE when the tab closes or navigates away
-  useEffect(() => {
-    const onUnload = () => sendPresenceRef.current({ type: 'LEAVE' })
-    window.addEventListener('beforeunload', onUnload)
-    return () => {
-      window.removeEventListener('beforeunload', onUnload)
-      sendPresenceRef.current({ type: 'LEAVE' })
-    }
-  }, [])
+  // Declared before collaboration, which holds back a rename's change while the name is being edited.
+  const editingWorkflowNameRef = useRef(false)
+  const {
+    remoteCursors,
+    editingPresence,
+    remoteAnnotationPreviews,
+    syncUserId,
+    handlePresence,
+    handleGraphChange,
+    handleReconnect,
+    handleSyncReady,
+  } = useWorkspaceCollaboration({ canvas, queryClient, inlineEditingNodeId, selectedProcessId, editingWorkflowNameRef })
 
   const workflows = workflowsQuery.data ?? []
   const [editingWorkflowName, setEditingWorkflowName] = useState(false)
   const [draftWorkflowName, setDraftWorkflowName] = useState(canvas.workflow.workflowName)
   const workflowNameInputRef = useRef<HTMLInputElement>(null)
-  const editingWorkflowNameRef = useRef(false)
 
   useEffect(() => {
     editingWorkflowNameRef.current = editingWorkflowName
@@ -881,144 +669,12 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
     },
     [deleteConnection, deleteElements, deleteNode]
   )
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement
-      // A focused dropdown takes its keys too: typing picks an option there.
-      const isEditing =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-
-      if (!isEditing) {
-        const shortcutTool = getWorkspaceToolShortcut(e)
-        if (shortcutTool && (shortcutTool === 'select' || canEditAnnotations)) {
-          e.preventDefault()
-          setActiveTool(shortcutTool)
-          if (shortcutTool === 'select') {
-            editorCommandApiRef.current?.clearSelection()
-            setEditorSelection(EMPTY_EDITOR_SELECTION)
-            clearSelection()
-          }
-          return
-        }
-
-        if (e.key === 'Escape' && (activeTool !== 'select' || editorSelection.elements.length > 0)) {
-          e.preventDefault()
-          setActiveTool('select')
-          editorCommandApiRef.current?.clearSelection()
-          setEditorSelection(EMPTY_EDITOR_SELECTION)
-          clearSelection()
-          return
-        }
-
-        // Reading: "/" finds a process (or a route's start or end), "?" opens the guide; once the Pointer tool is back
-        // (above), Esc stops picking a route, then stops reading.
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '/' || e.key === '?')) {
-          e.preventDefault()
-          setPanel(e.key === '/' ? 'finder' : 'guide')
-          if (e.key === '?') setMapOpen(false)
-          return
-        }
-        // archify's view keys: M the semantic radar, F the presentation stage, S the visual style, E the export menu,
-        // + - 0 the camera stepper. (R, L and T stay the editor's tools.)
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && ['m', 'M', 'f', 'F', 's', 'S', 'e', 'E', '+', '=', '-', '0'].includes(e.key)) {
-          e.preventDefault()
-          if (e.key === 'm' || e.key === 'M') toggleMap()
-          else if (e.key === 'e' || e.key === 'E') {
-            setStyleOpen(false)
-            setExportOpen((open) => !open)
-          }
-          else if (e.key === 'f' || e.key === 'F') togglePresenting()
-          else if (e.key === 's' || e.key === 'S') setPreset(nextPreset)
-          else if (e.key === '0') cameraRef.current?.reset()
-          else cameraRef.current?.zoomStep(e.key === '-' ? -1 : 1)
-          return
-        }
-        // archify's Esc order: the radar closes, then the route and the reading stop, then the selection clears (below),
-        // and only then the stage ends.
-        if (e.key === 'Escape' && mapOpen) {
-          e.preventDefault()
-          setMapOpen(false)
-          return
-        }
-        if (e.key === 'Escape' && readingRef.current.escape()) {
-          e.preventDefault()
-          return
-        }
-        if (e.key === 'Escape' && presenting && !selectedProcessId && !selectedConnectionId) {
-          e.preventDefault()
-          setPresenting(false)
-          return
-        }
-
-        if (
-          (e.ctrlKey || e.metaKey) &&
-          e.key.toLowerCase() === 'a' &&
-          (isWorkflowEditorTool(activeTool) || editorSelection.elements.length > 0)
-        ) {
-          e.preventDefault()
-          editorCommandApiRef.current?.selectAll()
-          clearSelection()
-          return
-        }
-
-        const undoRedoShortcut = getUndoRedoShortcut(e)
-        if (undoRedoShortcut && isEditorCommandContext) {
-          e.preventDefault()
-          if (undoRedoShortcut === 'undo') {
-            editorCommandApiRef.current?.undo()
-          } else {
-            editorCommandApiRef.current?.redo()
-          }
-          return
-        }
-      }
-
-      const ctx = {
-        selectedProcessId,
-        selectedConnectionId,
-        isEditing,
-        deleteSelection: () => deleteApiRef.current.deleteSelection(),
-        duplicateNode,
-        clearSelection,
-        selectAll: () => selectAllRef.current(),
-        undo,
-        redo,
-      }
-
-      for (const action of CANVAS_ACTIONS) {
-        if (action.keyTest(e) && action.predicate(ctx)) {
-          e.preventDefault()
-          void action.handler(ctx)
-          break
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    activeTool,
-    canEditAnnotations,
-    clearSelection,
-    duplicateNode,
-    editorSelection.canRedo,
-    editorSelection.canUndo,
-    editorSelection.elements.length,
-    isEditorCommandContext,
-    mapOpen,
-    presenting,
-    redo,
-    selectedConnectionId,
-    selectedProcessId,
-    setActiveTool,
-    setPresenting,
-    toggleMap,
-    togglePresenting,
-    undo,
-  ])
+  useWorkspaceKeyboard({
+    canEditAnnotations, activeTool, setActiveTool, editorCommandApiRef, editorSelection, setEditorSelection,
+    emptySelection: EMPTY_EDITOR_SELECTION, clearSelection, setPanel, mapOpen, setMapOpen, toggleMap, setStyleOpen,
+    setExportOpen, presenting, setPresenting, togglePresenting, setPreset, cameraRef, readingRef, selectedProcessId,
+    selectedConnectionId, isEditorCommandContext, deleteApiRef, duplicateNode, selectAllRef, undo, redo,
+  })
 
 
   useEffect(() => {
