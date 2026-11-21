@@ -114,9 +114,10 @@ tasks.named('test') {
 	// The integration suite retains several JPA/Redis contexts in one test JVM.
 	maxHeapSize = '2g'
 	systemProperty 'spring.test.context.cache.maxSize', '4'
-	// Two test JVMs side by side, each with its own Postgres and Redis (IntegrationTestSupport starts them once per JVM).
-	// On 4 cores the suite took 438 s in one, 319 s in two and 339 s in three (2026-11-21); -Ptest.forks=N to change it.
-	maxParallelForks = providers.gradleProperty('test.forks').map { it as int }.getOrElse(2)
+	// -Ptest.forks=N runs N test JVMs side by side, each with its own Postgres and Redis (IntegrationTestSupport starts
+	// them once per JVM). On a 4-core machine the suite took 438 s in one, 319 s in two and 339 s in three; on CI's
+	// runner the test step took 8 m 8 s in one and 8 m 29 s in two (2026-11-21), so the default stays one.
+	maxParallelForks = providers.gradleProperty('test.forks').map { it as int }.getOrElse(1)
 	// The module catalog tests read these files, which are not on the test classpath: without them as inputs, a change
 	// to the catalog or to a module's dependencies alone would leave the test task up to date.
 	inputs.file(file('../modules.yml')).withPropertyName('moduleCatalog')
