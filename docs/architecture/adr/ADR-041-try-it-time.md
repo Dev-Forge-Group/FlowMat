@@ -4,7 +4,7 @@
 
 ## 상태
 
-**Accepted (2026-11-21).** [월간 계획 12-21 ~ 01-15](../../status/MONTH-PLAN-2026-12-21.md)의 첫 결정이다. 세부는 2026-10-24 위임에 따라 권장안이다. 1주차 2번의 Java 순수 함수(`WorkingStretches`)는 2026-11-21에 먼저 넣었다(결정 3). 결정 4는 같은 날 고쳤다. 그래프 실행이 시스템 시계를 쓰므로, 실제로 돌린 시각을 고정 입력으로 쓸 수 없기 때문이다. 결정 4의 순수 함수 `FlowRunTiming`도 같은 날 넣었고, 라우터가 그것을 쓴다. 고정 입력 `time.json`(67개)과 커널의 `schedule`도 같은 날 들어갔다. Rust, WASM, TypeScript 모두에서 Java와 같은 답이다. 결정 5의 읽기 API(`GET /work-orders/{id}/working-time`, [worker-calendar](../../domain/worker-calendar.md) WC68)와 서버 대조 통합 테스트(`TryItTimeIntegrationTest`)도 같은 날 들어갔다. 결정 6(편집기)도 같은 날 들어갔다. "Try it"에서 이 흐름의 열린 작업지시와 시작 시각을 고르면 단계마다 시작할 수 있는 때와 기다린 설비·인력이 보인다(모의 브라우저 테스트). 남은 것은 같은 작업지시의 생산 실행과 비교하는 실 API 브라우저 테스트다. 나머지는 계획 순서대로 한다.
+**Accepted (2026-11-21).** [월간 계획 12-21 ~ 01-15](../../status/MONTH-PLAN-2026-12-21.md)의 첫 결정이다. 세부는 2026-10-24 위임에 따라 권장안이다. 1주차 2번의 Java 순수 함수(`WorkingStretches`)는 2026-11-21에 먼저 넣었다(결정 3). 결정 4는 같은 날 고쳤다. 그래프 실행이 시스템 시계를 쓰므로, 실제로 돌린 시각을 고정 입력으로 쓸 수 없기 때문이다. 결정 4의 순수 함수 `FlowRunTiming`도 같은 날 넣었고, 라우터가 그것을 쓴다. 고정 입력 `time.json`(67개)과 커널의 `schedule`도 같은 날 들어갔다. Rust, WASM, TypeScript 모두에서 Java와 같은 답이다. 결정 5의 읽기 API(`GET /work-orders/{id}/working-time`, [worker-calendar](../../domain/worker-calendar.md) WC68)와 서버 대조 통합 테스트(`TryItTimeIntegrationTest`)도 같은 날 들어갔다. 결정 6(편집기)도 같은 날 들어갔다. "Try it"에서 이 흐름의 열린 작업지시와 시작 시각을 고르면 단계마다 시작할 수 있는 때와 기다린 설비·인력이 보인다(모의 브라우저 테스트). 실 API 브라우저 테스트(`try-flow-real-api.spec.ts`)도 넣었다. 교대가 한 시간인 설비의 작업지시로 생산 실행을 돌리면, 라우터가 다음 단계를 설비의 다음 시간까지 미룬다. 같은 작업지시로 편집기에서 돌려 보면 같은 시각과 설비 코드가 나온다. 이 ADR의 결정은 모두 들어갔다. 나머지는 계획 순서대로 한다.
 
 ## 배경
 

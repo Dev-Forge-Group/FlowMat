@@ -39,7 +39,10 @@
   - 전체가 언제 끝나고 얼마나 걸리는지도 보인다.
   - 순수 함수(`startTime`, `kernelTime`, `timeNotes`, `timeSummary`, `duration`)에 단위 테스트를 붙였다.
   - 모의 브라우저 테스트(`try-flow.spec.ts`)가 근무 시간 지연과 점심시간 기다림을 본다.
-  - 남은 것: 3주차 2번 실 API 브라우저 테스트(같은 작업지시의 생산 실행과 비교).
+- **3주차 2번 같은 답 확인: 끝(2026-11-21, 일찍).** `try-flow-real-api.spec.ts`의 두 번째 테스트:
+  - 설비는 하루 한 시간(지금부터 세 시간 뒤) 일한다. 그 작업지시로 생산 실행을 돌리면 Bake가 설비의 다음 시간까지 미뤄진다.
+  - 편집기의 "Try it"에서 같은 작업지시를 고르면 같은 시각과 설비 코드가 나온다.
+  - CI의 `browser-e2e.yml`가 이미 이 파일을 돈다. 로컬의 버리는 DB에서 통과했다.
 - **2주차 2번 구간 읽기 API: 끝(2026-11-21, 일찍).** `GET /work-orders/{id}/working-time`([worker-calendar](../domain/worker-calendar.md) WC68). `ProductionRunWorkingTime`과 같은 계산이다. `TryItTimeIntegrationTest` 4개:
   - API가 낸 구간을 `FlowRunTiming`에 넣으면, 같은 작업지시의 생산 실행에서 라우터가 적은 `readyAt`·`scheduledAt`·기다린 설비·인력과 같다. 근무 밖 기다림과 근무 시간 지연 둘 다 본다(ADR-041 결정 4의 서버 대조).
   - 설비도 인력도 없는 작업지시는 모든 시간이다.
