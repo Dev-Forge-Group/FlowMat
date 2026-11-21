@@ -1,4 +1,4 @@
-package org.myweb.flowmat.domain.production.application;
+package org.myweb.flowmat.domain.flowrun.application.publicapi;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerTime.Span;
 
 /** The working-time answers from stretches alone (docs/architecture/adr/ADR-041-try-it-time.md decision 3). */
 class WorkingStretchesTest {
@@ -15,12 +14,12 @@ class WorkingStretchesTest {
         return Instant.parse("2026-12-21T" + time + "Z");
     }
 
-    private static Span span(String start, String end) {
-        return new Span(at(start), at(end));
+    private static WorkingStretch span(String start, String end) {
+        return new WorkingStretch(at(start), at(end));
     }
 
     /** Two shifts on one day: 08:00–12:00 and 13:00–17:00. */
-    private static final List<Span> DAY = List.of(span("08:00:00", "12:00:00"), span("13:00:00", "17:00:00"));
+    private static final List<WorkingStretch> DAY = List.of(span("08:00:00", "12:00:00"), span("13:00:00", "17:00:00"));
 
     @Test
     void aReadyTimeInsideAStretchStartsAtOnce() {
@@ -75,7 +74,7 @@ class WorkingStretchesTest {
 
     @Test
     void theStretchesBothListsShare() {
-        List<Span> crew = List.of(span("07:00:00", "09:00:00"), span("11:30:00", "14:00:00"), span("16:59:00", "18:00:00"));
+        List<WorkingStretch> crew = List.of(span("07:00:00", "09:00:00"), span("11:30:00", "14:00:00"), span("16:59:00", "18:00:00"));
         assertThat(WorkingStretches.intersect(DAY, crew)).containsExactly(span("08:00:00", "09:00:00"),
             span("11:30:00", "12:00:00"), span("13:00:00", "14:00:00"), span("16:59:00", "17:00:00"));
         // Stretches that only touch share nothing.

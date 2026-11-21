@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentSlot;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWorkingTimeQuery;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunWorkingTime;
+import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretch;
+import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretches;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
@@ -92,7 +94,7 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
     }
 
     /** When the team works together in a window, earliest first, and the crew with shifts that shaped it. */
-    private record Together(List<WorkerTime.Span> spans, List<String> crew) {
+    private record Together(List<WorkingStretch> spans, List<String> crew) {
     }
 
     /** Null without a work order, or with neither equipment nor full-share crew. */
@@ -134,10 +136,10 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
      * suggestions do (WC24). The whole window is searched however often the times miss each other (ADR-016 decision 4). Empty
      * when they never meet before {@code until}, or the equipment is gone.
      */
-    private List<WorkerTime.Span> commonSpans(String equipmentId, List<WorkerTime> crew, Instant from, Instant until) {
-        List<WorkerTime.Span> together;
+    private List<WorkingStretch> commonSpans(String equipmentId, List<WorkerTime> crew, Instant from, Instant until) {
+        List<WorkingStretch> together;
         if (equipmentId == null) {
-            together = List.of(new WorkerTime.Span(from, until));
+            together = List.of(new WorkingStretch(from, until));
         } else {
             Optional<List<EquipmentSlot>> stretches = equipmentWorkingTime.workingStretches(equipmentId, from.atOffset(ZoneOffset.UTC),
                 until.atOffset(ZoneOffset.UTC));
@@ -145,11 +147,12 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
                 return List.of();
             }
             together = stretches.get().stream()
-                .map(slot -> new WorkerTime.Span(slot.start().toInstant(), slot.end().toInstant()))
+                .map(slot -> new WorkingStretch(slot.start().toInstant(), slot.end().toInstant()))
                 .toList();
         }
         for (WorkerTime time : crew) {
-            together = WorkingStretches.intersect(together, time.spans());
+            together = WorkingStretches.intersect(together, time.spans().stream()
+                .map(span -> new WorkingStretch(span.start(), span.end())).toList());
         }
         return together;
     }

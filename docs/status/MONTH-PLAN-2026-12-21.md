@@ -32,6 +32,7 @@
 ## 진행
 
 - **1주차 1번 ADR-041: 초안(Proposed).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md).
+- **1주차 3번 고정 입력: 절반.** 라우터의 시각 규칙을 순수 함수 `FlowRunTiming`(지연, 근무 시간 지연, 합류, 근무 밖 기다림, 마이크로초)으로 뗐다. 라우터와 `FlowRunStepAvailability`가 이것을 부르므로 돌려 보기와 서버가 같은 규칙을 쓴다. `WorkingStretches`는 `flowrun`의 공개 계약으로 옮겼다(ADR-041 결정 3). 단위 테스트 9개를 붙였다. 남은 것은 `time.json`을 쓰는 테스트다: 지연을 뺀 판을 서버에서 돌려 단계와 도착을 얻고, 그 위에 `FlowRunTiming`으로 시각을 매긴다.
 - **1주차 2번 Java 구간 계산의 순수 함수: 끝(2026-11-21, 일찍).** `WorkingStretches`(`firstStart`, `afterWorking`, `intersect`)를 `ProductionRunWorkingTime`에서 뗐다. 단위 테스트 9개를 붙였다. 근무 시간·지연·합류 테스트 9클래스 94개(통합 8클래스, `FlowRunStepAvailabilityTest`)가 그대로 통과한다.
 
 ## 한 달 뒤 목표
