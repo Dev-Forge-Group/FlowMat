@@ -83,6 +83,27 @@ jobs:
         working-directory: flowmat_backend
         run: ./gradlew classes
 
+      # A stand-in for another company's system for the integration jobs test. The connector refuses loopback, so it
+      # listens on this runner's private address, and the backend approves only that one origin over plain HTTP.
+      - name: Start integration jobs target
+        run: |
+          nohup node scripts/integration-target.mjs > /tmp/integration-target.log 2>&1 &
+          for attempt in {1..20}; do
+            grep -q '^INTEGRATION_TARGET_ORIGIN=' /tmp/integration-target.log && break
+            sleep 0.5
+          done
+          origin=$(grep -m1 '^INTEGRATION_TARGET_ORIGIN=' /tmp/integration-target.log | cut -d= -f2-)
+          if [ -z "$origin" ]; then cat /tmp/integration-target.log; exit 1; fi
+          host=${origin#http://}
+          host=${host%%:*}
+          {
+            echo "INTEGRATION_TARGET_ORIGIN=$origin"
+            echo "FLOWMAT_CONNECTOR_ENABLED=true"
+            echo "FLOWMAT_CONNECTOR_ALLOWPRIVATEHTTP=true"
+            echo "FLOWMAT_CONNECTOR_ALLOWEDORIGINS=$origin"
+            echo "FLOWMAT_CONNECTOR_PRIVATECIDRS=$host/32"
+          } >> "$GITHUB_ENV"
+
       - name: Start backend
         working-directory: flowmat_backend
         env:
@@ -284,6 +305,12 @@ jobs:
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/production-quality-live.spec.ts
+
+      - name: Run real integration jobs E2E
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+        run: npm run test:e2e -- e2e/integration-jobs-live.spec.ts --workers=1 --retries=0
 
       - name: Run real workflow validation E2E
         working-directory: flowmat_frontend
