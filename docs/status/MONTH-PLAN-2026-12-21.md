@@ -29,6 +29,11 @@
 - **화면.** 큰 화면 셋이 모두 800줄 이하다. 그리기 층의 문서 계산은 `model/workspaceEditorDocument.ts`에 있다. 요소 단위 변경을 붙일 자리가 생겼다.
 - **CI**: 백엔드 약 8분, 모의 E2E 3조각 약 7분, 실 API E2E 약 7분.
 
+## 진행
+
+- **1주차 1번 ADR-041: 초안(Proposed).** [ADR-041](../architecture/adr/ADR-041-try-it-time.md).
+- **1주차 2번 Java 구간 계산의 순수 함수: 끝(2026-11-21, 일찍).** `WorkingStretches`(`firstStart`, `afterWorking`, `intersect`)를 `ProductionRunWorkingTime`에서 뗐다. 단위 테스트 9개를 붙였다. 근무 시간·지연·합류 테스트 9클래스 94개(통합 8클래스, `FlowRunStepAvailabilityTest`)가 그대로 통과한다.
+
 ## 한 달 뒤 목표
 
 1. **시간을 넣은 돌려 보기.** "Try it"에서 작업지시를 고르면 단계마다 시작할 수 있는 시각과 기다리는 이유(지연, 설비, 인력)가 보인다.

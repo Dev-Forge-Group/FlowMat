@@ -42,6 +42,7 @@
 | [ADR-038](ADR-038-integration-jobs.md) | 예약·반복 연동 작업(FM-INT-002) | **Accepted** 2026-11-20(사용자 선택, 세부는 2026-10-24 위임으로 권장안, 구현 #119·#121–#123) | 프로젝트의 연동 작업(`pull_items`·`pull_stock`·`push_stock`)을 프로젝트 시간대의 cron(15분 이상 간격)으로 돌린다. 실행은 맡긴 사람(`run_as`) 권한, 밀어 넣기는 읽고 다른 것만 보낸 뒤 다시 읽는다. 10분 넘게 도는 실행은 `outcome_unknown`, 세 번 연속 실패하면 멈춘다 |
 | [ADR-039](ADR-039-work-order-sequence-optimizer.md) | 설비별 작업지시 순서 제안(FM-AI) | **Accepted** 2026-11-21(1·2단계만, 구현 #124–#126) | 목적 = 전환 분 + 늦어진 분 × 우선순위 가중치. FlowMat이 스냅숏과 지금 규칙의 답을 내고, `compute/sequence-optimizer`(CP-SAT)가 풀어 오늘의 최선과 견준다. 합성 40개에서 30.8% 적었다. 3단계(제안·승인·적용)는 실제 스냅숏 평가와 풀이기 운영처가 정해진 뒤 |
 | [ADR-040](ADR-040-flow-kernel.md) | 흐름 커널(flow kernel) | **Accepted** 2026-11-21(월간 계획 11-23 첫 결정) | 포트 호환·조건식·검증 31규칙·경로 계산을 Rust 크레이트 `compute/flow-kernel` 하나에 모아 편집기에서 WASM으로 그리는 즉시 검증하고 돌려 본다. Java가 고정 입력에 답을 적고(`FlowKernelFixtureTest`) 커널이 맞춘다. 서버가 커널을 쓸지는 4주차에 Chicory로 같은 답·지연 2배 이하인지 재어 정한다 |
+| [ADR-041](ADR-041-try-it-time.md) | 돌려 보기의 시간 | **Proposed** 2026-11-21(월간 계획 12-21 첫 결정) | "Try it"에 단계별 시작 시각을 더한다. 커널은 달력·시간대를 계산하지 않고 Java가 구한 작업지시의 함께 일하는 구간을 받아, 서버의 `readyAt`·`scheduledAt`과 같은 답을 낸다. Java의 구간 계산은 순수 함수 `WorkingStretches`로 뗐다 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,8 +55,8 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
             if (together == null) {
                 return Optional.empty();
             }
-            if (!together.spans().isEmpty()) {
-                Instant start = together.spans().get(0).start();
+            Instant start = WorkingStretches.firstStart(together.spans(), readyAt.toInstant());
+            if (start != null) {
                 return start.equals(readyAt.toInstant()) ? Optional.empty()
                     : Optional.of(new WorkingStart(start.atOffset(readyAt.getOffset()), team.equipmentId(), together.crew()));
             }
@@ -80,15 +79,9 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
             if (together == null) {
                 return Optional.empty();
             }
-            Duration left = working;
-            for (WorkerTime.Span span : together.spans()) {
-                Instant start = span.start().isBefore(from.toInstant()) ? from.toInstant() : span.start();
-                Duration length = Duration.between(start, span.end());
-                if (length.compareTo(left) >= 0) {
-                    return Optional.of(new WorkingStart(start.plus(left).atOffset(from.getOffset()), team.equipmentId(),
-                        together.crew()));
-                }
-                left = left.minus(length);
+            Instant end = WorkingStretches.afterWorking(together.spans(), from.toInstant(), working);
+            if (end != null) {
+                return Optional.of(new WorkingStart(end.atOffset(from.getOffset()), team.equipmentId(), together.crew()));
             }
         }
         return Optional.empty();
@@ -156,30 +149,8 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
                 .toList();
         }
         for (WorkerTime time : crew) {
-            together = intersect(together, time.spans());
+            together = WorkingStretches.intersect(together, time.spans());
         }
         return together;
-    }
-
-    /** Both lists earliest first and none overlapping within each; the stretches in both. */
-    private static List<WorkerTime.Span> intersect(List<WorkerTime.Span> one, List<WorkerTime.Span> other) {
-        List<WorkerTime.Span> result = new ArrayList<>();
-        int left = 0;
-        int right = 0;
-        while (left < one.size() && right < other.size()) {
-            WorkerTime.Span a = one.get(left);
-            WorkerTime.Span b = other.get(right);
-            Instant start = a.start().isAfter(b.start()) ? a.start() : b.start();
-            Instant end = a.end().isBefore(b.end()) ? a.end() : b.end();
-            if (end.isAfter(start)) {
-                result.add(new WorkerTime.Span(start, end));
-            }
-            if (a.end().isBefore(b.end())) {
-                left++;
-            } else {
-                right++;
-            }
-        }
-        return result;
     }
 }
