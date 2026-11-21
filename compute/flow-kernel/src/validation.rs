@@ -12,16 +12,17 @@ use crate::graph::{self, Connection, Graph, Port, Process};
 use crate::ports;
 use crate::schema::PortSchema;
 
-/// The units the workflow may name, each with its type (`unit_master`); anything else is unknown.
+/// The units the workflow may name, each with its type (`unit_master`); anything else is unknown. As the catalog looks a
+/// code up (`CatalogQueryImpl`): ignoring case, and for whether it is known, ignoring surrounding spaces too.
 #[derive(Debug, Clone, Default)]
 pub struct Units {
-    types: HashMap<String, String>,
+    entries: Vec<(String, String)>,
 }
 
 impl Units {
     /// From `{code: type}`.
     pub fn from_json(known: &Json) -> Units {
-        let types = known
+        let entries = known
             .as_object()
             .map(|entries| {
                 entries
@@ -30,15 +31,18 @@ impl Units {
                     .collect()
             })
             .unwrap_or_default();
-        Units { types }
+        Units { entries }
     }
 
     fn known(&self, code: &str) -> bool {
-        self.types.contains_key(code)
+        self.kind(graph::trim(code)).is_some()
     }
 
     fn kind(&self, code: &str) -> Option<&str> {
-        self.types.get(code).map(String::as_str)
+        self.entries
+            .iter()
+            .find(|(known, _)| graph::equals_ignore_case(known, code))
+            .map(|(_, kind)| kind.as_str())
     }
 }
 

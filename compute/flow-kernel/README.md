@@ -17,7 +17,35 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
 
 - 조건식은 아직 `compute/condition-expression` 크레이트를 경로 의존성으로 쓴다. 이 크레이트로 흡수하는 것은 [월간 계획](../../docs/status/MONTH-PLAN-2026-11-23.md) 2주차 3번이다.
 - 노드 실행 정책(`nodePolicies`)과 실행 바인딩은 경로와 상관없으므로 읽지 않는다.
-- 아직 없는 것: WebAssembly로 내보내는 함수, 편집기 연결(2주차 2번), "돌려 보기"의 반복(3주차 2번).
+- 아직 없는 것: 시작 노드부터 끝까지 따라가는 "돌려 보기"의 반복(3주차 2번).
+
+## 편집기에서
+
+편집기는 이 크레이트의 WebAssembly 모듈 `flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm` 하나를 싣는다. 크기는 561KB, gzip으로 168KB다. 작업 화면을 처음 열 때 늦게 싣는다.
+
+- 이 모듈은 조건식 크레이트를 링크하므로 `check`·`evaluate`도 내보낸다. 조건식 입력칸의 검사(`conditionLanguage.ts`)도 같은 인스턴스를 쓴다.
+- **그리는 대로 검사**(`useLiveValidation`, `LiveValidation.tsx`): 캔버스가 150ms 멈추면 검사한다.
+  - 캔버스 보기 모델을 커널의 그래프로 바꿔(`toKernelGraph`) 단위 목록과 함께 넣는다.
+  - "As drawn: N errors, M warnings" 한 줄을 늘 보이고, 누르면 이슈 목록이 열린다.
+  - 서버의 "Check workflow"와 발행 전 검사는 그대로다.
+
+| 함수 | 넣는 것 | 답 |
+|---|---|---|
+| `validate` | `{graph, knownUnits}` | `{errors, warnings, issues}`(서버 응답과 같음) |
+| `route` | `{graph, probes: [{nodeId, output}], schemaVersion}` | `{error}` 또는 `{roots, delays, joins, probes: [{decisions} 또는 {error}]}` |
+| `check`, `evaluate` | 조건식 크레이트와 같음 | 조건식 크레이트와 같음 |
+
+호스트가 `alloc`으로 받은 메모리에 UTF-8 JSON을 쓰고, 답은 JSON 텍스트의 포인터(상위 32비트)와 길이(하위 32비트)로 받아 `dealloc`으로 돌려준다.
+
+소스를 바꾸면 모듈을 다시 만들어 함께 커밋한다. `wasm/build.sh`는 경로를 바꿔 적어 어느 기계에서 빌드해도 같은 바이트가 나오고, CI가 `--check`로 커밋된 모듈과 소스의 빌드를 비교한다.
+
+```bash
+wasm/build.sh
+```
+
+```bash
+node wasm/check-fixtures.mjs
+```
 
 ```bash
 cd compute/flow-kernel

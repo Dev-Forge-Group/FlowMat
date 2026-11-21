@@ -1412,6 +1412,21 @@ code {
   text-align: left;
 }
 
+/* The check as drawn (LiveValidation.tsx): one line that turns red while the drawing has errors. */
+.live-check {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.live-check--errors {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 /* The workflow check's issues (ValidationIssueList.tsx): fixes, the warnings an issue explains and folded evidence under
    each issue's button. */
 .validation-issues {

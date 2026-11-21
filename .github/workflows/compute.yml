@@ -56,10 +56,6 @@ jobs:
     - name: Build for WebAssembly
       run: cargo build --locked --release --lib --target wasm32-unknown-unknown
 
-    # The editor ships flowmat_frontend/src/shared/wasm/flowmat_condition.wasm; it must be what this source builds.
-    - name: Check the editor's module against the source
-      run: wasm/build.sh --check
-
     - name: Use Node.js 22
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
@@ -92,3 +88,22 @@ jobs:
 
     - name: Test against the shared fixtures
       run: cargo test --locked
+
+    - name: Build for WebAssembly
+      run: cargo build --locked --release --lib --target wasm32-unknown-unknown
+
+    # The editor ships flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm; it must be what this source builds.
+    - name: Check the editor's module against the source
+      run: wasm/build.sh --check
+
+    - name: Use Node.js 22
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: 22.x
+
+    - name: Check the fixtures through the WebAssembly build
+      run: node wasm/check-fixtures.mjs
+
+    # The editor's condition checker runs on the same module, which links the condition language in.
+    - name: Check the condition fixtures through the editor's module
+      run: node ../condition-expression/wasm/check-fixtures.mjs ../../flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm

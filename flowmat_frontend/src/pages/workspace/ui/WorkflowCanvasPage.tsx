@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '../model/workspaceStore'
 import { useWorkflowCanvasActions } from '../model/useWorkflowCanvasActions'
 import { validationSelection } from '../model/validationPanelModel'
 import { ValidationIssueList } from './ValidationIssueList'
+import { LiveValidation } from './LiveValidation'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { createWorkspaceSelectionCommands } from '../model/workspaceSelectionCommands'
 import { getRelatedConnectionIds } from '../../../entities/workflow/model/connectionPolicy'
@@ -20,7 +21,8 @@ import { useAutoLayout } from '../model/useAutoLayout'
 import { CANVAS_ACTIONS } from '../model/canvasActions'
 import { useWorkflowsQuery } from '../../../entities/workflow/api/useWorkflowsQuery'
 import { useUpdateWorkflowMutation } from '../../../entities/workflow/api/useUpdateWorkflowMutation'
-import { useWorkflowValidationQuery, workflowValidationQueryKey } from '../../../entities/workflow/api/useWorkflowValidationQuery'
+import { useWorkflowValidationQuery, workflowValidationQueryKey, type WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
+import { useLiveValidation } from '../../../entities/workflow/api/useLiveValidation'
 import type { PresenceMessage, GraphChangeMessage } from '../../../entities/workflow/api/useWorkflowSync'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { NodePaletteSidebar } from './NodePaletteSidebar'
@@ -559,6 +561,16 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
   const [activeRibbonTabId, setActiveRibbonTabId] = useState('home')
   const [showValidation, setShowValidation] = useState(false)
   const validationQuery = useWorkflowValidationQuery(canvas.workflow.workflowId, showValidation)
+  const liveValidation = useLiveValidation(canvas)
+  /** An issue's button selects what it is about, from the server's check or the check as drawn. */
+  const selectIssue = useCallback((issue: WorkflowValidationIssue) => {
+    const target = validationSelection(issue)
+    if (target?.kind === 'connection') selectEdge(target.id)
+    else if (target?.kind === 'process') {
+      selectNode(target.id)
+      if (target.ioId) useWorkspaceStore.getState().selectPort(target.ioId)
+    }
+  }, [selectEdge, selectNode])
   const [editorSelection, setEditorSelection] = useState<WorkspaceEditorSelectionSnapshot>(EMPTY_EDITOR_SELECTION)
   const editorCommandApiRef = useRef<WorkspaceEditorCommandApi | null>(null)
 
@@ -1834,14 +1846,7 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
               <>
                 <p>{validationQuery.data.errors} errors, {validationQuery.data.warnings} warnings</p>
                 {validationQuery.data.issues.length === 0 && <p>No issues found.</p>}
-                <ValidationIssueList issues={validationQuery.data.issues} nameOf={reading.nameOf} onSelect={(issue) => {
-                  const target = validationSelection(issue)
-                  if (target?.kind === 'connection') selectEdge(target.id)
-                  else if (target?.kind === 'process') {
-                    selectNode(target.id)
-                    if (target.ioId) useWorkspaceStore.getState().selectPort(target.ioId)
-                  }
-                }} />
+                <ValidationIssueList issues={validationQuery.data.issues} nameOf={reading.nameOf} onSelect={selectIssue} />
               </>
             )}
             <LayoutWarningList warnings={layoutFound} nameOf={reading.nameOf} onSelect={(warning) => {
@@ -1856,6 +1861,8 @@ export function WorkflowCanvasPage({ canvas, projectId: _projectId }: Props) {
           </div>
         )}
       </section>
+
+      <LiveValidation report={liveValidation} nameOf={reading.nameOf} onSelect={selectIssue} />
 
       {workspaceMessage && (
         <div

@@ -80,14 +80,17 @@ class FlowKernelFixtureTest {
         List<ProcessConnection> connections = new ArrayList<>();
         graph.get("connections").forEach(node -> connections.add(MAPPER.convertValue(stored(node), ProcessConnection.class)));
         return WorkflowValidationService.check(processes, ports, connections, new WorkflowUnits() {
+            // As CatalogQueryImpl looks a code up in unit_master: ignoring case, and for "known" surrounding spaces too.
             @Override
             public boolean known(String code) {
-                return KNOWN_UNITS.containsKey(code);
+                return code != null && type(code.trim()).isPresent();
             }
 
             @Override
             public Optional<String> type(String code) {
-                return Optional.ofNullable(KNOWN_UNITS.get(code));
+                if (code == null) return Optional.empty();
+                return KNOWN_UNITS.entrySet().stream().filter(unit -> unit.getKey().equalsIgnoreCase(code))
+                    .map(Map.Entry::getValue).findFirst();
             }
         });
     }
@@ -119,7 +122,7 @@ class FlowKernelFixtureTest {
             "exclusive", "join", "split", "split", "decision"};
         private static final String[] RESOURCES = {"material", "product", "data", "energy", "water", "signal", "generic",
             "plasma"};
-        private static final String[] UNITS = {"kg", "g", "ea", "l", "m", "lbx"};
+        private static final String[] UNITS = {"kg", "g", "ea", "l", "m", "lbx", "KG", " kg", "Ea"};
         private static final String[] SCHEMAS = {
             "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"},\"grade\":{\"type\":\"number\"}},\"required\":[\"lot\"]}",
             "{\"type\":\"object\",\"properties\":{\"lot\":{\"type\":\"string\"}}}",

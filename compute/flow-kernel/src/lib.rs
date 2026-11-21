@@ -10,6 +10,8 @@ pub mod ports;
 pub mod routing;
 pub mod schema;
 pub mod validation;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 
 pub use graph::Graph;
 pub use routing::{Decision, Refusal, RunGraph};
