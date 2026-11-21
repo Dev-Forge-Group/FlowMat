@@ -6,7 +6,8 @@
 # unless CLEANUP=1.
 #
 # Run from the repository root:  scripts/ops/restore-rehearsal.sh
-# Settings (environment): SOURCE_CONTAINER (flowmat_backend-postgres-1), TARGET_PORT (5444), REDIS_PORT_REHEARSAL (6390),
+# Settings (environment): SOURCE_CONTAINER (flowmat_backend-postgres-1), DB, DB_USER, DB_PASSWORD (default: POSTGRES_* of
+# the env file), ENV_FILE (flowmat_backend/.env; none for no file), TARGET_PORT (5444), REDIS_PORT_REHEARSAL (6390),
 # APP_PORT (8091), WORK_DIR (flowmat_backend/build/restore-rehearsal), SKIP_BUILD=1 to reuse the built jar, CLEANUP=1.
 set -euo pipefail
 
@@ -24,14 +25,19 @@ FINGERPRINT="$ROOT/scripts/ops/restore-fingerprint.sql"
 say() { printf '\n== %s\n' "$*"; }
 fail() { printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 
-# KEY=VALUE lines of flowmat_backend/.env only; nothing in the file is run as a command.
+# KEY=VALUE lines of the env file only (flowmat_backend/.env unless ENV_FILE names another); nothing in the file is run as
+# a command. ENV_FILE=none reads no file: the database settings then come from DB, DB_USER and DB_PASSWORD, and the
+# application takes the rest of its settings from this shell's environment, as in CI.
+ENV_FILE=${ENV_FILE:-$BACKEND/.env}
 declare -A ENV
-while IFS='=' read -r key value; do
-  [[ $key =~ ^[A-Z][A-Z0-9_]*$ ]] && ENV[$key]=$value
-done < "$BACKEND/.env"
-DB=${ENV[POSTGRES_DB]:?POSTGRES_DB missing from flowmat_backend/.env}
-DB_USER=${ENV[POSTGRES_USER]:?POSTGRES_USER missing from flowmat_backend/.env}
-DB_PASSWORD=${ENV[POSTGRES_PASSWORD]:?POSTGRES_PASSWORD missing from flowmat_backend/.env}
+if [ "$ENV_FILE" != none ]; then
+  while IFS='=' read -r key value; do
+    [[ $key =~ ^[A-Z][A-Z0-9_]*$ ]] && ENV[$key]=$value
+  done < "$ENV_FILE"
+fi
+DB=${DB:-${ENV[POSTGRES_DB]:?POSTGRES_DB missing from the env file; give DB}}
+DB_USER=${DB_USER:-${ENV[POSTGRES_USER]:?POSTGRES_USER missing from the env file; give DB_USER}}
+DB_PASSWORD=${DB_PASSWORD:-${ENV[POSTGRES_PASSWORD]:?POSTGRES_PASSWORD missing from the env file; give DB_PASSWORD}}
 
 mkdir -p "$WORK_DIR"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)

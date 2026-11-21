@@ -67,7 +67,7 @@ REAL_API_E2E=1 npx playwright test e2e/purchase-warehouse-live.spec.ts e2e/produ
 DUMP=/path/to/flowmat.dump scripts/ops/upgrade-rehearsal.sh
 ```
 
-`DUMP`은 올리려는 DB의 `pg_dump -Fc` 파일이다. 떠 있는 컨테이너에서 바로 뜨려면 `SOURCE_CONTAINER=<컨테이너 이름>`을 준다. DB 이름·사용자·비밀번호가 `flowmat_backend/.env`와 다르면 `DB`, `DB_USER`, `DB_PASSWORD`로 준다. 원본 DB는 건드리지 않는다.
+`DUMP`은 올리려는 DB의 `pg_dump -Fc` 파일이다. 떠 있는 컨테이너에서 바로 뜨려면 `SOURCE_CONTAINER=<컨테이너 이름>`을 준다. DB 이름·사용자·비밀번호가 `flowmat_backend/.env`와 다르면 `DB`, `DB_USER`, `DB_PASSWORD`로 준다. 원본 DB는 건드리지 않는다. `.env`를 읽지 않고 돌리려면 `ENV_FILE=none`을 준다. 그러면 DB 설정은 위 세 값에서, 앱의 나머지 설정은 셸 환경에서 가져온다(CI와 같다). 복원 리허설(`restore-rehearsal.sh`)도 같은 설정을 받는다.
 
 | 단계 | 하는 일 | 통과 기준 |
 |---|---|---|
