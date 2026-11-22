@@ -45,13 +45,20 @@ jobs:
       run: ${{ steps.plan.outputs.run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Restore passed specs
+      - name: Restore passed specs (shard 1)
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: flowmat_frontend/playwright-results/already-passed/passed.json
-          key: e2e-passed-real-${{ github.run_id }}
-          restore-keys: e2e-passed-real-
+          path: flowmat_frontend/playwright-results/already-passed/passed-1.json
+          key: e2e-passed-real-1-${{ github.run_id }}
+          restore-keys: e2e-passed-real-1-
+      - name: Restore passed specs (shard 2)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-2.json
+          key: e2e-passed-real-2-${{ github.run_id }}
+          restore-keys: e2e-passed-real-2-
       - name: Choose the specs to run
         id: plan
         working-directory: flowmat_frontend
@@ -61,18 +68,26 @@ jobs:
           extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts | tr '\n' ' ')$(git hash-object ../.github/workflows/browser-e2e.yml)"
           echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
           node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
-            --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
+            --records playwright-results/already-passed/passed-1.json --records playwright-results/already-passed/passed-2.json \
+            --out playwright-results/already-passed/skip.json
           echo "E2E_SKIP_FILE=$PWD/playwright-results/already-passed/skip.json" >> "$GITHUB_ENV"
           left=$(grep -o 'e2e/[A-Za-z0-9_-]*\.spec\.ts' ../.github/workflows/browser-e2e.yml | sort -u \
             | node -e "const skip = new Set(JSON.parse(require('fs').readFileSync('playwright-results/already-passed/skip.json', 'utf8')).skip); console.log(require('fs').readFileSync(0, 'utf8').split('\\n').filter((file) => file && !skip.has(file)).length)")
           echo "Spec files to run: $left"
           echo "run=$([ "$left" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+  # Two shards, each with its own backend and database, run half of the spec steps at the same time. The specs make their
+  # own data on the demo project, so a shard needs nothing from the other.
   browser-e2e:
+    name: browser-e2e (${{ matrix.shard }}/2)
     needs: plan
     if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       E2E_WEB_SERVER: preview
       E2E_CHUNK_MAP: playwright-results/already-passed/chunk-map.json
@@ -104,13 +119,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Restore passed specs
+      - name: Restore passed specs (shard 1)
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: flowmat_frontend/playwright-results/already-passed/passed.json
-          key: e2e-passed-real-${{ github.run_id }}
-          restore-keys: e2e-passed-real-
+          path: flowmat_frontend/playwright-results/already-passed/passed-1.json
+          key: e2e-passed-real-1-${{ github.run_id }}
+          restore-keys: e2e-passed-real-1-
+      - name: Restore passed specs (shard 2)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-2.json
+          key: e2e-passed-real-2-${{ github.run_id }}
+          restore-keys: e2e-passed-real-2-
       - name: Choose the specs to run
         working-directory: flowmat_frontend
         env:
@@ -119,7 +141,8 @@ jobs:
           extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts | tr '\n' ' ')$(git hash-object ../.github/workflows/browser-e2e.yml)"
           echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
           node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
-            --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
+            --records playwright-results/already-passed/passed-1.json --records playwright-results/already-passed/passed-2.json \
+            --out playwright-results/already-passed/skip.json
           echo "E2E_SKIP_FILE=$PWD/playwright-results/already-passed/skip.json" >> "$GITHUB_ENV"
           left=$(grep -o 'e2e/[A-Za-z0-9_-]*\.spec\.ts' ../.github/workflows/browser-e2e.yml | sort -u \
             | node -e "const skip = new Set(JSON.parse(require('fs').readFileSync('playwright-results/already-passed/skip.json', 'utf8')).skip); console.log(require('fs').readFileSync(0, 'utf8').split('\\n').filter((file) => file && !skip.has(file)).length)")
@@ -215,18 +238,21 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run real backend contract E2E
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/backend-contract.spec.ts --pass-with-no-tests
 
       - name: Run real Data Flow browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/data-flow-browser.spec.ts --pass-with-no-tests --workers=1
 
       - name: Run real worked time browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -234,6 +260,7 @@ jobs:
         run: npm run test:e2e -- e2e/run-labor-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real working delay browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -241,6 +268,7 @@ jobs:
         run: npm run test:e2e -- e2e/working-delay-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real organization browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -253,6 +281,7 @@ jobs:
           npm run test:e2e -- e2e/organizations-real-api.spec.ts --pass-with-no-tests --workers=1 --trace=off
 
       - name: Run real approval notification browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -264,6 +293,7 @@ jobs:
           npm run test:e2e -- e2e/approval-notification-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real execution policy and notification browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -278,6 +308,7 @@ jobs:
           npm run test:e2e -- e2e/notification-reorder-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real worker planning browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -289,6 +320,7 @@ jobs:
           npm run test:e2e -- e2e/worker-planning-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real Exclusive gateway browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -296,6 +328,7 @@ jobs:
         run: npm run test:e2e -- e2e/exclusive-gateway-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real gateway quantity browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -303,6 +336,7 @@ jobs:
         run: npm run test:e2e -- e2e/gateway-quantity-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real transfer, equipment limit and production step acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -310,6 +344,7 @@ jobs:
         run: npm run test:e2e -- e2e/gateway-delay-real-api.spec.ts e2e/equipment-concurrency-limit-real-api.spec.ts e2e/production-steps-real-api.spec.ts e2e/worker-schedule-history-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real worker rota browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -317,6 +352,7 @@ jobs:
         run: npm run test:e2e -- e2e/worker-rota-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real equipment capacity browser acceptance
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -324,132 +360,154 @@ jobs:
         run: npm run test:e2e -- e2e/equipment-capacity-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real BOM and LOT E2E
+        if: matrix.shard == 1
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/bom-lot-flow.spec.ts --pass-with-no-tests
 
       - name: Run real LOT genealogy E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/lot-genealogy.spec.ts --pass-with-no-tests
 
       - name: Run real storage location E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/storage-locations.spec.ts --pass-with-no-tests
 
       - name: Run real inspection standard E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/inspection-standards.spec.ts --pass-with-no-tests
 
       - name: Run real nonconformity E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/nonconformity.spec.ts --pass-with-no-tests
 
       - name: Run real warehouse task E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts --pass-with-no-tests
 
       - name: Run real purchase and warehouse recovery E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts --pass-with-no-tests
 
       - name: Run real production and quality journey E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/production-quality-live.spec.ts --pass-with-no-tests
 
       - name: Run real integration jobs E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/integration-jobs-live.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real workflow validation, try-it and drawing-together E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/workflow-validation.spec.ts e2e/try-flow-real-api.spec.ts e2e/editor-shapes-together-real-api.spec.ts --pass-with-no-tests
 
       - name: Run real equipment schedule E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/equipment-schedule.spec.ts --pass-with-no-tests
 
       - name: Run real equipment changeover E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/equipment-changeover.spec.ts --pass-with-no-tests
 
       - name: Run real equipment load E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/equipment-load.spec.ts --pass-with-no-tests
 
       - name: Run real work instruction E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/work-instructions.spec.ts --pass-with-no-tests
 
       - name: Run real stock allocation E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/stock-allocations.spec.ts --pass-with-no-tests
 
       - name: Run real data port E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/data-ports.spec.ts --pass-with-no-tests
 
       - name: Run real work order plan E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/work-order-plan.spec.ts --pass-with-no-tests
 
       - name: Run real NCR from defects E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/ncr-from-defects.spec.ts --pass-with-no-tests
 
       - name: Run real receipt checklist E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/receipt-checklist.spec.ts --pass-with-no-tests
 
       - name: Run real revision retire E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/revision-retire.spec.ts --pass-with-no-tests
 
       - name: Run real equipment days E2E
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
         run: npm run test:e2e -- e2e/equipment-days.spec.ts --pass-with-no-tests
 
       - name: Run real instruction quality and inventory report acceptance
+        if: matrix.shard == 2
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
@@ -475,21 +533,21 @@ jobs:
         working-directory: flowmat_frontend
         run: |
           node e2e/support/already-passed/select.mjs record --scope real --extra "$E2E_EXTRA" \
-            --records playwright-results/already-passed/passed.json \
+            --records playwright-results/already-passed/passed-1.json --records playwright-results/already-passed/passed-2.json \
             --chunks "$E2E_CHUNK_MAP" --assets "$E2E_ASSET_LOG" --tests "$E2E_PASSED_LOG" \
-            --out playwright-results/already-passed/passed.json
+            --out playwright-results/already-passed/passed-${{ matrix.shard }}.json
       - name: Save passed specs
         if: ${{ !cancelled() }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: flowmat_frontend/playwright-results/already-passed/passed.json
-          key: e2e-passed-real-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flowmat_frontend/playwright-results/already-passed/passed-${{ matrix.shard }}.json
+          key: e2e-passed-real-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload backend log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: browser-e2e-backend-log
+          name: browser-e2e-backend-log-${{ matrix.shard }}
           path: /tmp/flowmat-backend.log
           if-no-files-found: ignore
 
@@ -497,7 +555,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: browser-e2e-playwright-artifacts
+          name: browser-e2e-playwright-artifacts-${{ matrix.shard }}
           path: |
             flowmat_frontend/test-results
             flowmat_frontend/playwright-report

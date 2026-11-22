@@ -23,7 +23,7 @@
 > **사용자가 해야 열리는 일**(여기서 할 수 없었다):
 > 1. `main` 브랜치 보호(1주차 6번): 저장소 Settings에서 직접 push 금지와 `Commit Attribution` 필수.
 > 2. 개발 DB(5434)에 V133–V137 적용(3주차 2번): 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db ALLOW_DROPPED="cad_import_job payment_discount project_activity_log project_comment project_export project_file project_permission resource_types resource_usage resources simulation_run simulation_step" scripts/ops/upgrade-rehearsal.sh`가 통과한 뒤 같은 jar로 적용한다([절차](../operations/backup-restore.md) §5).
-> 3. 릴리스 후보 태그 `v0.9.0-rc.1`을 `main` `4d08345`에 push한다(점검표는 2026-11-22 통과, 이 세션은 태그 push가 403). 배포 결정 전에는 저장소 secret `NVD_API_KEY`에 활성화한 API 키를 넣고 `security.yml`을 돌린다(지금 값은 NVD가 거절한다).
+> 3. ~~릴리스 후보 태그 `v0.9.0-rc.1`을 `main` `4d08345`에 push한다.~~ 2026-11-22 사용자가 push했다. 배포 결정 전에는 저장소 secret `NVD_API_KEY`에 활성화한 API 키를 넣고 `security.yml`을 돌린다(지금 값은 NVD가 거절한다).
 > 4. 편집기 패키지 전환(4주차 1번)에 필요한 `read:packages` 토큰, uniplace-ai의 AWS 신뢰 정책. (`.github` 저장소의 첫 커밋은 11-21에 사용자가 SSH로 push했다. `main` = `4e5a52b`. HTTPS로는 저장된 토큰이 그 저장소에 쓰지 못해 403이었다.)
 > 5. FM-AI 3단계 전([ADR-039](../architecture/adr/ADR-039-work-order-sequence-optimizer.md)): 개발 서버에서 설비 몇 개의 `sequence-snapshot`을 받아 `compute/sequence-optimizer/real/`에 두고 `python -m sequence_optimizer.evaluate --snapshots real/*.json --out real/results`로 같은 표를 만든다. 그리고 풀이기(Python 서비스)를 어디서 돌릴지 정한다.
 
