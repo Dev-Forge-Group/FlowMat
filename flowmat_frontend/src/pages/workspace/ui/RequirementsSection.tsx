@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useEquipmentQuery } from '../../../entities/catalog/api/useEquipment'
+import { useProjectMembersQuery } from '../../../entities/project/api/useProjectMembersQuery'
 import {
   useProcessRequirementsQuery,
   useSaveProcessRequirementsMutation,
@@ -31,6 +32,7 @@ export function RequirementsSection({ processId, projectId }: { processId: strin
   const query = useProcessRequirementsQuery(processId)
   const save = useSaveProcessRequirementsMutation(processId)
   const equipment = useEquipmentQuery(projectId)
+  const members = useProjectMembersQuery(projectId)
   const [rows, setRows] = useState<Row[] | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -99,6 +101,12 @@ export function RequirementsSection({ processId, projectId }: { processId: strin
                   <option value="">Any equipment</option>
                   {(equipment.data ?? []).map((one) =>
                     <option key={one.equipmentId} value={one.equipmentId}>{one.equipmentCode ?? one.equipmentName}</option>)}
+                </select>
+              )}
+              {row.kind === 'crew' && (
+                <select aria-label="Person" value={row.ref} onChange={(event) => set(index, { ref: event.target.value })}>
+                  <option value="">Anyone (time not held to a shift)</option>
+                  {(members.data ?? []).map((one) => <option key={one.userId} value={one.userId}>{one.userId}</option>)}
                 </select>
               )}
               {(row.kind === 'skill' || row.kind === 'compute') && (

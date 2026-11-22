@@ -17,13 +17,16 @@ import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWorkingTi
 import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretch;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretches;
+import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerCalendarQuery;
+import org.myweb.flowmat.domain.workforce.application.publicapi.WorkerTime;
 import org.springframework.stereotype.Component;
 
 /**
  * When each step of a plan runs (docs/architecture/adr/ADR-043-plan-backwards-from-a-target.md decision 5): a step is ready
- * when every step before it has ended and the connection's delay has passed; one that takes equipment waits for the
- * equipment's working time (its shifts less holidays and downtime, as runs see it) and for the step before it on the same
- * equipment. Its minutes are working minutes. A step without equipment runs as soon as it is ready.
+ * when every step before it has ended and the connection's delay has passed; one that takes equipment or named people waits
+ * for the time they all work (equipment: shifts less holidays and downtime; people: shifts less days off and holidays, as runs
+ * see them) and for the step before it on the same equipment or person. Its minutes are working minutes. A step without
+ * either runs as soon as it is ready; people without a calendar do not hold a step back.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,18 +36,23 @@ class PlanSchedule {
     private static final Duration FIRST_WINDOW = Duration.ofDays(31);
 
     private final EquipmentWorkingTimeQuery equipmentTime;
+    private final WorkerCalendarQuery workerTime;
 
     record Placed(Instant start, Instant end) {
     }
 
     /** Each node with minutes, or between steps, placed from {@code from}; nodes in topological order. */
-    Map<String, Placed> place(FlowDemand.Graph graph, JsonNode snapshot, List<String> order, Map<String, BigDecimal> minutes,
-        Instant from) {
+    Map<String, Placed> place(String projectId, FlowDemand.Graph graph, JsonNode snapshot, List<String> order,
+        Map<String, BigDecimal> minutes, Instant from) {
         Map<String, BigDecimal> delays = delays(snapshot);
         Map<String, String> equipment = new HashMap<>();
+        Map<String, List<String>> people = new HashMap<>();
         for (FlowDemand.Node node : graph.nodes()) {
             node.execution().stream().filter(one -> "equipment".equals(one.kind()) && one.ref() != null).findFirst()
                 .ifPresent(one -> equipment.put(node.id(), one.ref()));
+            List<String> crew = node.execution().stream().filter(one -> "crew".equals(one.kind()) && one.ref() != null)
+                .map(FlowDemand.ExecutionRequirement::ref).distinct().toList();
+            if (!crew.isEmpty()) people.put(node.id(), crew);
         }
         Map<String, Placed> placed = new HashMap<>();
         Map<String, Instant> busyUntil = new HashMap<>();
@@ -63,27 +71,47 @@ class PlanSchedule {
             }
             Duration length = Duration.ofNanos(working.multiply(BigDecimal.valueOf(60)).movePointRight(9).longValue());
             String machine = equipment.get(id);
-            if (machine == null) {
+            List<String> crew = people.getOrDefault(id, List.of());
+            if (machine == null && crew.isEmpty()) {
                 placed.put(id, new Placed(ready, ready.plus(length)));
                 continue;
             }
-            Instant free = busyUntil.getOrDefault(machine, ready);
-            Instant earliest = free.isAfter(ready) ? free : ready;
-            Placed onMachine = onEquipment(machine, earliest, length);
-            placed.put(id, onMachine);
-            if (onMachine.end() != null) busyUntil.put(machine, onMachine.end());
+            List<String> holders = new ArrayList<>();
+            if (machine != null) holders.add("equipment:" + machine);
+            crew.forEach(person -> holders.add("person:" + person));
+            Instant earliest = ready;
+            for (String holder : holders) {
+                Instant free = busyUntil.get(holder);
+                if (free != null && free.isAfter(earliest)) earliest = free;
+            }
+            Placed step = within(projectId, machine, crew, earliest, length);
+            placed.put(id, step);
+            if (step.end() != null) holders.forEach(holder -> busyUntil.put(holder, step.end()));
         }
         return placed;
     }
 
-    /** The step's start and end in the equipment's working time; no end when a year holds too little of it. */
-    private Placed onEquipment(String equipmentId, Instant earliest, Duration length) {
+    /** The step in the time its equipment and named people all work; no end when a year holds too little of it. */
+    private Placed within(String projectId, String machine, List<String> crew, Instant earliest, Duration length) {
         for (Duration window : List.of(FIRST_WINDOW, EquipmentWorkingTimeQuery.LONGEST_WINDOW)) {
             OffsetDateTime from = earliest.atOffset(ZoneOffset.UTC);
-            Optional<List<EquipmentSlot>> slots = equipmentTime.workingStretches(equipmentId, from, from.plus(window));
-            if (slots.isEmpty()) return new Placed(earliest, earliest.plus(length));
-            List<WorkingStretch> stretches = new ArrayList<>();
-            for (EquipmentSlot slot : slots.get()) stretches.add(new WorkingStretch(slot.start().toInstant(), slot.end().toInstant()));
+            OffsetDateTime to = from.plus(window);
+            List<WorkingStretch> stretches = List.of(new WorkingStretch(from.toInstant(), to.toInstant()));
+            if (machine != null) {
+                Optional<List<EquipmentSlot>> slots = equipmentTime.workingStretches(machine, from, to);
+                if (slots.isPresent()) {
+                    List<WorkingStretch> working = new ArrayList<>();
+                    for (EquipmentSlot slot : slots.get()) working.add(new WorkingStretch(slot.start().toInstant(), slot.end().toInstant()));
+                    stretches = WorkingStretches.intersect(stretches, working);
+                }
+            }
+            if (!crew.isEmpty()) {
+                for (WorkerTime time : workerTime.workingTime(projectId, crew, from, to).values()) {
+                    if (!time.calendarSet()) continue;
+                    stretches = WorkingStretches.intersect(stretches,
+                        time.spans().stream().map(span -> new WorkingStretch(span.start(), span.end())).toList());
+                }
+            }
             Instant start = WorkingStretches.firstStart(stretches, earliest);
             if (start == null) continue;
             Instant end = WorkingStretches.afterWorking(stretches, start, length);

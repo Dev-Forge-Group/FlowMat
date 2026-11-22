@@ -76,7 +76,7 @@ public class ProductionPlanService {
         Map<String, String> owner = owners(graph);
         Map<String, BigDecimal> usable = itemIds.isEmpty() ? Map.of() : usableStock.byItem(workflow.projectId(), itemIds);
         List<PlanPreviewResponse.Requirement> requirements = requirements(result, items, usable, owner, table);
-        List<PlanPreviewResponse.Node> nodes = placed(graph, snapshot,
+        List<PlanPreviewResponse.Node> nodes = placed(workflow.projectId(), graph, snapshot,
             result.nodes().stream().map(ProductionPlanService::node).toList(), request.startAt());
         List<PlanPreviewResponse.Limit> limits = new ArrayList<>();
         requirements.stream()
@@ -108,12 +108,12 @@ public class ProductionPlanService {
     }
 
     /** The nodes placed in time from {@code startAt} (now when left out), in the plan's order (ADR-043 decision 5). */
-    private List<PlanPreviewResponse.Node> placed(FlowDemand.Graph graph, JsonNode snapshot, List<PlanPreviewResponse.Node> nodes,
-        java.time.OffsetDateTime startAt) {
+    private List<PlanPreviewResponse.Node> placed(String projectId, FlowDemand.Graph graph, JsonNode snapshot,
+        List<PlanPreviewResponse.Node> nodes, java.time.OffsetDateTime startAt) {
         Map<String, BigDecimal> minutes = new HashMap<>();
         nodes.forEach(node -> { if (node.minutes() != null) minutes.put(node.processId(), node.minutes()); });
         java.time.Instant from = startAt == null ? java.time.Instant.now() : startAt.toInstant();
-        Map<String, PlanSchedule.Placed> placed = schedule.place(graph, snapshot,
+        Map<String, PlanSchedule.Placed> placed = schedule.place(projectId, graph, snapshot,
             nodes.stream().map(PlanPreviewResponse.Node::processId).toList(), minutes, from);
         java.time.ZoneOffset offset = startAt == null ? java.time.ZoneOffset.UTC : startAt.getOffset();
         return nodes.stream().map(node -> {

@@ -31,6 +31,7 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
     @Autowired private MockMvc mockMvc;
     @Autowired private JwtProvider jwtProvider;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     /**
      * Melon milk, 1,000 bottles: Pack takes 24 filled bottles and a box for 24; 1% breaks before Pack and 2% of the mix is
@@ -118,6 +119,37 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + fill + "')].minutes").value(hasItem(50.5051)))
             .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + pack + "')].minutes").value(hasItem(41.6667)))
             .andExpect(jsonPath("$.data.basis.available['" + milk + "']").value(150.0));
+    }
+
+    /** A step that names a person waits for their shift (ADR-043 decision 5): kim works 10:00-11:00, the step takes 30 min. */
+    @Test
+    void aStepWithANamedPersonWaitsForTheirShift() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String zone = objectMapper.readTree(call(get("/projects/" + DEMO_PROJECT + "/time-zone")).andReturn().getResponse()
+            .getContentAsString()).path("data").path("timeZone").asText();
+        String kim = UUID.randomUUID().toString();
+        jdbc.update("insert into users(user_id,user_name,user_email,user_pwd,user_birth,user_tel) "
+            + "select ?,user_name,?,user_pwd,user_birth,user_tel from users where user_id=?", kim, kim + "@test.local", DEMO_OWNER);
+        jdbc.update("insert into project_member(project_member_id,project_id,user_id,project_role) values(?,?,?,?)",
+            UUID.randomUUID().toString(), DEMO_PROJECT, kim, "editor");
+        call(put("/projects/" + DEMO_PROJECT + "/workers/" + kim + "/shifts"), json(Map.of("shifts",
+            java.util.List.of(Map.of("shiftStart", "10:00", "shiftEnd", "11:00", "workDays", java.util.List.of(1, 2, 3, 4, 5, 6, 7))))))
+            .andExpect(status().isOk());
+        String stool = item("PL-STOOL-" + tag, "unit_ea");
+        Graph graph = new Graph("Crew " + tag);
+        String assemble = graph.node("Assemble");
+        String out = graph.port(assemble, "output", stool, 1, "ea");
+        requirements(assemble, Map.of("kind", "crew", "ref", kim, "amount", 1), Map.of("kind", "time", "amount", 30));
+        graph.publish();
+        java.time.ZonedDateTime morning = java.time.LocalDate.of(2030, 1, 7).atTime(8, 0).atZone(java.time.ZoneId.of(zone));
+        var plan = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of(
+                "target", Map.of("processIoId", out, "quantity", 1), "startAt", morning.toOffsetDateTime().toString())))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        var step = plan.path("nodes").get(0);
+        org.assertj.core.api.Assertions.assertThat(java.time.OffsetDateTime.parse(step.path("startAt").asText()).toInstant())
+            .isEqualTo(morning.withHour(10).toInstant());
+        org.assertj.core.api.Assertions.assertThat(java.time.OffsetDateTime.parse(step.path("endAt").asText()).toInstant())
+            .isEqualTo(morning.withHour(10).withMinute(30).toInstant());
     }
 
     /** A plan needs read access, a published revision and a graph it can plan. */
