@@ -44,4 +44,4 @@
 
 | 날짜 | 커밋 | 자동 1~6 | 두 여정 | 복원 | 업그레이드 | 설정 개정 | 성능 | 판정 |
 |---|---|---|---|---|---|---|---|---|
-| | | | | | | | | |
+| 2026-11-22 | `main` `4d08345` | 1~5 통과(손으로 돌린 실행: backend 267, frontend 277, mock-e2e 80, browser-e2e 260 명세 43개, compute 46, sequence-optimizer 9, 작성자 표기 push 178). 6: npm audit 0건, OWASP 미실행(NVD): NVD가 `NVD_API_KEY`를 거절했다(run 233, 활성화한 API 키가 아님) | 통과(백엔드의 두 여정 테스트, 실 API `purchase-warehouse-live`·`production-quality-live`) | 통과(지문 같음, 적용 0, 여정 재고가 DB와 같음) | 통과 V134 → V137(빈 표 12개만 삭제, 다시 띄우면 up to date) | `a30ff06863a0`(설정 6개) | 전개 37 ms, MRP 43 ms, 시뮬레이션 15 ms(기록 표 마지막 줄 43·59·17 ms) | 후보 `v0.9.0-rc.1`. 배포 결정 전에 OWASP를 돌린다 |
