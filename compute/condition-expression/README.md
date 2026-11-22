@@ -56,13 +56,17 @@ node wasm/check-fixtures.mjs
 
 ## 편집기에서
 
-편집기는 이 크레이트의 WebAssembly 빌드로 연결 조건과 포트 검증 규칙을 입력하는 중에 검사한다(`flowmat_frontend/src/shared/lib/conditionLanguage.ts`). 빌드된 모듈은 `flowmat_frontend/src/shared/wasm/flowmat_condition.wasm`에 커밋돼 있어 프런트 빌드와 CI에 Rust가 필요 없다. 소스를 바꾸면 다시 만들어 함께 커밋한다.
+편집기는 연결 조건과 포트 검증 규칙을 입력하는 중에 검사한다(`flowmat_frontend/src/shared/lib/conditionLanguage.ts`). 이 크레이트를 따로 싣지 않는다. 흐름 커널([`compute/flow-kernel`](../flow-kernel/README.md))이 이 크레이트를 링크하고 `check`·`evaluate`를 그대로 내보내므로, 편집기는 커널 모듈 `flowmat_flow_kernel.wasm` 하나만 싣는다(2026-11-21). 그래서 이 크레이트의 소스를 바꾸면 커널 모듈을 다시 만든다.
 
 ```bash
-wasm/build.sh
+../flow-kernel/wasm/build.sh
 ```
 
-`wasm/build.sh`는 경로를 바꿔 적어(`--remap-path-prefix`) 어느 기계에서 빌드해도 같은 바이트가 나온다. compute CI가 `wasm/build.sh --check`로 커밋된 모듈이 이 소스의 빌드와 같은지 본다. 프런트의 `conditionLanguage.test.ts`가 그 모듈과 TypeScript 감싸개로 고정 입력 1,641개를 돌린다.
+- compute CI의 `flow-kernel` job이 다음을 본다.
+  - 커밋된 모듈이 소스의 빌드와 같은지(`wasm/build.sh --check`).
+  - 이 크레이트의 고정 입력 1,641개가 그 모듈을 거쳐서도 Java와 같은지.
+- 프런트의 `conditionLanguage.test.ts`도 같은 모듈과 TypeScript 감싸개로 고정 입력을 돌린다.
+- `condition-expression` job은 이 크레이트만의 WASM 빌드로 같은 확인을 한다.
 
 ## WebAssembly 경계
 

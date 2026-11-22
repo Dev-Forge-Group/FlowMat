@@ -386,72 +386,25 @@ public class ProcessConnectionServiceImpl implements ProcessConnectionService {
     }
 
     private void validateConnectionContract(ProcessConnection connection, String excludedConnectionId, boolean inferItem) {
-        ConditionExpression condition = null;
-        if (hasText(connection.getConditionExpr())) {
-            condition = ConditionExpression.compile(connection.getConditionExpr());
-        }
-        if (connection.getFromProcessId().equals(connection.getToProcessId())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "A connection cannot link a process to itself.");
-        }
-        if (connection.getFromIoId() != null && connection.getToIoId() != null &&
-            processConnectionRepository.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(
-                connection.getWorkflowId(), NOT_DELETED).stream().anyMatch(existing ->
-                !existing.getConnectionId().equals(excludedConnectionId)
-                    && connection.getFromIoId().equals(existing.getFromIoId())
-                    && connection.getToIoId().equals(existing.getToIoId()))) {
-            throw new BusinessException(ErrorCode.CONFLICT, "Ports are already connected.");
-        }
-        String fromIoId = connection.getFromIoId();
-        String toIoId = connection.getToIoId();
-        ProcessIo source = fromIoId == null ? null : processIoRepository.findByProcessIoIdAndDeletedYn(fromIoId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Connection fromIoId points to a deleted port."));
-        ProcessIo target = toIoId == null ? null : processIoRepository.findByProcessIoIdAndDeletedYn(toIoId, NOT_DELETED)
-            .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "Connection toIoId points to a deleted port."));
-        if (source != null && (!source.getProcessId().equals(connection.getFromProcessId())
-            || !"output".equalsIgnoreCase(source.getDirection()))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Connection fromIoId must be an output port of fromProcessId.");
-        }
-        if (target != null && (!target.getProcessId().equals(connection.getToProcessId())
-            || !"input".equalsIgnoreCase(target.getDirection()))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Connection toIoId must be an input port of toProcessId.");
-        }
-        PortSchema sourceSchema = source == null ? null : PortSchema.parseStored(source.getSchemaJson());
-        if (condition != null) {
-            condition.requireDeclaredAttributes(sourceSchema == null ? null : sourceSchema.properties().keySet());
-        }
-        String sourceItem = source == null ? null : source.getItemId();
-        String targetItem = target == null ? null : target.getItemId();
-        String selectedItem = connection.getItemId();
-        if (sourceItem != null && targetItem != null && !sourceItem.equals(targetItem)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Connected ports itemId must match.");
-        }
-        if (selectedItem != null && ((sourceItem != null && !selectedItem.equals(sourceItem))
-            || (targetItem != null && !selectedItem.equals(targetItem)))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Connection itemId must match the ports.");
-        }
-        if (inferItem && selectedItem == null && sourceItem != null && sourceItem.equals(targetItem)) {
-            connection.setItemId(sourceItem);
-        }
-        if (source != null && target != null) {
-            String sourceType = defaultIfBlank(source.getResourceType(), source.getIoType());
-            String targetType = defaultIfBlank(target.getResourceType(), target.getIoType());
-            if (!sourceType.equals(targetType)) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "Connected ports resourceType must match.");
+        ConnectionContract.check(connection, excludedConnectionId,
+            () -> processConnectionRepository.findAllByWorkflowIdAndDeletedYnOrderByCreatedAtAsc(connection.getWorkflowId(), NOT_DELETED),
+            ioId -> processIoRepository.findByProcessIoIdAndDeletedYn(ioId, NOT_DELETED).orElse(null),
+            catalogUnits(), inferItem);
+    }
+
+    /** The project's units as the catalog knows them. */
+    WorkflowUnits catalogUnits() {
+        return new WorkflowUnits() {
+            @Override
+            public boolean known(String code) {
+                return catalogQuery.isKnownUnitCode(code);
             }
-            PortSchema targetSchema = PortSchema.parseStored(target.getSchemaJson());
-            PortSchema.requireCompatible(sourceSchema, targetSchema);
-        }
-        Set<String> types = new java.util.HashSet<>();
-        for (String unit : new String[] {source == null ? null : source.getUnit(),
-            target == null ? null : target.getUnit(), connection.getUnit()}) {
-            if (unit != null && !unit.isBlank()) {
-                catalogQuery.findUnitType(unit).ifPresent(types::add);
+
+            @Override
+            public java.util.Optional<String> type(String code) {
+                return catalogQuery.findUnitType(code);
             }
-        }
-        if (types.size() > 1) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Connection unit type must match port units.");
-        }
+        };
     }
 
     private String validateItem(String itemId, String projectId) {

@@ -10,6 +10,8 @@ on:
       - 'modules.yml'
       # conditionLanguage.test.ts runs the editor's condition checker on these.
       - 'compute/condition-expression/fixtures/**'
+      # flowKernel.test.ts and toKernelGraph.test.ts run the editor's flow kernel on these.
+      - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/frontend.yml'
   pull_request:
     branches: [ main, develop ]
@@ -18,6 +20,8 @@ on:
       - 'modules.yml'
       # conditionLanguage.test.ts runs the editor's condition checker on these.
       - 'compute/condition-expression/fixtures/**'
+      # flowKernel.test.ts and toKernelGraph.test.ts run the editor's flow kernel on these.
+      - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/frontend.yml'
   # Runs it whatever changed.
   workflow_dispatch:

@@ -10,6 +10,8 @@ import {
 import {
   backendDtoToEditorDocument,
   editorDocumentToBackendSaveInput,
+  editorElementChanges,
+  isServerEditorDocument,
   type BackendEditorDocumentDto,
 } from './editorDocumentBackendAdapter'
 
@@ -119,5 +121,38 @@ describe('editorDocumentBackendAdapter', () => {
       expect(restored.startBinding).toBeNull()
       expect(restored.endBinding).toBeNull()
     }
+  })
+})
+
+describe('element changes (ADR-042)', () => {
+  const rect = (id: string, x: number) => createRectangleElement({ id: toElementId(id), x, y: 0, width: 80, height: 40 })
+  /** What the server gives for these elements, each at its own version. */
+  const server = (versions: Record<string, number>, ...elements: ReturnType<typeof rect>[]) => {
+    const payload = editorDocumentToBackendSaveInput({ ...createEmptyEditorDocument({ nextElementSeq: 4 }), elements })
+    return backendDtoToEditorDocument({ ...payload, version: 5, versionNonce: 1,
+      elements: payload.elements.map((element) => ({ ...element, version: versions[element.id], versionNonce: 1 })) })
+  }
+
+  it('keeps each element\'s version beside a document the server gave, and tells it from a draft', () => {
+    const base = server({ 'shape-1': 3, 'shape-2': 7 }, rect('shape-1', 0), rect('shape-2', 100))
+    expect(base.elementVersions).toEqual({ 'shape-1': 3, 'shape-2': 7 })
+    expect(isServerEditorDocument(base)).toBe(true)
+    expect(isServerEditorDocument({ ...base })).toBe(false)
+    expect(isServerEditorDocument(null)).toBe(false)
+  })
+
+  it('sends only what changed, each change with the version it was edited from', () => {
+    const base = server({ 'shape-1': 3, 'shape-2': 7, 'shape-3': 2 }, rect('shape-1', 0), rect('shape-2', 100), rect('shape-3', 200))
+    const next = { ...base, nextElementSeq: 6, elements: [base.elements[0], rect('shape-2', 150), rect('shape-5', 300)] }
+    const { changes, nextElementSeq } = editorElementChanges(base, next)
+    expect(changes.map((change) => ('deleteId' in change ? `delete ${change.deleteId}@${change.baseVersion}`
+      : `${change.baseVersion === undefined ? 'add' : 'replace'} ${change.element.id}${change.baseVersion === undefined ? '' : `@${change.baseVersion}`}`)))
+      .toEqual(['replace shape-2@7', 'add shape-5', 'delete shape-3@2'])
+    expect(nextElementSeq).toBe(6)
+  })
+
+  it('has nothing to send for the same document', () => {
+    const base = server({ 'shape-1': 1 }, rect('shape-1', 0))
+    expect(editorElementChanges(base, { ...base, selectedIds: [toElementId('shape-1')] }).changes).toEqual([])
   })
 })

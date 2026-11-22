@@ -17,6 +17,7 @@ import org.myweb.flowmat.domain.workflow.collab.GraphSyncService;
 import org.myweb.flowmat.domain.workflow.collab.dto.GraphChangeMessage;
 import org.myweb.flowmat.domain.workflow.domain.entity.Workflow;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.request.EditorDocumentSaveRequest;
+import org.myweb.flowmat.domain.workflow.editor.api.dto.request.EditorElementChangesRequest;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.request.EditorElementRequest;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.response.EditorDocumentResponse;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.response.EditorElementResponse;
@@ -126,6 +127,113 @@ public class WorkflowEditorDocumentService {
             userId
         );
         return response;
+    }
+
+    /**
+     * Applies element changes (docs/architecture/adr/ADR-042-drawing-layer-element-changes.md): an addition, a replacement
+     * or a deletion each, all or none. A replacement or deletion edited from an older version of its element, a
+     * replacement of an element that is gone, or an addition whose id is taken is a conflict, and the whole request is
+     * refused with each conflicting element named. Changes to other elements made meanwhile are kept.
+     */
+    public EditorDocumentResponse applyElementChanges(String workflowId, EditorElementChangesRequest request) {
+        Workflow workflow = workflowAccess.requireWorkflowWriteAccess(workflowId);
+        if (request == null || request.changes() == null || request.changes().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "changes are required.");
+        }
+        Map<String, Boolean> touched = new LinkedHashMap<>();
+        for (EditorElementChangesRequest.Change change : request.changes()) {
+            String id = changeId(change);
+            if (touched.put(id, Boolean.TRUE) != null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Change each element once: " + id + ".");
+            }
+        }
+        // The same locks in the same order as a whole save, so the two never interleave.
+        entityManager.lock(workflow, LockModeType.PESSIMISTIC_WRITE);
+        String userId = projectAccessService.requireCurrentUserId();
+        long nonce = System.currentTimeMillis();
+        WorkflowEditorDocument document = documentRepository.findByWorkflowIdForUpdate(workflow.getWorkflowId())
+            .orElseGet(() -> newDocument(workflow, userId));
+        Map<String, WorkflowEditorElement> current = new LinkedHashMap<>();
+        for (WorkflowEditorElement element : elementRepository
+            .findAllByWorkflowIdAndDeletedYnOrderByElementOrderAscCreatedAtAsc(workflow.getWorkflowId(), NOT_DELETED)) {
+            current.put(element.getElementId(), element);
+        }
+
+        List<String> conflicts = new ArrayList<>();
+        for (EditorElementChangesRequest.Change change : request.changes()) {
+            WorkflowEditorElement element = current.get(changeId(change));
+            boolean adding = change.deleteId() == null && change.baseVersion() == null;
+            if (adding ? element != null
+                : change.deleteId() != null ? element != null && element.getVersion() != change.baseVersion()
+                : element == null || element.getVersion() != change.baseVersion()) {
+                conflicts.add(changeId(change));
+            }
+        }
+        if (!conflicts.isEmpty()) {
+            throw new BusinessException(ErrorCode.CONFLICT, String.join(", ", conflicts)
+                + (conflicts.size() == 1 ? " was" : " were") + " changed by someone else.");
+        }
+
+        List<WorkflowEditorElement> toSave = new ArrayList<>();
+        int nextOrder = current.values().stream().mapToInt(WorkflowEditorElement::getElementOrder).max().orElse(0) + 1;
+        for (EditorElementChangesRequest.Change change : request.changes()) {
+            WorkflowEditorElement element = current.get(changeId(change));
+            if (change.deleteId() != null) {
+                if (element != null) {
+                    element.setDeletedYn(DELETED);
+                    element.setUpdatedBy(userId);
+                    element.setVersion(element.getVersion() + 1);
+                    element.setVersionNonce(nonce);
+                    toSave.add(element);
+                    current.remove(element.getElementId());
+                }
+                continue;
+            }
+            if (element == null) {
+                element = newElement(workflow, change.element().id(), userId);
+            }
+            applyElement(element, workflow, change.element(), nextOrder++, userId, nonce);
+            toSave.add(element);
+            current.put(element.getElementId(), element);
+        }
+        elementRepository.saveAll(toSave);
+
+        document.setUpdatedBy(userId);
+        document.setVersion(document.getVersion() + 1);
+        document.setVersionNonce(nonce);
+        if (request.nextElementSeq() != null && request.nextElementSeq() > document.getNextElementSeq()) {
+            document.setNextElementSeq(request.nextElementSeq());
+        }
+        documentRepository.save(document);
+
+        List<WorkflowEditorElement> active = new ArrayList<>(current.values());
+        active.sort(Comparator.comparing(WorkflowEditorElement::getElementOrder));
+        EditorDocumentResponse response = toDocumentResponse(document, active);
+        graphSyncService.broadcast(GraphChangeMessage.Type.EDITOR_DOCUMENT_UPDATED, workflow.getWorkflowId(),
+            workflow.getWorkflowId(), userId);
+        return response;
+    }
+
+    /** The element a change is about; a change names exactly one, by its element or by {@code deleteId}. */
+    private String changeId(EditorElementChangesRequest.Change change) {
+        if (change == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "A change is required.");
+        }
+        boolean deletes = change.deleteId() != null;
+        if (deletes == (change.element() != null)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "A change has an element to add or replace, or a deleteId.");
+        }
+        if (deletes) {
+            if (change.deleteId().isBlank()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "deleteId is required.");
+            }
+            if (change.baseVersion() == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "A deletion names the baseVersion it was made from.");
+            }
+            return change.deleteId().trim();
+        }
+        validateElement(change.element());
+        return change.element().id().trim();
     }
 
     private WorkflowEditorDocument newDocument(Workflow workflow, String userId) {

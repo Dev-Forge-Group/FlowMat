@@ -104,6 +104,9 @@ dependencies {
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:postgresql'
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.1'
+	// Runs the flow kernel's WebAssembly module in the JVM for the ADR-040 decision 6 measurement (-Dflow.bench=true).
+	testImplementation 'com.dylibso.chicory:runtime:1.7.5'
+	testImplementation 'com.dylibso.chicory:compiler:1.7.5'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
@@ -114,6 +117,10 @@ tasks.named('test') {
 	// The integration suite retains several JPA/Redis contexts in one test JVM.
 	maxHeapSize = '2g'
 	systemProperty 'spring.test.context.cache.maxSize', '4'
+	// -Ptest.forks=N runs N test JVMs side by side, each with its own Postgres and Redis (IntegrationTestSupport starts
+	// them once per JVM). On a 4-core machine the suite took 438 s in one, 319 s in two and 339 s in three; on CI's
+	// runner the test step took 8 m 8 s in one and 8 m 29 s in two (2026-11-21), so the default stays one.
+	maxParallelForks = providers.gradleProperty('test.forks').map { it as int }.getOrElse(1)
 	// The module catalog tests read these files, which are not on the test classpath: without them as inputs, a change
 	// to the catalog or to a module's dependencies alone would leave the test task up to date.
 	inputs.file(file('../modules.yml')).withPropertyName('moduleCatalog')
@@ -122,9 +129,12 @@ tasks.named('test') {
 	inputs.dir(file('../compute/condition-expression/fixtures')).withPropertyName('conditionFixtures')
 	// The sequence optimizer's evaluation set, whose baselines SequenceFixtureTest checks (compute/sequence-optimizer).
 	inputs.dir(file('../compute/sequence-optimizer/fixtures')).withPropertyName('sequenceFixtures')
+	// The flow kernel's fixtures, whose answers FlowKernelFixtureTest writes and checks (compute/flow-kernel, ADR-040).
+	inputs.dir(file('../compute/flow-kernel/fixtures')).withPropertyName('flowKernelFixtures')
 	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison;
-	// -Dsequence.fixtures.update=true rewrites the sequence optimizer's baselines.
-	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update'].each { name ->
+	// -Dsequence.fixtures.update=true rewrites the sequence optimizer's baselines; -Dflow.fixtures.update=true the flow
+	// kernel's validation answers.
+	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update', 'flow.fixtures.update', 'flow.bench'].each { name ->
 		def value = providers.systemProperty(name).orNull
 		if (value != null) systemProperty name, value
 	}

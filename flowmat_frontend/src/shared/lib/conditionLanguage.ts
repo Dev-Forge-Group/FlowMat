@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { loadKernelModule } from './flowKernel'
 
 /**
  * FlowMat's condition language, checked in the browser by the server's own rules: the Rust implementation in
- * compute/condition-expression, built to WebAssembly (flowmat_condition.wasm, rebuilt by its wasm/build.sh and checked
- * against its source in CI). It answers as the backend's ConditionExpression does, message and position alike, so the
- * editor can show while someone types what saving would refuse. The server still checks on save; this only tells sooner.
+ * compute/condition-expression, which the flow kernel's WebAssembly module links in and exports (flowmat_flow_kernel.wasm,
+ * rebuilt by compute/flow-kernel/wasm/build.sh and checked against its source in CI). It answers as the backend's
+ * ConditionExpression does, message and position alike, so the editor can show while someone types what saving would
+ * refuse. The server still checks on save; this only tells sooner.
  */
 
 /** What a source is: a condition, with the attributes it reads and the declared-attribute check, or the reason it is not. */
@@ -64,20 +66,9 @@ export function conditionChecker(exports: WebAssembly.Exports): ConditionChecker
   }
 }
 
-let loading: Promise<ConditionChecker> | null = null
-
-/** Loads the module once; a failed load is tried again on the next call. */
-export function loadConditionChecker(): Promise<ConditionChecker> {
-  loading ??= (async () => {
-    const response = await fetch(new URL('../wasm/flowmat_condition.wasm', import.meta.url))
-    if (!response.ok) throw new Error(`The condition checker could not be loaded (${response.status}).`)
-    const { instance } = await WebAssembly.instantiate(await response.arrayBuffer())
-    return conditionChecker(instance.exports)
-  })().catch((error: unknown) => {
-    loading = null
-    throw error
-  })
-  return loading
+/** The checker over the flow kernel's module, loaded once; a failed load is tried again on the next call. */
+export async function loadConditionChecker(): Promise<ConditionChecker> {
+  return conditionChecker(await loadKernelModule())
 }
 
 /**

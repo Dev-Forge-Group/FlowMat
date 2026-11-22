@@ -1,7 +1,8 @@
 name: Compute (Rust)
 
-# The Rust implementation of the condition language in compute/condition-expression. Runs when the crate or its shared
-# fixtures change; the backend workflow checks the Java side of the same fixtures.
+# The Rust crates in compute/: the condition language (compute/condition-expression) and the flow kernel
+# (compute/flow-kernel). Runs when a crate or its shared fixtures change; the backend workflow checks the Java side of
+# the same fixtures.
 on:
   push:
     branches: [ main, develop, 'release-validation/**' ]
@@ -55,7 +56,43 @@ jobs:
     - name: Build for WebAssembly
       run: cargo build --locked --release --lib --target wasm32-unknown-unknown
 
-    # The editor ships flowmat_frontend/src/shared/wasm/flowmat_condition.wasm; it must be what this source builds.
+    - name: Use Node.js 22
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: 22.x
+
+    - name: Check the fixtures through the WebAssembly build
+      run: node wasm/check-fixtures.mjs
+
+  # The flow kernel (ADR-040): validation and routing against the answers Java writes into its fixtures. The backend
+  # workflow checks the Java side of the same files.
+  flow-kernel:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compute/flow-kernel
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+    - name: Rust toolchain
+      run: rustup toolchain install
+
+    - name: Format
+      run: cargo fmt --check
+
+    - name: Lint
+      run: cargo clippy --locked --all-targets -- -D warnings
+
+    - name: Lint the WebAssembly build
+      run: cargo clippy --locked --lib --target wasm32-unknown-unknown -- -D warnings
+
+    - name: Test against the shared fixtures
+      run: cargo test --locked
+
+    - name: Build for WebAssembly
+      run: cargo build --locked --release --lib --target wasm32-unknown-unknown
+
+    # The editor ships flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm; it must be what this source builds.
     - name: Check the editor's module against the source
       run: wasm/build.sh --check
 
@@ -66,3 +103,7 @@ jobs:
 
     - name: Check the fixtures through the WebAssembly build
       run: node wasm/check-fixtures.mjs
+
+    # The editor's condition checker runs on the same module, which links the condition language in.
+    - name: Check the condition fixtures through the editor's module
+      run: node ../condition-expression/wasm/check-fixtures.mjs ../../flowmat_frontend/src/shared/wasm/flowmat_flow_kernel.wasm

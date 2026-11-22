@@ -1412,6 +1412,127 @@ code {
   text-align: left;
 }
 
+/* A node's default handle when it has ports (CanvasNode.tsx): there for connections saved without ports, not shown. */
+.react-flow__handle.canvas-node__default-handle--quiet {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Trying the flow (TryFlowPanel.tsx): the form, the outcome and, on the canvas, what reached each connection. */
+.try-flow {
+  margin: 8px 16px 0;
+}
+
+.try-flow__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.try-flow__form input {
+  width: 110px;
+}
+
+.try-flow__summary--finished {
+  color: #166534;
+}
+
+.try-flow__summary--stopped,
+.try-flow__summary--failed,
+.try-flow__summary--unreadable {
+  color: #991b1b;
+}
+
+.try-flow__steps {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.try-flow__time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.try-flow__ends {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.try-flow__note {
+  color: #991b1b;
+}
+
+.canvas-flow-chip {
+  font-size: 10px;
+  font-weight: 600;
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-radius: 999px;
+  padding: 2px 6px;
+  pointer-events: none;
+}
+
+.workspace-canvas-viewport.reading-exporting .canvas-flow-chip {
+  display: none;
+}
+
+/* The check as drawn on the canvas (issueMarks.ts): a count on each process and connection it has something to say
+   about, red with errors, amber with warnings only. Pictures of the workflow leave it out. */
+.canvas-issue-mark {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 16px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 3px 5px;
+  flex-shrink: 0;
+}
+
+.canvas-issue-mark--error {
+  color: #fff;
+  background: #dc2626;
+}
+
+.canvas-issue-mark--warning {
+  color: #78350f;
+  background: #fde68a;
+}
+
+/* On a process, a corner badge, so the name keeps the header. */
+.canvas-issue-mark--node {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 2;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.canvas-issue-mark--edge {
+  pointer-events: all;
+}
+
+.workspace-canvas-viewport.reading-exporting .canvas-issue-mark {
+  display: none;
+}
+
+/* The check as drawn (LiveValidation.tsx): one line that turns red while the drawing has errors. */
+.live-check {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.live-check--errors {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 /* The workflow check's issues (ValidationIssueList.tsx): fixes, the warnings an issue explains and folded evidence under
    each issue's button. */
 .validation-issues {

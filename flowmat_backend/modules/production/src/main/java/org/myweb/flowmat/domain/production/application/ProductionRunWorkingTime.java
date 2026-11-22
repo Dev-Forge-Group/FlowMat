@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentSlot;
 import org.myweb.flowmat.domain.catalog.application.publicapi.EquipmentWorkingTimeQuery;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.LinkedRunWorkingTime;
+import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretch;
+import org.myweb.flowmat.domain.flowrun.application.publicapi.WorkingStretches;
 import org.myweb.flowmat.domain.production.domain.entity.ProductionRun;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrder;
 import org.myweb.flowmat.domain.production.domain.entity.WorkOrderCrew;
@@ -56,8 +57,8 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
             if (together == null) {
                 return Optional.empty();
             }
-            if (!together.spans().isEmpty()) {
-                Instant start = together.spans().get(0).start();
+            Instant start = WorkingStretches.firstStart(together.spans(), readyAt.toInstant());
+            if (start != null) {
                 return start.equals(readyAt.toInstant()) ? Optional.empty()
                     : Optional.of(new WorkingStart(start.atOffset(readyAt.getOffset()), team.equipmentId(), together.crew()));
             }
@@ -80,15 +81,9 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
             if (together == null) {
                 return Optional.empty();
             }
-            Duration left = working;
-            for (WorkerTime.Span span : together.spans()) {
-                Instant start = span.start().isBefore(from.toInstant()) ? from.toInstant() : span.start();
-                Duration length = Duration.between(start, span.end());
-                if (length.compareTo(left) >= 0) {
-                    return Optional.of(new WorkingStart(start.plus(left).atOffset(from.getOffset()), team.equipmentId(),
-                        together.crew()));
-                }
-                left = left.minus(length);
+            Instant end = WorkingStretches.afterWorking(together.spans(), from.toInstant(), working);
+            if (end != null) {
+                return Optional.of(new WorkingStart(end.atOffset(from.getOffset()), team.equipmentId(), together.crew()));
             }
         }
         return Optional.empty();
@@ -99,18 +94,36 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
     }
 
     /** When the team works together in a window, earliest first, and the crew with shifts that shaped it. */
-    private record Together(List<WorkerTime.Span> spans, List<String> crew) {
+    private record Together(List<WorkingStretch> spans, List<String> crew) {
     }
 
     /** Null without a work order, or with neither equipment nor full-share crew. */
     private Team team(String productionRunId) {
-        WorkOrder order = productionRunRepository.findById(productionRunId)
+        return productionRunRepository.findById(productionRunId)
             .map(ProductionRun::getWorkOrderId)
             .flatMap(workOrderRepository::findById)
+            .map(this::team)
             .orElse(null);
-        if (order == null) {
-            return null;
-        }
+    }
+
+    /**
+     * The stretches of [from, until) when a work order's equipment and its full-share crew with shifts work together, and who
+     * fixed them (docs/architecture/adr/ADR-041-try-it-time.md decision 5): what a production run of the order waits for and
+     * counts working-time delays by. Empty when nothing fixes the time, so every delay counts all time; no stretches when the
+     * team never works together in the window, or its equipment is gone.
+     */
+    public Optional<TeamTime> workingTime(WorkOrder order, OffsetDateTime from, OffsetDateTime until) {
+        Team team = team(order);
+        Together together = team == null ? null : together(team, from, until);
+        return together == null ? Optional.empty()
+            : Optional.of(new TeamTime(team.equipmentId(), together.crew(), together.spans()));
+    }
+
+    /** A work order's working time: its equipment (null without one), the crew with shifts it follows, the stretches. */
+    public record TeamTime(String equipmentId, List<String> crew, List<WorkingStretch> stretches) {
+    }
+
+    private Team team(WorkOrder order) {
         String equipmentId = order.getEquipmentId();
         // Only people needed for all of their time fix when the step can start (WC39, ADR-016 decision 3).
         List<String> fullCrew = crewRepository.findAllByWorkOrderIdOrderByAddedAtAscCrewIdAsc(order.getWorkOrderId()).stream()
@@ -141,10 +154,10 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
      * suggestions do (WC24). The whole window is searched however often the times miss each other (ADR-016 decision 4). Empty
      * when they never meet before {@code until}, or the equipment is gone.
      */
-    private List<WorkerTime.Span> commonSpans(String equipmentId, List<WorkerTime> crew, Instant from, Instant until) {
-        List<WorkerTime.Span> together;
+    private List<WorkingStretch> commonSpans(String equipmentId, List<WorkerTime> crew, Instant from, Instant until) {
+        List<WorkingStretch> together;
         if (equipmentId == null) {
-            together = List.of(new WorkerTime.Span(from, until));
+            together = List.of(new WorkingStretch(from, until));
         } else {
             Optional<List<EquipmentSlot>> stretches = equipmentWorkingTime.workingStretches(equipmentId, from.atOffset(ZoneOffset.UTC),
                 until.atOffset(ZoneOffset.UTC));
@@ -152,34 +165,13 @@ public class ProductionRunWorkingTime implements LinkedRunWorkingTime {
                 return List.of();
             }
             together = stretches.get().stream()
-                .map(slot -> new WorkerTime.Span(slot.start().toInstant(), slot.end().toInstant()))
+                .map(slot -> new WorkingStretch(slot.start().toInstant(), slot.end().toInstant()))
                 .toList();
         }
         for (WorkerTime time : crew) {
-            together = intersect(together, time.spans());
+            together = WorkingStretches.intersect(together, time.spans().stream()
+                .map(span -> new WorkingStretch(span.start(), span.end())).toList());
         }
         return together;
-    }
-
-    /** Both lists earliest first and none overlapping within each; the stretches in both. */
-    private static List<WorkerTime.Span> intersect(List<WorkerTime.Span> one, List<WorkerTime.Span> other) {
-        List<WorkerTime.Span> result = new ArrayList<>();
-        int left = 0;
-        int right = 0;
-        while (left < one.size() && right < other.size()) {
-            WorkerTime.Span a = one.get(left);
-            WorkerTime.Span b = other.get(right);
-            Instant start = a.start().isAfter(b.start()) ? a.start() : b.start();
-            Instant end = a.end().isBefore(b.end()) ? a.end() : b.end();
-            if (end.isAfter(start)) {
-                result.add(new WorkerTime.Span(start, end));
-            }
-            if (a.end().isBefore(b.end())) {
-                left++;
-            } else {
-                right++;
-            }
-        }
-        return result;
     }
 }

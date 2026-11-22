@@ -15,6 +15,7 @@ import {
 } from '../../../entities/workflow/model/nodeCatalog'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
+import { issueMarkLabel, useIssueMarksStore } from '../model/issueMarks'
 
 const COLOR_MAP: Record<string, string> = {
   sky: '#0ea5e9',
@@ -168,6 +169,7 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
   const requestDeleteNode = useCanvasInteractionStore((s) => s.requestDeleteNode)
   const requestColorChange = useCanvasInteractionStore((s) => s.requestColorChange)
   const requestDuplicateNode = useCanvasInteractionStore((s) => s.requestDuplicateNode)
+  const issueMark = useIssueMarksStore((s) => s.marks.processes[node.processId])
   const isColorPickerOpen = activeColorPickerNodeId === node.id
   const editing = inlineEditingNodeId === node.id
   const [draftName, setDraftName] = useState(node.name)
@@ -189,6 +191,14 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
   const nodeDefinition = getWorkflowNodeDefinition(node.nodeType)
 
   return (
+    <>
+    {/* Beside the node's box, so it sits on the corner of React Flow's node wrapper without moving the handles. */}
+    {issueMark && (
+      <span role="img" aria-label={issueMarkLabel(issueMark)} title={issueMarkLabel(issueMark)}
+        className={`canvas-issue-mark canvas-issue-mark--node ${issueMark.errors > 0 ? 'canvas-issue-mark--error' : 'canvas-issue-mark--warning'}`}>
+        {issueMark.errors > 0 ? issueMark.errors : issueMark.warnings}
+      </span>
+    )}
     <div
       className={`canvas-node ${selected ? 'canvas-node--selected' : ''} ${editing ? 'canvas-node--editing' : ''}`}
       style={getWorkflowNodeStyle(node.nodeType) as CSSProperties}
@@ -311,6 +321,7 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
             Edit
           </span>
         )}
+
       </div>
 
       {node.inputs.length > 0 && (
@@ -329,8 +340,15 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
         </div>
       )}
 
-      {node.inputs.length === 0 && <Handle type="target" position={Position.Left} id="in-default" />}
-      {node.outputs.length === 0 && <Handle type="source" position={Position.Right} id="out-default" />}
+      {/* The default handles stay when a node has ports, quiet and not for drawing new lines, so a connection saved
+          without ports still has an end to be drawn to. */}
+      <Handle type="target" position={Position.Left} id="in-default"
+        isConnectable={node.inputs.length === 0}
+        className={node.inputs.length === 0 ? undefined : 'canvas-node__default-handle--quiet'} />
+      <Handle type="source" position={Position.Right} id="out-default"
+        isConnectable={node.outputs.length === 0}
+        className={node.outputs.length === 0 ? undefined : 'canvas-node__default-handle--quiet'} />
     </div>
+    </>
   )
 }

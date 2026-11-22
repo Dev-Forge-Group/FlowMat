@@ -26,13 +26,19 @@ describe('CanvasViewport React Flow retention', () => {
 
 describe('Workspace editor keyboard integration', () => {
   it('keeps editor tool shortcuts and editor select-all wired in the workspace page', () => {
-    const source = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    const page = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // The page hands its state to the workspace keyboard hook, which reads the shortcut table in the workspace tools
+    // model (workspaceTools.test.ts checks what that table answers).
+    const source = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'useWorkspaceKeyboard.ts'), 'utf8')
+    const tools = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'workspaceTools.ts'), 'utf8')
 
+    expect(page).toContain('useWorkspaceKeyboard({')
+    expect(page).toContain('editorCommandApiRef, editorSelection')
     expect(source).toContain('getWorkspaceToolShortcut')
-    expect(source).toContain("return 'editor-rectangle'")
-    expect(source).toContain("return 'editor-ellipse'")
-    expect(source).toContain("return 'editor-line'")
-    expect(source).toContain("return 'editor-text'")
+    expect(tools).toContain("return 'editor-rectangle'")
+    expect(tools).toContain("return 'editor-ellipse'")
+    expect(tools).toContain("return 'editor-line'")
+    expect(tools).toContain("return 'editor-text'")
     expect(source).toContain('editorCommandApiRef.current?.selectAll()')
     expect(source).toContain('editorCommandApiRef.current?.clearSelection()')
     expect(source).toContain('editorCommandApiRef.current?.undo()')
@@ -42,22 +48,28 @@ describe('Workspace editor keyboard integration', () => {
 
   it('keeps editor document undo/redo routed through the workspace editor command api', () => {
     const pageSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // A new editor element is saved by the page's editor document hook, which records it for undo.
+    const documentSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'useEditorDocumentActions.ts'), 'utf8')
     const layerSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkspaceEditorLayer.tsx'), 'utf8')
+    // The layer's command handle and its documents' logic are typed and worked out in the editor document model.
+    const modelSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'model', 'workspaceEditorDocument.ts'), 'utf8')
 
     expect(pageSource).toContain('isEditorCommandContext')
-    expect(pageSource).toContain('editorCommandApiRef.current?.recordBackendSnapshot')
-    expect(layerSource).toContain('recordBackendSnapshot(document: EditorDocument')
+    expect(pageSource).toContain('useEditorDocumentActions(')
+    expect(documentSource).toContain('editorCommandApiRef.current?.recordBackendSnapshot')
+    expect(modelSource).toContain('recordBackendSnapshot(document: EditorDocument')
     expect(layerSource).toContain('split.annotationIds.length === 0')
     expect(layerSource).toContain('persistDocument(selectElements(target.document, target.selectedIds))')
   })
 
   it('keeps legacy annotation toolbar commands backed by svg editor selection', () => {
-    const pageSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'WorkflowCanvasPage.tsx'), 'utf8')
+    // The ribbon's commands are built in workspaceRibbon.tsx from the page's state.
+    const ribbonSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'workspaceRibbon.tsx'), 'utf8')
     const viewportSource = readFileSync(join(process.cwd(), 'src', 'pages', 'workspace', 'ui', 'CanvasViewport.tsx'), 'utf8')
 
     expect(viewportSource).toContain('selectedEditorAnnotationIdsRef.current')
     expect(viewportSource).toContain('onAnnotationSelectionReady?.(() => selectedEditorAnnotationIdsRef.current)')
     expect(viewportSource).toContain('filter((id) => annotationIds.has(id))')
-    expect(pageSource).toContain('batchAnnotations: (input) => batchAnnotationMutation.mutateAsync(input)')
+    expect(ribbonSource).toContain('batchAnnotations: (input) => k.batchAnnotationMutation.mutateAsync(input)')
   })
 })
