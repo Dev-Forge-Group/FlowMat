@@ -3,6 +3,7 @@ package org.myweb.flowmat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -71,6 +72,13 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         graph.connect(receive, receiveOut, mix, mixMilk, null);
         graph.connect(mix, mixOut, fill, fillMix, 0.02);
         graph.connect(fill, fillOut, pack, packFilled, 0.01);
+        // A mix takes the mixer 30 minutes, a bottle the filler 3 seconds, a box two people a minute (ADR-043 decision 4).
+        String mixer = equipment("PL-MIXER-" + tag);
+        String filler = equipment("PL-FILLER-" + tag);
+        requirements(mix, Map.of("kind", "equipment", "ref", mixer, "amount", 1), Map.of("kind", "time", "amount", 30, "unit", "min"));
+        requirements(fill, Map.of("kind", "equipment", "ref", filler, "amount", 1),
+            Map.of("kind", "time", "amount", 3, "unit", "s", "per", "output_unit"));
+        requirements(pack, Map.of("kind", "crew", "amount", 2), Map.of("kind", "time", "amount", 1));
         String revision = graph.publish();
 
         String row = "$.data.requirements[?(@.itemId == '%s')]";
@@ -95,8 +103,14 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath(row.formatted(milk) + ".trace[*].processId").value(hasItems(pack, fill, mix, receive)))
             .andExpect(jsonPath("$.data.limits[0].kind").value("stock"))
             .andExpect(jsonPath("$.data.limits[0].at").value(receiveIn))
-            .andExpect(jsonPath("$.data.limits.length()").value(1))
+            // Then the longest equipment step: Mix, 1.8406 batches of 30 minutes, longer than Fill's 1,010.1011 × 3 s.
+            .andExpect(jsonPath("$.data.limits[1].kind").value("equipment-time"))
+            .andExpect(jsonPath("$.data.limits[1].at").value(mix))
+            .andExpect(jsonPath("$.data.limits.length()").value(2))
             .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + mix + "')].batches").value(hasItem(1.8406)))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + mix + "')].minutes").value(hasItem(55.2169)))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + fill + "')].minutes").value(hasItem(50.5051)))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + pack + "')].minutes").value(hasItem(41.6667)))
             .andExpect(jsonPath("$.data.basis.available['" + milk + "']").value(150.0));
     }
 
@@ -119,6 +133,8 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             json(Map.of("target", Map.of("processIoId", out, "quantity", 0))))
             .andExpect(status().isConflict());
         call(post("/workflows/" + graph.workflow + "/plan-previews"), body).andExpect(status().isOk());
+        call(put("/processes/" + make + "/requirements"), json(Map.of("requirements", java.util.List.of(Map.of("kind", "magic", "amount", 1)))))
+            .andExpect(status().isBadRequest());
     }
 
     private final class Graph {
@@ -149,6 +165,17 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         String publish() throws Exception {
             return id(call(post("/workflows/" + workflow + "/revisions")), "workflowRevisionId");
         }
+    }
+
+    @SafeVarargs
+    private void requirements(String process, Map<String, Object>... requirements) throws Exception {
+        call(put("/processes/" + process + "/requirements"), json(Map.of("requirements", java.util.List.of(requirements))))
+            .andExpect(status().isOk());
+    }
+
+    private String equipment(String code) throws Exception {
+        return id(call(post("/equipments"), json(Map.of("projectId", DEMO_PROJECT, "equipmentCode", code, "equipmentName",
+            code.toLowerCase(), "equipmentType", "machine"))), "equipmentId");
     }
 
     private void stock(String itemId, double quantity, String tag) throws Exception {

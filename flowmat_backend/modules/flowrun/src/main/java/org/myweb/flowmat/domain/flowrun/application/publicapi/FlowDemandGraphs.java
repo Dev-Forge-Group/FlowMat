@@ -3,6 +3,7 @@ package org.myweb.flowmat.domain.flowrun.application.publicapi;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand.Connection;
@@ -12,15 +13,21 @@ import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand.Port;
 
 /**
  * A published revision's snapshot as {@link FlowDemand} reads it (ADR-043 decision 2): processes, ports and connections as
- * runs read them (loss from schema version 2, as FlowRunGraph). A port's item is its {@code ref}. Execution requirements are
- * passed by node id, since the snapshot keeps them apart from the graph.
+ * runs read them (loss from schema version 2, as FlowRunGraph). A port's item is its {@code ref}; nodes' execution
+ * requirements come from the snapshot's {@code processRequirements} (ADR-043 decision 4), none in revisions published before.
  */
 public final class FlowDemandGraphs {
 
     private FlowDemandGraphs() {
     }
 
-    public static FlowDemand.Graph fromSnapshot(JsonNode snapshot, Map<String, List<ExecutionRequirement>> execution) {
+    public static FlowDemand.Graph fromSnapshot(JsonNode snapshot) {
+        Map<String, List<ExecutionRequirement>> execution = new HashMap<>();
+        for (JsonNode requirement : snapshot.path("processRequirements")) {
+            execution.computeIfAbsent(text(requirement, "processId"), ignored -> new ArrayList<>()).add(new ExecutionRequirement(
+                text(requirement, "kind"), text(requirement, "ref"), decimal(requirement, "amount"), text(requirement, "unit"),
+                text(requirement, "per")));
+        }
         List<Node> nodes = new ArrayList<>();
         for (JsonNode process : snapshot.path("processes")) {
             String id = text(process, "processId");

@@ -16,6 +16,7 @@ import org.myweb.flowmat.domain.workflow.annotation.application.CanvasAnnotation
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionBindingResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.NodeExecutionPolicyResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionResponse;
+import org.myweb.flowmat.domain.workflow.api.dto.response.ProcessRequirementResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSnapshot;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowRevisionSummaryResponse;
 import org.myweb.flowmat.domain.workflow.api.dto.response.WorkflowValidationResponse;
@@ -28,6 +29,7 @@ import org.myweb.flowmat.domain.workflow.editor.application.WorkflowEditorDocume
 import org.myweb.flowmat.domain.workflow.guide.application.GuidedViewService;
 import org.myweb.flowmat.domain.workflow.repository.ProcessConnectionRepository;
 import org.myweb.flowmat.domain.workflow.repository.ProcessIoRepository;
+import org.myweb.flowmat.domain.workflow.repository.ProcessRequirementRepository;
 import org.myweb.flowmat.domain.workflow.repository.ProcessRepository;
 import org.myweb.flowmat.domain.workflow.repository.WorkflowRevisionRepository;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -52,6 +54,7 @@ public class WorkflowRevisionService {
     private final WorkflowRevisionRepository repository;
     private final ProcessRepository processRepository;
     private final ProcessIoRepository processIoRepository;
+    private final ProcessRequirementRepository requirementRepository;
     private final ProcessConnectionRepository connectionRepository;
     private final CanvasAnnotationService annotationService;
     private final WorkflowEditorDocumentService editorDocumentService;
@@ -108,7 +111,9 @@ public class WorkflowRevisionService {
                     process.getMaxRetryDelaySeconds(), process.getConcurrencyLimit()))
                 .toList(),
             bindings,
-            guidedViewService.snapshot(workflowId)
+            guidedViewService.snapshot(workflowId),
+            processIds.isEmpty() ? List.of() : requirementRepository.findAllByProcessIdInOrderByProcessIdAscSortOrderAsc(processIds)
+                .stream().map(ProcessRequirementResponse::from).toList()
         );
 
         WorkflowRevision revision = new WorkflowRevision();

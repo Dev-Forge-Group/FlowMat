@@ -57,7 +57,7 @@ public class ProductionPlanService {
         WorkflowAccessView workflow = workflowAccess.requireRead(workflowId);
         WorkflowProductionQuery.Revision revision = revision(workflow.workflowId(), request.revisionId());
         JsonNode snapshot = snapshot(revision);
-        FlowDemand.Graph graph = FlowDemandGraphs.fromSnapshot(snapshot, Map.of());
+        FlowDemand.Graph graph = FlowDemandGraphs.fromSnapshot(snapshot);
 
         Set<String> itemIds = graph.ports().stream().map(FlowDemand.Port::ref).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, CatalogItemView> items = itemIds.isEmpty() ? Map.of() : catalogQuery.findItems(itemIds);
