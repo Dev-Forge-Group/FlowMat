@@ -3,10 +3,12 @@ package org.myweb.flowmat.domain.workflow.editor.api;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.request.EditorDocumentSaveRequest;
+import org.myweb.flowmat.domain.workflow.editor.api.dto.request.EditorElementChangesRequest;
 import org.myweb.flowmat.domain.workflow.editor.api.dto.response.EditorDocumentResponse;
 import org.myweb.flowmat.domain.workflow.editor.application.WorkflowEditorDocumentService;
 import org.myweb.flowmat.global.response.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,5 +33,14 @@ public class WorkflowEditorDocumentController {
         @Valid @RequestBody EditorDocumentSaveRequest request
     ) {
         return ApiResponse.ok(workflowEditorDocumentService.saveDocument(workflowId, request));
+    }
+
+    /** Element changes, all or none (docs/architecture/adr/ADR-042-drawing-layer-element-changes.md). */
+    @PatchMapping("/elements")
+    public ApiResponse<EditorDocumentResponse> applyElementChanges(
+        @PathVariable("workflowId") String workflowId,
+        @Valid @RequestBody EditorElementChangesRequest request
+    ) {
+        return ApiResponse.ok(workflowEditorDocumentService.applyElementChanges(workflowId, request));
     }
 }

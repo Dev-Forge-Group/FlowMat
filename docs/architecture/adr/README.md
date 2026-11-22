@@ -43,6 +43,7 @@
 | [ADR-039](ADR-039-work-order-sequence-optimizer.md) | 설비별 작업지시 순서 제안(FM-AI) | **Accepted** 2026-11-21(1·2단계만, 구현 #124–#126) | 목적 = 전환 분 + 늦어진 분 × 우선순위 가중치. FlowMat이 스냅숏과 지금 규칙의 답을 내고, `compute/sequence-optimizer`(CP-SAT)가 풀어 오늘의 최선과 견준다. 합성 40개에서 30.8% 적었다. 3단계(제안·승인·적용)는 실제 스냅숏 평가와 풀이기 운영처가 정해진 뒤 |
 | [ADR-040](ADR-040-flow-kernel.md) | 흐름 커널(flow kernel) | **Accepted** 2026-11-21(월간 계획 11-23 첫 결정) | 포트 호환·조건식·검증 31규칙·경로 계산을 Rust 크레이트 `compute/flow-kernel` 하나에 모아 편집기에서 WASM으로 그리는 즉시 검증하고 돌려 본다. Java가 고정 입력에 답을 적고(`FlowKernelFixtureTest`) 커널이 맞춘다. 서버가 커널을 쓸지는 4주차에 Chicory로 같은 답·지연 2배 이하인지 재어 정한다 |
 | [ADR-041](ADR-041-try-it-time.md) | 돌려 보기의 시간 | **Accepted** 2026-11-21(월간 계획 12-21 첫 결정) | "Try it"에 단계별 시작 시각을 더한다. 커널은 달력·시간대를 계산하지 않고 Java가 구한 작업지시의 함께 일하는 구간을 받아, 서버의 `readyAt`·`scheduledAt`과 같은 답을 낸다. 라우터의 시각 규칙은 순수 함수 `FlowRunTiming`이고, `time.json`(67개)이 Rust·WASM·TypeScript에서 같다 |
+| [ADR-042](ADR-042-drawing-layer-element-changes.md) | 그리기 층의 요소 단위 변경 | **Accepted** 2026-11-22(월간 계획 12-21 4주차) | `PATCH …/editor-document/elements`가 요소마다 편집을 시작한 판으로 추가·바꾸기·지우기를 받는다. 한 요청은 다 되거나 하나도 안 된다. 서로 다른 요소의 동시 편집은 둘 다 남고, 같은 요소는 409로 알린다. 마이그레이션 없음 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

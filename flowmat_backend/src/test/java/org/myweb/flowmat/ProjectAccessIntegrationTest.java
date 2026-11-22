@@ -97,6 +97,8 @@ class ProjectAccessIntegrationTest extends IntegrationTestSupport {
             Arguments.of("read editor document", get("/workflows/" + DEMO_WORKFLOW + "/editor-document")),
             Arguments.of("save editor document", json(put("/workflows/" + DEMO_WORKFLOW + "/editor-document"),
                 "{\"expectedVersion\":0,\"elements\":[]}")),
+            Arguments.of("change editor elements", json(patch("/workflows/" + DEMO_WORKFLOW + "/editor-document/elements"),
+                "{\"changes\":[{\"deleteId\":\"shape-1\",\"baseVersion\":1}]}")),
             Arguments.of("list annotations", get("/workflows/" + DEMO_WORKFLOW + "/annotations")),
             Arguments.of("create annotation", json(post("/workflows/" + DEMO_WORKFLOW + "/annotations"),
                 "{\"annotationType\":\"shape\",\"shapeKind\":\"rectangle\",\"posX\":0,\"posY\":0}")),
