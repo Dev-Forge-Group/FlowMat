@@ -16,6 +16,7 @@
 
 작업을 시작할 때는 아래 순서로 읽는다. 세션 1 구역(재고·BOM·LOT·생산·품질·설비)은 [인계 문서](status/AGENT_HANDOFF.md)에서 담당 범위와 작업 규칙을 먼저 확인한다.
 
+1. [status/ROADMAP-2026-11-23.md](status/ROADMAP-2026-11-23.md) — 1년 계획과 지금 달의 일. 무엇을 하고 무엇을 하지 않는지가 여기서 정해진다.
 1. [status/WORKBOARD.md](status/WORKBOARD.md) — 지금 하는 일, 다음 일, 결정 대기.
 2. [status/CURRENT_CAPABILITIES.md](status/CURRENT_CAPABILITIES.md) — 구현된 기능과 남은 작업.
 3. [architecture/decision-handoff.md](architecture/decision-handoff.md) — 확정된 아키텍처 결정, 아직 정하면 안 되는 것, 다음 아키텍처 작업.
@@ -26,7 +27,7 @@
 
 | 폴더 | 내용 | 시작 문서 |
 |---|---|---|
-| [status/](status/) | 작업 현황판, 기능 기준선, Agent 인계 | [WORKBOARD](status/WORKBOARD.md), [CURRENT_CAPABILITIES](status/CURRENT_CAPABILITIES.md), [AGENT_HANDOFF](status/AGENT_HANDOFF.md) |
+| [status/](status/) | 1년 계획, 작업 현황판, 기능 기준선, Agent 인계 | [ROADMAP](status/ROADMAP-2026-11-23.md), [WORKBOARD](status/WORKBOARD.md), [CURRENT_CAPABILITIES](status/CURRENT_CAPABILITIES.md), [AGENT_HANDOFF](status/AGENT_HANDOFF.md) |
 | [architecture/](architecture/README.md) | 결정 인계, ADR, 도메인 지도, 실행 모델 | [README](architecture/README.md) |
 | [domain/](domain/README.md) | 기능별 계약·설계(재고·BOM·LOT·생산·품질·설비·공정 포트·revision·Flow Run). **파일을 옮기거나 이름을 바꾸지 않는다.** 코드 주석이 `docs/domain/*.md` 경로를 가리킨다 | [README](domain/README.md) |
 | [editor/](editor/README.md) | 캔버스·도형 편집 엔진·리본 | [current-state](editor/current-state.md) |
