@@ -206,7 +206,7 @@ export function OAuthCallbackRoute() {
         <input value={userNickname} onChange={(event) => setUserNickname(event.target.value)} placeholder="Nickname" required />
         <input value={userTel} onChange={(event) => setUserTel(event.target.value)} placeholder="Phone number" required />
         <input type="date" value={userBirth} onChange={(event) => setUserBirth(event.target.value)} required />
-        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" required />
+        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (8 or more characters, not your user ID)" required minLength={8} />
         {errorMessage && <p style={{ margin: 0, color: '#dc2626', fontSize: 13 }}>{errorMessage}</p>}
         <button type="submit" disabled={submitting}>
           {submitting ? 'Completing...' : 'Complete Sign-Up'}
