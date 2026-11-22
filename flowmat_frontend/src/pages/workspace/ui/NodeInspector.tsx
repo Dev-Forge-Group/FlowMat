@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ExecutionPolicySection } from './ExecutionPolicySection'
+import { RequirementsSection } from './RequirementsSection'
 import { ProcessExecutionBindingSection } from './ProcessExecutionBindingSection'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { useItemsQuery } from '../../../entities/catalog/api/useItemsQuery'
@@ -436,6 +437,8 @@ export function NodeInspector({
         )}
       </section>
 
+      {!['exclusive', 'join', 'split'].includes(node.nodeType.toLowerCase()) &&
+        <RequirementsSection key={`req-${node.id}`} processId={node.id} projectId={node.projectId} />}
       <ExecutionPolicySection key={node.id} processId={node.id} />
       {!['exclusive', 'join', 'split'].includes(node.nodeType.toLowerCase()) && <ProcessExecutionBindingSection
         key={`http-${node.id}`} processId={node.id} projectId={node.projectId} outputs={node.outputs} />}
