@@ -24,6 +24,7 @@ test('the Plan panel plans from a target and lights a material’s path', async 
     flowRate: null, unit: null, delayTimeSec: null, lossRate: null, priority: 0 }]
   const trace = (processId: string, at: string) => ({ at, processId, rule: 'ratio', from: 1000, to: 1000, factor: 1 })
   const sent: unknown[] = []
+  const confirmed: { target: unknown; basis: unknown; requestId: string; supplierName: string }[] = []
 
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request()
@@ -41,6 +42,10 @@ test('the Plan panel plans from a target and lights a material’s path', async 
           { kind: 'equipment-time', at: 'mix', processId: 'mix', message: 'The longest equipment step takes 55.2169 minutes.' }],
         assumptions: [], basis: { revisionId: 'rev-1', available: { milk: 150 } },
       })
+    }
+    if (request.method() === 'POST' && pathname === '/api/workflows/wf-plan/plan-confirmations') {
+      confirmed.push(request.postDataJSON())
+      return ok(route, { requestId: 'k', revisionId: 'rev-1', workOrderId: 'wo-1', purchaseOrderIds: ['po-1'] })
     }
     if (request.method() !== 'GET') {
       return route.fulfill({ status: 404, contentType: 'application/json',
@@ -78,4 +83,15 @@ test('the Plan panel plans from a target and lights a material’s path', async 
 
   await panel.getByRole('row', { name: /Raw milk/ }).click()
   await expect(page.locator('.react-flow__node.is-traced')).toHaveCount(2)
+
+  // Confirming: milk is short, so the draft purchase order needs a supplier.
+  await panel.getByRole('button', { name: 'Confirm plan' }).click()
+  await expect(panel.getByRole('alert')).toHaveText('Name the supplier for the draft purchase order of the shortages.')
+  expect(confirmed).toHaveLength(0)
+  await panel.getByLabel('Supplier for the shortages').fill('Dairy Co')
+  await panel.getByRole('button', { name: 'Confirm plan' }).click()
+  await expect(panel.getByRole('status')).toContainText('Draft work order made with a draft purchase order for the shortages.')
+  expect(confirmed[0]).toMatchObject({ target: { processIoId: 'pack-out', quantity: 1000, unit: 'ea' },
+    basis: { revisionId: 'rev-1', available: { milk: 150 } }, supplierName: 'Dairy Co' })
+  expect(confirmed[0].requestId).toMatch(/^plan-/)
 })

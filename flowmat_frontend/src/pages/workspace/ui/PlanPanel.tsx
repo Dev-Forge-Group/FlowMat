@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { usePlanPreviewMutation, type PlanRequirement } from '../../../entities/production/api/usePlanPreview'
+import { usePlanConfirmMutation, usePlanPreviewMutation, type PlanRequirement, type PlanTarget } from '../../../entities/production/api/usePlanPreview'
 import type { WorkflowCanvasViewModel } from '../../../entities/workflow/model/types'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { usePlanTraceStore } from '../model/planTrace'
@@ -28,6 +28,11 @@ export function PlanPanel({ canvas, nameOf }: Props) {
   const [problem, setProblem] = useState<string | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
   const preview = usePlanPreviewMutation(canvas.workflow.workflowId)
+  const confirm = usePlanConfirmMutation(canvas.workflow.workflowId)
+  const [planned, setPlanned] = useState<PlanTarget | null>(null)
+  const [supplier, setSupplier] = useState('')
+  // One key per plan seen: sending the same confirmation again after a lost reply makes nothing twice.
+  const [requestId, setRequestId] = useState('')
   const setTraced = usePlanTraceStore((s) => s.setTraced)
   const plan = preview.data
   const unit = outputs.find(({ port }) => port.processIoId === portId)?.port.unit ?? ''
@@ -41,7 +46,11 @@ export function PlanPanel({ canvas, nameOf }: Props) {
     setProblem(null)
     setChosen(null)
     setTraced([])
-    preview.mutate({ processIoId: portId, quantity: target, unit: unit || null })
+    confirm.reset()
+    const next = { processIoId: portId, quantity: target, unit: unit || null }
+    setPlanned(next)
+    setRequestId(`plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
+    preview.mutate(next)
   }
 
   function choose(row: PlanRequirement) {
@@ -50,7 +59,15 @@ export function PlanPanel({ canvas, nameOf }: Props) {
   }
 
   const bottleneck = plan?.limits.find((limit) => limit.kind === 'equipment-time')
-  const failure = problem ?? (preview.isError ? errorMessage(preview.error) : null)
+  const short = plan?.requirements.some((row) => (row.shortage ?? 0) > 0) ?? false
+  const failure = problem ?? (preview.isError ? errorMessage(preview.error) : confirm.isError ? errorMessage(confirm.error) : null)
+
+  function confirmPlan() {
+    if (!plan || !planned) return
+    if (short && !supplier.trim()) return setProblem('Name the supplier for the draft purchase order of the shortages.')
+    setProblem(null)
+    confirm.mutate({ target: planned, basis: plan.basis, requestId, supplierName: supplier.trim() || null })
+  }
 
   return (
     <section aria-label="Plan the flow" style={{ margin: '12px 16px 0', border: '1px solid #e2e8f0', padding: '10px' }}>
@@ -101,6 +118,24 @@ export function PlanPanel({ canvas, nameOf }: Props) {
             <ul aria-label="Limits" style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
               {plan.limits.map((limit, index) => <li key={index}>{limit.message}</li>)}
             </ul>
+          )}
+          {plan.feasible && !confirm.data && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end', marginTop: '8px' }}>
+              {short && (
+                <label style={{ display: 'grid', gap: '4px' }}><span>Supplier for the shortages</span>
+                  <input value={supplier} onChange={(event) => setSupplier(event.target.value)} />
+                </label>
+              )}
+              <button type="button" disabled={confirm.isPending} onClick={confirmPlan}>
+                {confirm.isPending ? 'Confirming...' : 'Confirm plan'}
+              </button>
+            </div>
+          )}
+          {confirm.data && (
+            <p role="status" style={{ marginTop: '8px' }}>
+              Draft work order made{confirm.data.purchaseOrderIds.length > 0 ? ' with a draft purchase order for the shortages' : ''}.
+              {' '}<a href={`/projects/${canvas.workflow.projectId}/runs`}>Open work orders</a>
+            </p>
           )}
         </div>
       )}

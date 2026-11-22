@@ -10,8 +10,8 @@ test.use({ viewport: { width: 1920, height: 1080 }, trace: 'off' })
  * materials, equipment and time; ask for 1,000 bottles; see what is needed against stock, what can be made now, the
  * bottleneck and the time; confirm into a draft work order and a draft purchase order for the shortage.
  *
- * Written first, on purpose failing: the plan endpoints come in week 2 (preview) and week 4 (confirmation), the editor's
- * Plan panel in week 3. It goes into browser-e2e.yml once it passes. The numbers are ADR-043's rules worked by hand:
+ * Written first (week 1), it passed once the plan (week 2), the editor's Plan panel (week 3) and confirmation (week 4) were
+ * in, and runs in browser-e2e.yml since. The numbers are ADR-043's rules worked by hand:
  * Pack 1,000 / 24 = 41.6667 batches; 1% breakage before Pack, so Fill makes 1,010.1011; Fill takes 0.2 kg of mix a
  * bottle and 2% is lost before it, so Mix sends 206.1431 kg in 1.8406 batches of 112 kg; each batch takes 100 kg of milk.
  * 150 kg of milk makes 814.968 bottles; counted units round down to whole ones, as "buildable" does for BOMs today.
@@ -137,13 +137,13 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
 
     // Week 4: confirming makes a draft work order and a draft purchase order for the milk, once, and moves no stock.
     const requestId = `melon-${tag}`
+    const confirmation = { target, basis: plan.basis, requestId, supplierName: 'Dairy Co' }
     const confirmed = await api<{ workOrderId: string; purchaseOrderIds: string[] }>('POST',
-      `/workflows/${workflowId}/plan-confirmations`, { target, basis: plan.basis, requestId })
+      `/workflows/${workflowId}/plan-confirmations`, confirmation)
     expect(confirmed.purchaseOrderIds).toHaveLength(1)
-    expect(await api('POST', `/workflows/${workflowId}/plan-confirmations`, { target, basis: plan.basis, requestId }))
-      .toEqual(confirmed)
-    expect(await api(`GET`, `/work-orders/${confirmed.workOrderId}`)).toMatchObject({
-      workflowId, workflowRevisionId: revision.workflowRevisionId, targetItemId: melonMilk, targetQuantity: 1000, status: 'draft',
+    expect(await api('POST', `/workflows/${workflowId}/plan-confirmations`, confirmation)).toEqual(confirmed)
+    expect(await api('GET', `/work-orders/${confirmed.workOrderId}`)).toMatchObject({
+      workflowId, targetItemId: melonMilk, targetQuantity: 1000, workOrderStatus: 'draft',
     })
     expect(await api('GET', `/purchase-orders/${confirmed.purchaseOrderIds[0]}`)).toMatchObject({
       status: 'draft', lines: [expect.objectContaining({ itemId: milk, quantity: 34.0564 })],
@@ -153,7 +153,7 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     // A new revision changes the basis: confirming the old plan is refused and makes nothing.
     await api('POST', `/workflows/${workflowId}/revisions`)
     const stale = await request('POST', `/workflows/${workflowId}/plan-confirmations`,
-      { target, basis: plan.basis, requestId: `${requestId}-stale` })
+      { ...confirmation, requestId: `${requestId}-stale` })
     expect(stale.status()).toBe(409)
     completed = true
   } finally {

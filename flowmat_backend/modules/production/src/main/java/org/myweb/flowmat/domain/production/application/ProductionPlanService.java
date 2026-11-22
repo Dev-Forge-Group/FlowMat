@@ -96,6 +96,12 @@ public class ProductionPlanService {
             new PlanPreviewResponse.Basis(revision.workflowRevisionId(), basis));
     }
 
+    /** The item at a target of a revision the caller has already planned. */
+    public String targetItemOf(String workflowId, String revisionId, PlanPreviewRequest.Target target) {
+        return revisions.findRevision(revisionId, workflowId)
+            .map(revision -> targetItem(FlowDemandGraphs.fromSnapshot(snapshot(revision)), target)).orElse(null);
+    }
+
     private WorkflowProductionQuery.Revision revision(String workflowId, String revisionId) {
         if (revisionId == null || revisionId.isBlank()) {
             return revisions.latestPublishedRevision(workflowId)

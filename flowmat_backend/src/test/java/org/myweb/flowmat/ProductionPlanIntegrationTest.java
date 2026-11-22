@@ -2,6 +2,7 @@ package org.myweb.flowmat;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -135,6 +136,67 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         call(post("/workflows/" + graph.workflow + "/plan-previews"), body).andExpect(status().isOk());
         call(put("/processes/" + make + "/requirements"), json(Map.of("requirements", java.util.List.of(Map.of("kind", "magic", "amount", 1)))))
             .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Confirming a plan (ADR-043 decision 7): a draft work order and a draft purchase order for the shortage, once per requestId,
+     * stock unmoved; a newer revision or other usable stock refuses it and makes nothing; outsiders cannot.
+     */
+    @Test
+    void aConfirmedPlanMakesDraftsOnceAndMovesNoStock() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String flour = item("PC-FLOUR-" + tag, "unit_kg");
+        String bread = item("PC-BREAD-" + tag, "unit_ea");
+        stock(flour, 10, tag);
+        // Listed, since a project that lists suppliers takes only listed ones (PO20).
+        call(post("/suppliers"), json(Map.of("projectId", DEMO_PROJECT, "supplierName", "Mill " + tag))).andExpect(status().isOk());
+        Graph graph = new Graph("Bread " + tag);
+        String bake = graph.node("Bake");
+        graph.port(bake, "input", flour, 2, "kg");
+        String loaves = graph.port(bake, "output", bread, 1, "ea");
+        graph.publish();
+        Map<String, Object> target = Map.of("processIoId", loaves, "quantity", 10, "unit", "ea");
+        var plan = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of("target", target)))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        Map<String, Object> basis = objectMapper.convertValue(plan.path("basis"), Map.class);
+        String url = "/workflows/" + graph.workflow + "/plan-confirmations";
+        Map<String, Object> confirm = Map.of("target", target, "basis", basis, "requestId", "pc-" + tag, "supplierName", "Mill " + tag);
+
+        mockMvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(json(confirm))
+                .header("Authorization", "Bearer " + jwtProvider.generateAccessToken("plan-outsider")))
+            .andExpect(status().isForbidden());
+        var made = objectMapper.readTree(call(post(url), json(confirm)).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString()).path("data");
+        String workOrder = made.path("workOrderId").asText();
+        String order = made.path("purchaseOrderIds").path(0).asText();
+        call(post(url), json(confirm)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.workOrderId").value(workOrder))
+            .andExpect(jsonPath("$.data.purchaseOrderIds[0]").value(order));
+        call(get("/work-orders/" + workOrder)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.workOrderStatus").value("draft"))
+            .andExpect(jsonPath("$.data.targetItemId").value(bread))
+            .andExpect(jsonPath("$.data.targetQuantity").value(10.0));
+        call(get("/purchase-orders/" + order)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("draft"))
+            .andExpect(jsonPath("$.data.lines[0].itemId").value(flour))
+            .andExpect(jsonPath("$.data.lines[0].quantity").value(10.0));
+        call(get("/inventories").param("projectId", DEMO_PROJECT))
+            .andExpect(jsonPath("$.data[?(@.itemId == '" + flour + "')].quantity").value(hasItem(10.0)));
+
+        // A newer revision: the old plan is refused and nothing more is made.
+        graph.publish();
+        Map<String, Object> stale = new HashMap<>(confirm);
+        stale.put("requestId", "pc-stale-" + tag);
+        call(post(url), json(stale)).andExpect(status().isConflict());
+        // Planned again but stock moved meanwhile: refused too.
+        var fresh = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of("target", target)))
+            .andReturn().getResponse().getContentAsString()).path("data");
+        stock(flour, 1, tag + "B");
+        Map<String, Object> moved = new HashMap<>(stale);
+        moved.put("basis", objectMapper.convertValue(fresh.path("basis"), Map.class));
+        call(post(url), json(moved)).andExpect(status().isConflict());
+        call(get("/purchase-orders").param("projectId", DEMO_PROJECT))
+            .andExpect(jsonPath("$.data[?(@.supplierName == 'Mill " + tag + "')]").value(org.hamcrest.Matchers.hasSize(1)));
     }
 
     private final class Graph {
