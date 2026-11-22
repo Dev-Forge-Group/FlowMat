@@ -5,7 +5,7 @@ name: Compute (Rust)
 # the same fixtures.
 on:
   push:
-    branches: [ main, develop, 'release-validation/**' ]
+    branches: [ 'release-validation/**' ]
     paths:
       - 'compute/**'
       - 'flowmat_frontend/src/shared/wasm/**'
@@ -16,10 +16,13 @@ on:
       - 'compute/**'
       - 'flowmat_frontend/src/shared/wasm/**'
       - '.github/workflows/compute.yml'
+  schedule:
+    # Each night on main; a pull request already ran this before its merge (docs/operations/ci-selection.md).
+    - cron: '33 17 * * *'
   # Runs it whatever changed.
   workflow_dispatch:
 
-# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+# A newer push to the same pull request replaces the older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true

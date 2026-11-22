@@ -2,9 +2,14 @@ name: Browser E2E with Backend Services
 
 # The real-backend browser checks run when the backend, the frontend, the scripts and fixtures they use, or this file
 # changes. The mocked browser checks need only the frontend and are in mock-e2e.yml.
+#
+# A pull request leaves out the spec files that already passed against the same code (docs/operations/ci-selection.md):
+# the same backend, scripts and this file, the same spec and support files, the same built frontend files loaded. When
+# every spec here already passed, the backend is not started at all. The merge to main does not run them again; every
+# spec runs each night on main, and on a manual run.
 on:
   push:
-    branches: [ main, develop, 'release-validation/**' ]
+    branches: [ 'release-validation/**' ]
     paths:
       - 'flowmat_backend/**'
       - 'flowmat_frontend/**'
@@ -17,9 +22,12 @@ on:
       - 'flowmat_frontend/**'
       - 'scripts/**'
       - '.github/workflows/browser-e2e.yml'
+  schedule:
+    # Every spec, each night on main (docs/operations/ci-selection.md).
+    - cron: '13 18 * * *'
   workflow_dispatch:
 
-# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+# A newer push to the same pull request replaces the older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -29,11 +37,47 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether any spec here still has to run, before a backend is started for them.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Restore passed specs
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed.json
+          key: e2e-passed-real-${{ github.run_id }}
+          restore-keys: e2e-passed-real-
+      - name: Choose the specs to run
+        id: plan
+        working-directory: flowmat_frontend
+        env:
+          FULL: ${{ github.event_name != 'pull_request' && '--full' || '' }}
+        run: |
+          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts) $(git hash-object ../.github/workflows/browser-e2e.yml)"
+          echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
+          node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
+            --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
+          echo "E2E_SKIP_FILE=$PWD/playwright-results/already-passed/skip.json" >> "$GITHUB_ENV"
+          left=$(grep -o 'e2e/[A-Za-z0-9_-]*\.spec\.ts' ../.github/workflows/browser-e2e.yml | sort -u \
+            | node -e "const skip = new Set(JSON.parse(require('fs').readFileSync('playwright-results/already-passed/skip.json', 'utf8')).skip); console.log(require('fs').readFileSync(0, 'utf8').split('\\n').filter((file) => file && !skip.has(file)).length)")
+          echo "Spec files to run: $left"
+          echo "run=$([ "$left" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   browser-e2e:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       E2E_WEB_SERVER: preview
+      E2E_CHUNK_MAP: playwright-results/already-passed/chunk-map.json
+      E2E_ASSET_LOG: playwright-results/already-passed/requests.log
+      E2E_PASSED_LOG: playwright-results/already-passed/tests.jsonl
     services:
       postgres:
         image: postgres:16
@@ -60,6 +104,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Restore passed specs
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed.json
+          key: e2e-passed-real-${{ github.run_id }}
+          restore-keys: e2e-passed-real-
+      - name: Choose the specs to run
+        working-directory: flowmat_frontend
+        env:
+          FULL: ${{ github.event_name != 'pull_request' && '--full' || '' }}
+        run: |
+          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts) $(git hash-object ../.github/workflows/browser-e2e.yml)"
+          echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
+          node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
+            --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
+          echo "E2E_SKIP_FILE=$PWD/playwright-results/already-passed/skip.json" >> "$GITHUB_ENV"
+          left=$(grep -o 'e2e/[A-Za-z0-9_-]*\.spec\.ts' ../.github/workflows/browser-e2e.yml | sort -u \
+            | node -e "const skip = new Set(JSON.parse(require('fs').readFileSync('playwright-results/already-passed/skip.json', 'utf8')).skip); console.log(require('fs').readFileSync(0, 'utf8').split('\\n').filter((file) => file && !skip.has(file)).length)")
+          echo "Spec files to run: $left"
+          echo "run=$([ "$left" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Set up JDK 21
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
@@ -153,27 +218,27 @@ jobs:
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/backend-contract.spec.ts
+        run: npm run test:e2e -- e2e/backend-contract.spec.ts --pass-with-no-tests
 
       - name: Run real Data Flow browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/data-flow-browser.spec.ts --workers=1
+        run: npm run test:e2e -- e2e/data-flow-browser.spec.ts --pass-with-no-tests --workers=1
 
       - name: Run real worked time browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_LABOR_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/run-labor-real-api.spec.ts --workers=1 --retries=0
+        run: npm run test:e2e -- e2e/run-labor-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real working delay browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_WORKING_DELAY_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/working-delay-real-api.spec.ts --workers=1 --retries=0
+        run: npm run test:e2e -- e2e/working-delay-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real organization browser acceptance
         working-directory: flowmat_frontend
@@ -185,7 +250,7 @@ jobs:
           PGOPTIONS: '-c flowmat.org_e2e_disposable=true'
         run: |
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/organization-e2e-fixture.sql
-          npm run test:e2e -- e2e/organizations-real-api.spec.ts --workers=1 --trace=off
+          npm run test:e2e -- e2e/organizations-real-api.spec.ts --pass-with-no-tests --workers=1 --trace=off
 
       - name: Run real approval notification browser acceptance
         working-directory: flowmat_frontend
@@ -196,7 +261,7 @@ jobs:
           PGOPTIONS: '-c flowmat.approval_e2e_disposable=true'
         run: |
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/approval-notification-e2e-fixture.sql
-          npm run test:e2e -- e2e/approval-notification-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/approval-notification-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real execution policy and notification browser acceptance
         working-directory: flowmat_frontend
@@ -207,10 +272,10 @@ jobs:
           PGOPTIONS: '-c flowmat.notification_e2e_disposable=true'
         run: |
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/notification-e2e-fixture.sql
-          npm run test:e2e -- e2e/execution-policy-real-api.spec.ts --workers=1 --retries=0 --trace=off
-          npm run test:e2e -- e2e/stock-alert-notification-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/execution-policy-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/stock-alert-notification-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
           # The recipient test removes viewer membership, so run it last.
-          npm run test:e2e -- e2e/notification-reorder-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/notification-reorder-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real worker planning browser acceptance
         working-directory: flowmat_frontend
@@ -221,174 +286,174 @@ jobs:
           PGOPTIONS: '-c flowmat.worker_e2e_disposable=true'
         run: |
           psql --host=127.0.0.1 --port=5432 --username=flowmat --dbname=flowmat --set=ON_ERROR_STOP=1 --file=../scripts/ci/worker-planning-e2e-fixture.sql
-          npm run test:e2e -- e2e/worker-planning-real-api.spec.ts --workers=1 --retries=0 --trace=off
+          npm run test:e2e -- e2e/worker-planning-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real Exclusive gateway browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_GATEWAY_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/exclusive-gateway-real-api.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/exclusive-gateway-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real gateway quantity browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_GATEWAY_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/gateway-quantity-real-api.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/gateway-quantity-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real transfer, equipment limit and production step acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/gateway-delay-real-api.spec.ts e2e/equipment-concurrency-limit-real-api.spec.ts e2e/production-steps-real-api.spec.ts e2e/worker-schedule-history-real-api.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/gateway-delay-real-api.spec.ts e2e/equipment-concurrency-limit-real-api.spec.ts e2e/production-steps-real-api.spec.ts e2e/worker-schedule-history-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real worker rota browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_ROTA_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/worker-rota-real-api.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/worker-rota-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real equipment capacity browser acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
           FLOWMAT_EQUIPMENT_E2E_DISPOSABLE: '1'
-        run: npm run test:e2e -- e2e/equipment-capacity-real-api.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/equipment-capacity-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       - name: Run real BOM and LOT E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/bom-lot-flow.spec.ts
+        run: npm run test:e2e -- e2e/bom-lot-flow.spec.ts --pass-with-no-tests
 
       - name: Run real LOT genealogy E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/lot-genealogy.spec.ts
+        run: npm run test:e2e -- e2e/lot-genealogy.spec.ts --pass-with-no-tests
 
       - name: Run real storage location E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/storage-locations.spec.ts
+        run: npm run test:e2e -- e2e/storage-locations.spec.ts --pass-with-no-tests
 
       - name: Run real inspection standard E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/inspection-standards.spec.ts
+        run: npm run test:e2e -- e2e/inspection-standards.spec.ts --pass-with-no-tests
 
       - name: Run real nonconformity E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/nonconformity.spec.ts
+        run: npm run test:e2e -- e2e/nonconformity.spec.ts --pass-with-no-tests
 
       - name: Run real warehouse task E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts
+        run: npm run test:e2e -- e2e/warehouse-tasks.spec.ts --pass-with-no-tests
 
       - name: Run real purchase and warehouse recovery E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts
+        run: npm run test:e2e -- e2e/purchase-warehouse-live.spec.ts --pass-with-no-tests
 
       - name: Run real production and quality journey E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/production-quality-live.spec.ts
+        run: npm run test:e2e -- e2e/production-quality-live.spec.ts --pass-with-no-tests
 
       - name: Run real integration jobs E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/integration-jobs-live.spec.ts --workers=1 --retries=0
+        run: npm run test:e2e -- e2e/integration-jobs-live.spec.ts --pass-with-no-tests --workers=1 --retries=0
 
       - name: Run real workflow validation, try-it and drawing-together E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/workflow-validation.spec.ts e2e/try-flow-real-api.spec.ts e2e/editor-shapes-together-real-api.spec.ts
+        run: npm run test:e2e -- e2e/workflow-validation.spec.ts e2e/try-flow-real-api.spec.ts e2e/editor-shapes-together-real-api.spec.ts --pass-with-no-tests
 
       - name: Run real equipment schedule E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/equipment-schedule.spec.ts
+        run: npm run test:e2e -- e2e/equipment-schedule.spec.ts --pass-with-no-tests
 
       - name: Run real equipment changeover E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/equipment-changeover.spec.ts
+        run: npm run test:e2e -- e2e/equipment-changeover.spec.ts --pass-with-no-tests
 
       - name: Run real equipment load E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/equipment-load.spec.ts
+        run: npm run test:e2e -- e2e/equipment-load.spec.ts --pass-with-no-tests
 
       - name: Run real work instruction E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/work-instructions.spec.ts
+        run: npm run test:e2e -- e2e/work-instructions.spec.ts --pass-with-no-tests
 
       - name: Run real stock allocation E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/stock-allocations.spec.ts
+        run: npm run test:e2e -- e2e/stock-allocations.spec.ts --pass-with-no-tests
 
       - name: Run real data port E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/data-ports.spec.ts
+        run: npm run test:e2e -- e2e/data-ports.spec.ts --pass-with-no-tests
 
       - name: Run real work order plan E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/work-order-plan.spec.ts
+        run: npm run test:e2e -- e2e/work-order-plan.spec.ts --pass-with-no-tests
 
       - name: Run real NCR from defects E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/ncr-from-defects.spec.ts
+        run: npm run test:e2e -- e2e/ncr-from-defects.spec.ts --pass-with-no-tests
 
       - name: Run real receipt checklist E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/receipt-checklist.spec.ts
+        run: npm run test:e2e -- e2e/receipt-checklist.spec.ts --pass-with-no-tests
 
       - name: Run real revision retire E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/revision-retire.spec.ts
+        run: npm run test:e2e -- e2e/revision-retire.spec.ts --pass-with-no-tests
 
       - name: Run real equipment days E2E
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/equipment-days.spec.ts
+        run: npm run test:e2e -- e2e/equipment-days.spec.ts --pass-with-no-tests
 
       - name: Run real instruction quality and inventory report acceptance
         working-directory: flowmat_frontend
         env:
           REAL_API_E2E: '1'
-        run: npm run test:e2e -- e2e/instruction-quality-real-api.spec.ts e2e/inventory-reports.spec.ts --workers=1 --retries=0 --trace=off
+        run: npm run test:e2e -- e2e/instruction-quality-real-api.spec.ts e2e/inventory-reports.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
       # As in the mocked job: each failed check's page, and the backend's last warnings and errors, go into the log.
       - name: Show failed pages and backend warnings
@@ -403,6 +468,22 @@ jobs:
           echo "::group::backend warnings and errors"
           grep -E ' (WARN|ERROR) ' /tmp/flowmat-backend.log | tail -n 80 || true
           echo "::endgroup::"
+
+      # Spec files that passed are recorded with what they loaded; a failure is recorded too, so it runs again.
+      - name: Record passed specs
+        if: ${{ !cancelled() }}
+        working-directory: flowmat_frontend
+        run: |
+          node e2e/support/already-passed/select.mjs record --scope real --extra "$E2E_EXTRA" \
+            --records playwright-results/already-passed/passed.json \
+            --chunks "$E2E_CHUNK_MAP" --assets "$E2E_ASSET_LOG" --tests "$E2E_PASSED_LOG" \
+            --out playwright-results/already-passed/passed.json
+      - name: Save passed specs
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed.json
+          key: e2e-passed-real-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload backend log
         if: always()

@@ -5,7 +5,7 @@ name: Backend Tests & Build
 # catalog's folder paths, is checked by the frontend's own tests too.
 on:
   push:
-    branches: [ main, develop, 'release-validation/**' ]
+    branches: [ 'release-validation/**' ]
     paths:
       - 'flowmat_backend/**'
       - 'modules.yml'
@@ -26,10 +26,13 @@ on:
       - 'compute/sequence-optimizer/fixtures/**'
       - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/backend.yml'
+  schedule:
+    # Every test, each night on main; a pull request already ran them before its merge (docs/operations/ci-selection.md).
+    - cron: '7 18 * * *'
   # Runs it whatever changed.
   workflow_dispatch:
 
-# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+# A newer push to the same pull request replaces the older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true

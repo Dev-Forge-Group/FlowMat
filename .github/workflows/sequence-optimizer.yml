@@ -3,16 +3,14 @@ name: Sequence optimizer (Python)
 # The solver and evaluation for ordering one equipment's work orders (compute/sequence-optimizer, ADR-039). The backend's
 # SequenceFixtureTest, in backend.yml, checks that fixtures/baselines.json is what the backend computes.
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'compute/sequence-optimizer/**'
-      - '.github/workflows/sequence-optimizer.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'compute/sequence-optimizer/**'
       - '.github/workflows/sequence-optimizer.yml'
+  schedule:
+    # Each night on main; a pull request already ran this before its merge (docs/operations/ci-selection.md).
+    - cron: '37 17 * * *'
   workflow_dispatch:
 
 concurrency:

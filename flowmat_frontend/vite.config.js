@@ -4,11 +4,12 @@ import tailwindcss from '@tailwindcss/vite'
 import { dirname, resolve } from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
+import { alreadyPassedPlugin } from './e2e/support/already-passed/vitePlugin.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), alreadyPassedPlugin(__dirname)],
   build: {
     rollupOptions: {
       output: {

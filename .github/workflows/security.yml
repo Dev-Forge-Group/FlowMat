@@ -55,6 +55,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # Without an NVD_API_KEY secret the first sync of the vulnerability data takes a long while; the cache below keeps it.
+    # Not a pull request check: a pull request never waits for NVD (docs/operations/ci-selection.md).
     timeout-minutes: 150
     defaults:
       run:
@@ -76,10 +77,53 @@ jobs:
         key: dependency-check-data-${{ github.run_id }}
         restore-keys: dependency-check-data-
 
+    # The scan fails only when it cannot run; findings are listed by the next step and judged for a release
+    # (docs/status/RELEASE-CHECKLIST.md). When NVD cannot be reached or refuses the key, the error says so, so it is not
+    # read as a finding.
     - name: Run OWASP dependency check
-      run: ./gradlew dependencyCheckAnalyze
+      run: |
+        set +e
+        [ -n "$NVD_API_KEY" ] || unset NVD_API_KEY
+        ./gradlew dependencyCheckAnalyze 2>&1 | tee /tmp/dependency-check.log
+        status=${PIPESTATUS[0]}
+        if [ "$status" -ne 0 ] && grep -qE 'NvdApiException|Error updating the NVD Data' /tmp/dependency-check.log; then
+          if grep -q 'Invalid API Key' /tmp/dependency-check.log; then
+            reason='NVD refused the NVD_API_KEY secret: it is not an activated API key'
+          else
+            reason='NVD did not answer (rate limit or outage)'
+          fi
+          message="The vulnerability data could not be downloaded: $reason. Nothing was scanned, so this is not a finding."
+          echo "::error title=Vulnerability data unavailable::$message"
+          { echo '### OWASP dependency check did not run'; echo; echo "$message"; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
       env:
         NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+    - name: List findings
+      if: always()
+      run: |
+        python3 - <<'PY'
+        import json, os, pathlib
+        report = pathlib.Path('build/reports/dependency-check-report.json')
+        if not report.exists():
+            raise SystemExit(0)
+        counts, serious = {}, []
+        for dependency in json.loads(report.read_text()).get('dependencies', []):
+            for vulnerability in dependency.get('vulnerabilities', []):
+                severity = (vulnerability.get('severity') or 'UNKNOWN').upper()
+                counts[severity] = counts.get(severity, 0) + 1
+                if severity in ('HIGH', 'CRITICAL'):
+                    serious.append(f"| {dependency.get('fileName')} | {vulnerability.get('name')} | {severity} |")
+        lines = ['### OWASP dependency check', '', 'Findings by severity: '
+                 + (', '.join(f'{name} {count}' for name, count in sorted(counts.items())) or 'none'), '']
+        if serious:
+            lines += ['| Dependency | Vulnerability | Severity |', '|---|---|---|', *sorted(set(serious))]
+            print(f'::warning title=High or critical findings::{len(set(serious))} to judge before a release')
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+            summary.write('\n'.join(lines) + '\n')
+        print('\n'.join(lines))
+        PY
 
     - name: Upload dependency-check report
       if: always()
