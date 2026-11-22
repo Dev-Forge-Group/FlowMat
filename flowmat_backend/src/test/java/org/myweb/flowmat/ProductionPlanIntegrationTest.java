@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
@@ -121,7 +122,10 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.basis.available['" + milk + "']").value(150.0));
     }
 
-    /** A step that names a person waits for their shift (ADR-043 decision 5): kim works 10:00-11:00, the step takes 30 min. */
+    /**
+     * A step that names a person waits for their shift (ADR-043 decision 5), and a working-time delay before it counts their
+     * working time: kim works 10:00-11:00, the delay is 10 min and the step 30 min, so it runs 10:10-10:40.
+     */
     @Test
     void aStepWithANamedPersonWaitsForTheirShift() throws Exception {
         String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
@@ -135,21 +139,29 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         call(put("/projects/" + DEMO_PROJECT + "/workers/" + kim + "/shifts"), json(Map.of("shifts",
             java.util.List.of(Map.of("shiftStart", "10:00", "shiftEnd", "11:00", "workDays", java.util.List.of(1, 2, 3, 4, 5, 6, 7))))))
             .andExpect(status().isOk());
+        String part = item("PL-PART-" + tag, "unit_ea");
         String stool = item("PL-STOOL-" + tag, "unit_ea");
         Graph graph = new Graph("Crew " + tag);
+        String prepare = graph.node("Prepare");
         String assemble = graph.node("Assemble");
+        String prepared = graph.port(prepare, "output", part, 1, "ea");
+        String takes = graph.port(assemble, "input", part, 1, "ea");
         String out = graph.port(assemble, "output", stool, 1, "ea");
+        // Ten minutes to settle, counted in kim's working time (ADR-022): from 10:00 to 10:10.
+        call(post("/process-connections"), json(Map.of("workflowId", graph.workflow, "fromProcessId", prepare, "toProcessId", assemble,
+            "fromIoId", prepared, "toIoId", takes, "delayTimeSec", 600, "delayBasis", "working"))).andExpect(status().isOk());
         requirements(assemble, Map.of("kind", "crew", "ref", kim, "amount", 1), Map.of("kind", "time", "amount", 30));
         graph.publish();
         java.time.ZonedDateTime morning = java.time.LocalDate.of(2030, 1, 7).atTime(8, 0).atZone(java.time.ZoneId.of(zone));
         var plan = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of(
                 "target", Map.of("processIoId", out, "quantity", 1), "startAt", morning.toOffsetDateTime().toString())))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
-        var step = plan.path("nodes").get(0);
+        JsonNode step = null;
+        for (JsonNode one : plan.path("nodes")) if (one.path("processId").asText().equals(assemble)) step = one;
         org.assertj.core.api.Assertions.assertThat(java.time.OffsetDateTime.parse(step.path("startAt").asText()).toInstant())
-            .isEqualTo(morning.withHour(10).toInstant());
+            .isEqualTo(morning.withHour(10).withMinute(10).toInstant());
         org.assertj.core.api.Assertions.assertThat(java.time.OffsetDateTime.parse(step.path("endAt").asText()).toInstant())
-            .isEqualTo(morning.withHour(10).withMinute(30).toInstant());
+            .isEqualTo(morning.withHour(10).withMinute(40).toInstant());
     }
 
     /** A plan needs read access, a published revision and a graph it can plan. */

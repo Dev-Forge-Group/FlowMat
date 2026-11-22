@@ -41,10 +41,14 @@ class PlanSchedule {
     record Placed(Instant start, Instant end) {
     }
 
+    /** A connection's delay; {@code working} counts only the next step's working time (ADR-022). */
+    private record Delay(BigDecimal seconds, boolean working) {
+    }
+
     /** Each node with minutes, or between steps, placed from {@code from}; nodes in topological order. */
     Map<String, Placed> place(String projectId, FlowDemand.Graph graph, JsonNode snapshot, List<String> order,
         Map<String, BigDecimal> minutes, Instant from) {
-        Map<String, BigDecimal> delays = delays(snapshot);
+        Map<String, Delay> delays = delays(snapshot);
         Map<String, String> equipment = new HashMap<>();
         Map<String, List<String>> people = new HashMap<>();
         for (FlowDemand.Node node : graph.nodes()) {
@@ -57,12 +61,26 @@ class PlanSchedule {
         Map<String, Placed> placed = new HashMap<>();
         Map<String, Instant> busyUntil = new HashMap<>();
         for (String id : order) {
+            String machine = equipment.get(id);
+            List<String> crew = people.getOrDefault(id, List.of());
             Instant ready = from;
+            boolean unknown = false;
             for (FlowDemand.Connection connection : graph.connections()) {
                 if (!connection.to().equals(id) || !placed.containsKey(connection.from())) continue;
-                BigDecimal delay = delays.getOrDefault(connection.id(), BigDecimal.ZERO);
-                Instant after = placed.get(connection.from()).end().plusNanos(delay.movePointRight(9).longValue());
-                if (after.isAfter(ready)) ready = after;
+                Instant end = placed.get(connection.from()).end();
+                if (end == null) {
+                    unknown = true;
+                    continue;
+                }
+                Delay delay = delays.get(connection.id());
+                Instant after = delay == null ? end : afterDelay(projectId, machine, crew, end, delay);
+                if (after == null) unknown = true;
+                else if (after.isAfter(ready)) ready = after;
+            }
+            if (unknown) {
+                // A step before it could not be placed: neither can this one.
+                placed.put(id, new Placed(null, null));
+                continue;
             }
             BigDecimal working = minutes.get(id);
             if (working == null) {
@@ -70,8 +88,6 @@ class PlanSchedule {
                 continue;
             }
             Duration length = Duration.ofNanos(working.multiply(BigDecimal.valueOf(60)).movePointRight(9).longValue());
-            String machine = equipment.get(id);
-            List<String> crew = people.getOrDefault(id, List.of());
             if (machine == null && crew.isEmpty()) {
                 placed.put(id, new Placed(ready, ready.plus(length)));
                 continue;
@@ -91,9 +107,35 @@ class PlanSchedule {
         return placed;
     }
 
+    /**
+     * When a delay after {@code end} is over: plain time, or for a working-time delay the next step's equipment and people's
+     * working time (as runs count it, ADR-022); null when a year holds too little of it.
+     */
+    private Instant afterDelay(String projectId, String machine, List<String> crew, Instant end, Delay delay) {
+        Duration length = Duration.ofNanos(delay.seconds().movePointRight(9).longValue());
+        if (!delay.working() || machine == null && crew.isEmpty()) return end.plus(length);
+        for (Duration window : List.of(FIRST_WINDOW, EquipmentWorkingTimeQuery.LONGEST_WINDOW)) {
+            Instant after = WorkingStretches.afterWorking(stretches(projectId, machine, crew, end, window), end, length);
+            if (after != null) return after;
+        }
+        return null;
+    }
+
     /** The step in the time its equipment and named people all work; no end when a year holds too little of it. */
     private Placed within(String projectId, String machine, List<String> crew, Instant earliest, Duration length) {
         for (Duration window : List.of(FIRST_WINDOW, EquipmentWorkingTimeQuery.LONGEST_WINDOW)) {
+            List<WorkingStretch> stretches = stretches(projectId, machine, crew, earliest, window);
+            Instant start = WorkingStretches.firstStart(stretches, earliest);
+            if (start == null) continue;
+            Instant end = WorkingStretches.afterWorking(stretches, start, length);
+            if (end != null) return new Placed(start, end);
+        }
+        return new Placed(null, null);
+    }
+
+    /** The time in [earliest, earliest + window) that the equipment and every named person with a calendar all work. */
+    private List<WorkingStretch> stretches(String projectId, String machine, List<String> crew, Instant earliest, Duration window) {
+        {
             OffsetDateTime from = earliest.atOffset(ZoneOffset.UTC);
             OffsetDateTime to = from.plus(window);
             List<WorkingStretch> stretches = List.of(new WorkingStretch(from.toInstant(), to.toInstant()));
@@ -112,22 +154,19 @@ class PlanSchedule {
                         time.spans().stream().map(span -> new WorkingStretch(span.start(), span.end())).toList());
                 }
             }
-            Instant start = WorkingStretches.firstStart(stretches, earliest);
-            if (start == null) continue;
-            Instant end = WorkingStretches.afterWorking(stretches, start, length);
-            if (end != null) return new Placed(start, end);
+            return stretches;
         }
-        return new Placed(null, null);
     }
 
-    /** Each connection's delay in seconds, as runs read it (schema version 3 on). */
-    private static Map<String, BigDecimal> delays(JsonNode snapshot) {
-        Map<String, BigDecimal> delays = new HashMap<>();
+    /** Each connection's delay, as runs read it (schema version 3 on; a basis of working time from ADR-022). */
+    private static Map<String, Delay> delays(JsonNode snapshot) {
+        Map<String, Delay> delays = new HashMap<>();
         if (snapshot.path("schemaVersion").asInt(1) < 3) return delays;
         for (JsonNode connection : snapshot.path("connections")) {
             JsonNode delay = connection.path("delayTimeSec");
             if (delay.isNumber() && delay.decimalValue().signum() > 0) {
-                delays.put(connection.path("connectionId").asText(), delay.decimalValue());
+                delays.put(connection.path("connectionId").asText(),
+                    new Delay(delay.decimalValue(), "working".equals(connection.path("delayBasis").asText(null))));
             }
         }
         return delays;
