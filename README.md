@@ -1,6 +1,11 @@
 # FlowMat
 
-This project tracks materials in an ERP workflow.
+From idea to production. FlowMat models what comes in, how it changes and where it goes, and runs and simulates
+it. Today you draw a production process in 2D, the editor checks it as you draw and tries it with quantities and
+working time, and production runs against stock, BOMs, LOTs and purchasing. Next (this month, roadmap §8): set a
+target, see the materials, shortages, time and bottleneck, and confirm it into work orders and purchase orders. The
+drawing is one view of the model; the same engine is meant to map software flows later. The one-year plan is
+[docs/status/ROADMAP-2026-11-23.md](docs/status/ROADMAP-2026-11-23.md).
 
 Project documentation starts at [`docs/README.md`](docs/README.md): current status and work board,
 architecture decisions, domain specs, and the archive of superseded documents.
