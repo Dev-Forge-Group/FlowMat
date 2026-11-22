@@ -17,12 +17,18 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
+    /**
+     * The API's version (docs/api/README.md): the major part goes up when a published operation or a field of a schema
+     * goes away, which OpenApiContractTest checks against docs/api/openapi.json.
+     */
+    public static final String API_VERSION = "1.0.0";
+
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
                         .title("FlowMat API")
-                        .version("1.0.0")
+                        .version(API_VERSION)
                         .description("FlowMat - Universal Flow Engine API Documentation")
                         .contact(new Contact()
                                 .name("FlowMat Team")

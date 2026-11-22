@@ -14,6 +14,8 @@ on:
       # SequenceFixtureTest checks the sequence optimizer's baselines against SequenceCost.
       - 'compute/sequence-optimizer/fixtures/**'
       - 'compute/flow-kernel/fixtures/**'
+      # OpenApiContractTest compares the served API with this contract.
+      - 'docs/api/openapi.json'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, develop ]
@@ -25,6 +27,8 @@ on:
       # SequenceFixtureTest checks the sequence optimizer's baselines against SequenceCost.
       - 'compute/sequence-optimizer/fixtures/**'
       - 'compute/flow-kernel/fixtures/**'
+      # OpenApiContractTest compares the served API with this contract.
+      - 'docs/api/openapi.json'
       - '.github/workflows/backend.yml'
   schedule:
     # Every test, each night on main; a pull request already ran them before its merge (docs/operations/ci-selection.md).
