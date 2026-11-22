@@ -14,6 +14,7 @@ test.use({ viewport: { width: 1920, height: 1080 }, trace: 'off' })
  * Plan panel in week 3. It goes into browser-e2e.yml once it passes. The numbers are ADR-043's rules worked by hand:
  * Pack 1,000 / 24 = 41.6667 batches; 1% breakage before Pack, so Fill makes 1,010.1011; Fill takes 0.2 kg of mix a
  * bottle and 2% is lost before it, so Mix sends 206.1431 kg in 1.8406 batches of 112 kg; each batch takes 100 kg of milk.
+ * 150 kg of milk makes 814.968 bottles; counted units round down to whole ones, as "buildable" does for BOMs today.
  */
 test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', async ({ page }) => {
   test.setTimeout(180_000)
@@ -94,7 +95,7 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     // Week 2: the plan, read only.
     const target = { processIoId: packOut, quantity: 1000, unit: 'ea' }
     const plan = await api<any>('POST', `/workflows/${workflowId}/plan-previews`, { target })
-    expect(plan).toMatchObject({ revisionId: revision.workflowRevisionId, feasible: true, buildable: 814.968 })
+    expect(plan).toMatchObject({ revisionId: revision.workflowRevisionId, feasible: true, buildable: 814 })
     const needs = Object.fromEntries((plan.requirements as any[]).map((row) =>
       [row.itemId, [row.needed, row.available, row.shortage, row.unit]]))
     expect(needs).toEqual({
@@ -125,7 +126,7 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     await panel.getByRole('button', { name: 'Plan', exact: true }).click()
     await expect(panel.getByRole('row', { name: /Raw milk/ })).toContainText('184.0564 kg')
     await expect(panel.getByRole('row', { name: /Raw milk/ })).toContainText('34.0564 kg short')
-    await expect(panel.getByText('Can make 814.968 now')).toBeVisible()
+    await expect(panel.getByText('Can make 814 now')).toBeVisible()
     await expect(panel.getByText('Bottleneck: Mix')).toBeVisible()
     await panel.getByRole('row', { name: /Raw milk/ }).click()
     await expect(page.locator('.react-flow__node.is-traced')).toHaveCount(4)
