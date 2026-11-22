@@ -7,6 +7,7 @@
 //   FLOWMAT_API=http://127.0.0.1:8080/api FLOWMAT_USER=demo-owner FLOWMAT_PASSWORD=... node scripts/demo/melon-milk.mjs
 //
 // It prints the project and workflow, and the plan for 1,000 bottles.
+// Home's "견본으로 시작" builds the same sample in the browser (flowmat_frontend/src/features/sample-start): change both.
 
 import { connect, printPlan, sample } from './lib.mjs'
 

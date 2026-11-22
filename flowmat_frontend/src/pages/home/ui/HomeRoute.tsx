@@ -26,6 +26,7 @@ import {
   preloadTemplatesRoute,
 } from '../../../app/router/routePreload'
 import { preloadWorkspaceExperience } from '../../workspace/ui/workspacePreload'
+import { StartFromSample } from '../../../features/sample-start/ui/StartFromSample'
 
 type DashboardProps = {
   onLogout: () => void
@@ -332,6 +333,8 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
               </p>
             )}
           </form>
+
+          <StartFromSample ownerId={currentUser?.userId} />
         </div>
 
         <div className="mb-3.5 flex items-center justify-between">
