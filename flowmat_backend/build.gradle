@@ -108,7 +108,8 @@ dependencies {
 	testImplementation 'com.dylibso.chicory:runtime:1.7.5'
 	testImplementation 'com.dylibso.chicory:compiler:1.7.5'
 	testCompileOnly 'org.projectlombok:lombok'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	// The test impact filter and listener (src/test/java/org/myweb/flowmat/testimpact) use the launcher API.
+	testImplementation 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
@@ -191,6 +192,56 @@ def moduleSources = files(contextModules.collect { it.file('src/main/java') })
 	coverageTask.configure {
 		classDirectories.from(moduleClasses)
 		sourceDirectories.from(moduleSources)
+	}
+}
+
+// Backend test selection (docs/operations/ci-selection.md §3). -PtestImpact.record writes, for each test class, the
+// project classes it ran into build/test-impact; -PtestImpact.previous=<an earlier build/test-impact> also leaves out the
+// classes whose last run passed against the same code. Off without the properties: a local run runs everything.
+def testImpactDir = layout.buildDirectory.dir('test-impact')
+def testImpactRecord = providers.gradleProperty('testImpact.record').isPresent()
+def testImpactPrevious = providers.gradleProperty('testImpact.previous')
+// What every test depends on besides the classes: resources (migrations, application settings), build files,
+// fixtures read from disk, and the libraries on the test class path. Any change runs every test class.
+def testImpactKey = {
+	def digest = java.security.MessageDigest.getInstance('SHA-256')
+	def inputs = files(
+		fileTree('src/main/resources'), fileTree('src/test/resources'),
+		fileTree('modules') { include '*/src/main/resources/**', '*/src/test/resources/**', '*/build.gradle' },
+		'build.gradle', 'settings.gradle', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', '../modules.yml',
+		fileTree('../compute/condition-expression/fixtures'), fileTree('../compute/sequence-optimizer/fixtures'),
+		fileTree('../compute/flow-kernel/fixtures'))
+	inputs.files.findAll { it.isFile() }.sort { it.absolutePath }.each { input ->
+		digest.update(projectDir.toPath().relativize(input.toPath()).toString().getBytes('UTF-8'))
+		digest.update(input.bytes)
+	}
+	configurations.testRuntimeClasspath.files.findAll { !it.absolutePath.startsWith(projectDir.absolutePath) }
+		.collect { it.name }.sort().each { digest.update(it.getBytes('UTF-8')) }
+	digest.digest().encodeHex().toString()
+}
+if (testImpactRecord) {
+	def testImpactOut = testImpactDir.get().asFile
+	tasks.named('test') {
+		systemProperty 'testImpact.out', testImpactOut.absolutePath
+		// Starts the shared context and checks the schema, whatever else is left out.
+		systemProperty 'testImpact.alwaysRun', 'org.myweb.flowmat.FlowMatSmokeTest'
+		if (testImpactPrevious.isPresent()) {
+			systemProperty 'testImpact.previous', file(testImpactPrevious.get()).absolutePath
+			// When every class already passed, nothing is left to discover but the smoke test.
+			failOnNoDiscoveredTests = false
+		}
+		def classDirs = sourceSets.main.output.classesDirs + sourceSets.test.output.classesDirs + moduleClasses
+		jvmArgumentProviders.add({ ["-DtestImpact.key=${testImpactKey()}".toString(),
+			"-DtestImpact.classDirs=${classDirs.asPath}".toString()] } as CommandLineArgumentProvider)
+		outputs.dir(testImpactOut).withPropertyName('testImpact')
+		doFirst { project.delete(testImpactOut) }
+	}
+	// The listener resets the agent at each class, so the coverage is the sum of the pieces it wrote, including the
+	// pieces of classes left out (copied from their last run: the classes they ran are unchanged).
+	[tasks.named('jacocoTestReport'), tasks.named('jacocoTestCoverageVerification')].each { coverageTask ->
+		coverageTask.configure {
+			executionData.from(fileTree(testImpactOut) { include 'exec/*.exec' })
+		}
 	}
 }
 
