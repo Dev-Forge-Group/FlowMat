@@ -26,6 +26,7 @@ import {
   preloadTemplatesRoute,
 } from '../../../app/router/routePreload'
 import { preloadWorkspaceExperience } from '../../workspace/ui/workspacePreload'
+import { StartFromSample } from '../../../features/sample-start/ui/StartFromSample'
 
 type DashboardProps = {
   onLogout: () => void
@@ -332,6 +333,8 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
               </p>
             )}
           </form>
+
+          <StartFromSample ownerId={currentUser?.userId} />
         </div>
 
         <div className="mb-3.5 flex items-center justify-between">
@@ -926,8 +929,15 @@ export function HomeRoute() {
                 onChange={(event) => setAuthPassword(event.target.value)}
                 placeholder="••••••••"
                 required
+                minLength={authMode === 'signup' ? 8 : undefined}
+                aria-describedby={authMode === 'signup' ? 'signup-password-rule' : undefined}
                 className="w-full rounded-[9px] border border-[#2a2b35] bg-white/[0.02] px-3 py-2.5 text-sm text-[#e8e7ee] outline-none transition placeholder:text-[#5a5866] focus:border-[#a06bff] focus:bg-[#a06bff]/[0.03] focus:shadow-[0_0_0_3px_rgba(160,107,255,0.16)]"
               />
+              {authMode === 'signup' && (
+                <p id="signup-password-rule" className="mt-1 text-[11px] text-[#8b899a]">
+                  8자 이상, 아이디·이메일과 다르게
+                </p>
+              )}
             </div>
 
             {authError && (

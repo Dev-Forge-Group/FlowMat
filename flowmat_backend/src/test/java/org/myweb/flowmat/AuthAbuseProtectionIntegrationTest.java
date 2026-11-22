@@ -1,6 +1,7 @@
 package org.myweb.flowmat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -88,6 +89,12 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
         store.storeRefreshToken("jti-a-" + userId, userId, "device-a", Duration.ofDays(30));
         store.storeRefreshToken("jti-b-" + userId, userId, "device-b", Duration.ofDays(30));
         String token = store.createPasswordResetToken(userId, Duration.ofMinutes(30));
+
+        // A password too short is refused before anything changes: the sessions and the link stay (login-security.md).
+        assertThatThrownBy(() -> auth.confirmPasswordReset(new PasswordResetConfirmRequest(token, "short")))
+            .hasMessageContaining("at least 8");
+        assertThat(store.getRefreshToken("jti-a-" + userId)).isNotNull();
+        assertThat(store.getPasswordResetUserId(token)).isEqualTo(userId);
 
         auth.confirmPasswordReset(new PasswordResetConfirmRequest(token, "New-password-2026!"));
 

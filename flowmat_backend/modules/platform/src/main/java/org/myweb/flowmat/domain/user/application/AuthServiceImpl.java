@@ -54,6 +54,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProvider jwtProvider;
     private final AuthRedisStore authRedisStore;
     private final MailService mailService;
+    private volatile String unknownUserHash;
 
     @Override
     @Transactional(readOnly = true)
@@ -101,6 +102,7 @@ public class AuthServiceImpl implements AuthService {
         if (request.userBirth() == null || email == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
+        password = PasswordPolicy.require(password, userId, email);
         if (!authRedisStore.isEmailVerified(email)) {
             throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
@@ -146,6 +148,8 @@ public class AuthServiceImpl implements AuthService {
 
         User user = resolveLoginUser(userIdOrEmail);
         if (user == null) {
+            // As slow as a wrong password, so the answer's timing does not tell which accounts exist.
+            passwordEncoder.matches(password, unknownUserHash());
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "User ID/email or password is incorrect.");
         }
         if (authRedisStore.isLoginLocked(user.getUserId())) {
@@ -321,7 +325,7 @@ public class AuthServiceImpl implements AuthService {
         }
         User user = userRepository.findByUserId(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "User not found."));
-        user.setUserPwd(passwordEncoder.encode(request.newPassword().trim()));
+        user.setUserPwd(passwordEncoder.encode(PasswordPolicy.require(request.newPassword(), user.getUserId(), user.getUserEmail())));
         user.setPwdUpdatedAt(OffsetDateTime.now());
         // Sessions opened with the old password end here; a failure rolls the new password back and keeps the link usable.
         authRedisStore.revokeAllRefreshTokensOrFail(user.getUserId());
@@ -419,6 +423,7 @@ public class AuthServiceImpl implements AuthService {
         ensureUnique(userId, null, tel, nickname);
 
         String email = resolveSocialEmail(provider, providerId, providerEmail);
+        password = PasswordPolicy.require(password, userId, email);
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setUserId(userId);
@@ -477,6 +482,16 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByUserNickname(nickname)) {
             throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
         }
+    }
+
+    /** A hash no password matches, made once with the same encoder, for logins to accounts that do not exist. */
+    private String unknownUserHash() {
+        String hash = unknownUserHash;
+        if (hash == null) {
+            hash = passwordEncoder.encode(UUID.randomUUID().toString());
+            unknownUserHash = hash;
+        }
+        return hash;
     }
 
     private User resolveLoginUser(String userIdOrEmail) {

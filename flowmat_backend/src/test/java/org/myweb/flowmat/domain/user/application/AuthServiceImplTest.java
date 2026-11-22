@@ -147,6 +147,17 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void loginToAnAccountThatDoesNotExistSpendsAPasswordCheckToo() {
+        when(userRepository.findByUserId("nobody")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("unknown-user-hash");
+
+        assertThatThrownBy(() -> authService.login(new UserLoginRequest("nobody", "plain-password", "device-1"), "JUnit", "127.0.0.1"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("User ID/email or password is incorrect.");
+        verify(passwordEncoder).matches("plain-password", "unknown-user-hash");
+    }
+
+    @Test
     void refreshRotatesRefreshToken() {
         when(jwtProvider.isRefreshToken("refresh-token")).thenReturn(true);
         when(jwtProvider.resolveUserId("refresh-token")).thenReturn("tester");

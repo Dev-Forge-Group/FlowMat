@@ -8,6 +8,9 @@
 //
 // It prints the project and workflow, and the plan for 1,000 bottles.
 
+// Home's "견본으로 시작" builds the same sample from data (flowmat_frontend/src/features/sample-start/model/samples.ts):
+// change both.
+
 import { connect, printPlan, sample } from './lib.mjs'
 
 const { call, user } = await connect()
