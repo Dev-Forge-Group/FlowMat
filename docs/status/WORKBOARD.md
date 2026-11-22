@@ -1,8 +1,10 @@
 # 작업 현황판
 
-> **현행 문서** · 최종 갱신 2026-11-21 · 작업을 시작·끝내거나 결정이 나면 같은 변경에서 고친다. 무엇이 구현됐는지는 [CURRENT_CAPABILITIES](CURRENT_CAPABILITIES.md), 아키텍처 결정은 [결정 인계](../architecture/decision-handoff.md)가 기준이다. 이 판은 "지금 무엇을 하고, 다음에 무엇을 하며, 무엇을 기다리는가"만 모은다.
+> **현행 문서** · 최종 갱신 2026-11-22 · 작업을 시작·끝내거나 결정이 나면 같은 변경에서 고친다. 무엇이 구현됐는지는 [CURRENT_CAPABILITIES](CURRENT_CAPABILITIES.md), 아키텍처 결정은 [결정 인계](../architecture/decision-handoff.md)가 기준이다. 이 판은 "지금 무엇을 하고, 다음에 무엇을 하며, 무엇을 기다리는가"만 모은다.
 
 ## 1. 진행 중
+
+> 2026-11-22 리드: 사용자 지시("이미 통과하고 서로 안 물려 있는 테스트는 다음 push·PR에서 빼라, 개발이 너무 느리다")로 CI를 고쳤다(#131, [CI가 다시 돌리지 않는 것](../operations/ci-selection.md)). merge는 검사를 다시 돌리지 않고 밤마다 `main`에서 전부 돈다. PR의 E2E는 같은 코드로 통과한 명세 파일을 뺀다. 모의 E2E 조각이 6~7분에서 33~50초가 됐다. 백엔드는 같은 Spring 컨텍스트끼리 묶어 컨텍스트 기동 42 → 26번이다. OWASP는 PR 조건이 아니고, NVD 장애를 발견과 구분해 적는다. 릴리스 후보 점검표가 `main` `4d08345`에서 통과했다(OWASP만 미실행(NVD)). 태그 `v0.9.0-rc.1`은 이 세션이 태그를 push할 수 없어 사용자가 단다. 다음은 백엔드 테스트 고르기(클래스마다 실행된 코드).
 
 > 2026-11-21 리드(2): 11-23 계획의 1~4주차가 #130에 들어갔다(1주차 1번 릴리스 후보 태그만 NVD 키를 기다린다). 흐름 커널이 Java의 답(검증 170, 경로 130, 실행 94, 조건식 1,641)과 모두 같고, 편집기에 "As drawn"과 "Try it"이 생겼다. 서버는 Java를 둔다(Chicory 18배). 큰 화면 셋은 모두 800줄 이하다. 그다음 한 달은 [월간 개발 계획 12-21 ~ 01-15](MONTH-PLAN-2026-12-21.md)다: 돌려 보기에 시간을 넣고(Java가 계산한 함께 일하는 구간으로 서버의 `scheduledAt`과 같게), 그리기 층을 요소 단위로 함께 고치게 한다.
 
@@ -21,7 +23,7 @@
 > **사용자가 해야 열리는 일**(여기서 할 수 없었다):
 > 1. `main` 브랜치 보호(1주차 6번): 저장소 Settings에서 직접 push 금지와 `Commit Attribution` 필수.
 > 2. 개발 DB(5434)에 V133–V137 적용(3주차 2번): 그 PC에서 `SOURCE_CONTAINER=flowmat-session1-db ALLOW_DROPPED="cad_import_job payment_discount project_activity_log project_comment project_export project_file project_permission resource_types resource_usage resources simulation_run simulation_step" scripts/ops/upgrade-rehearsal.sh`가 통과한 뒤 같은 jar로 적용한다([절차](../operations/backup-restore.md) §5).
-> 3. 릴리스 후보 태그(4주차 3번): 이름(권장 `v0.9.0-rc.1`)과 라이선스 표기를 정하면 [점검표](RELEASE-CHECKLIST.md)를 그 커밋에서 돌리고 태그를 단다.
+> 3. 릴리스 후보 태그 `v0.9.0-rc.1`을 `main` `4d08345`에 push한다(점검표는 2026-11-22 통과, 이 세션은 태그 push가 403). 배포 결정 전에는 저장소 secret `NVD_API_KEY`에 활성화한 API 키를 넣고 `security.yml`을 돌린다(지금 값은 NVD가 거절한다).
 > 4. 편집기 패키지 전환(4주차 1번)에 필요한 `read:packages` 토큰, uniplace-ai의 AWS 신뢰 정책. (`.github` 저장소의 첫 커밋은 11-21에 사용자가 SSH로 push했다. `main` = `4e5a52b`. HTTPS로는 저장된 토큰이 그 저장소에 쓰지 못해 403이었다.)
 > 5. FM-AI 3단계 전([ADR-039](../architecture/adr/ADR-039-work-order-sequence-optimizer.md)): 개발 서버에서 설비 몇 개의 `sequence-snapshot`을 받아 `compute/sequence-optimizer/real/`에 두고 `python -m sequence_optimizer.evaluate --snapshots real/*.json --out real/results`로 같은 표를 만든다. 그리고 풀이기(Python 서비스)를 어디서 돌릴지 정한다.
 
