@@ -14,6 +14,10 @@
 # SKIP_BUILD=1 to reuse the built jar, CLEANUP=1 to remove the containers at the end.
 set -euo pipefail
 
+# Git Bash (MSYS2) rewrites arguments that start with /tmp into Windows paths, but these /tmp paths are inside the
+# containers. Only /tmp is left alone: host paths must still be converted for docker.exe and java.exe.
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+$MSYS2_ARG_CONV_EXCL;}/tmp"
+
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BACKEND="$ROOT/flowmat_backend"
 TARGET_CONTAINER=${TARGET_CONTAINER:-flowmat-upgrade-rehearsal-db}

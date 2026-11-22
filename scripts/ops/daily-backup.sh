@@ -11,6 +11,10 @@
 # ATTACHMENTS_DIR (unset: no attachment copy), VERIFY (1; 0 skips the restore check, not for daily use).
 set -euo pipefail
 
+# Git Bash (MSYS2) rewrites arguments that start with /tmp into Windows paths, but these /tmp paths are inside the
+# containers. Only /tmp is left alone: host paths must still be converted for docker.exe and java.exe.
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+$MSYS2_ARG_CONV_EXCL;}/tmp"
+
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BACKEND="$ROOT/flowmat_backend"
 SOURCE_CONTAINER=${SOURCE_CONTAINER:-flowmat_backend-postgres-1}
