@@ -43,7 +43,7 @@ cd flowmat_backend && ./gradlew test jacocoTestCoverageVerification && ./gradlew
 
 - CI는 이미 있는 워크플로가 판정한다: `backend.yml`, `frontend.yml`, `mock-e2e.yml`, `browser-e2e.yml`, `compute.yml`, `security.yml`, `commit-attribution.yml`. 새 범용 워크플로로 중복하지 않는다. 경로 조건 때문에 새 파일이 검사에서 빠지지 않는지 본다.
 - 프런트만의 성공을 전체 통과로 적지 않는다. 서버와 함께 도는 확인은 `browser-e2e.yml`(실제 Postgres·Redis)이다.
-- PR의 E2E는 같은 코드로 이미 통과한 명세 파일을 건너뛰고, merge는 검사를 다시 돌리지 않으며, 매일 밤 `main`에서 전부 돈다([CI가 다시 돌리지 않는 것](docs/operations/ci-selection.md)). 건너뛴 명세는 통과 기록이 있는 것이고, 그 규칙을 넓혀 실패를 숨기지 않는다. 의존성 감사(OWASP)는 PR merge의 조건이 아니다.
+- PR은 같은 코드로 이미 통과한 E2E 명세 파일과 백엔드 테스트 클래스를 건너뛰고, merge는 검사를 다시 돌리지 않으며, 매일 밤 `main`에서 전부 돈다([CI가 다시 돌리지 않는 것](docs/operations/ci-selection.md)). 건너뛴 명세는 통과 기록이 있는 것이고, 그 규칙을 넓혀 실패를 숨기지 않는다. 의존성 감사(OWASP)는 PR merge의 조건이 아니다.
 - 릴리스 후보는 [점검표](docs/status/RELEASE-CHECKLIST.md)가 같은 커밋에서 모두 통과해야 한다. 초록 배지 하나로 대신하지 않는다.
 - JaCoCo 기준(줄 45%, 분기 30%)을 낮추지 않는다.
 
