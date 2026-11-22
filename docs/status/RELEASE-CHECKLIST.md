@@ -1,12 +1,12 @@
 # 릴리스 후보 점검표
 
-> **현행 문서** · 확인 2026-11-14(`main` V134). 검사를 더하거나 빼면 같은 변경에서 고친다.
+> **현행 문서** · 확인 2026-11-22(실행 조건과 의존성 감사 판정). 검사를 더하거나 빼면 같은 변경에서 고친다.
 
 [월간 계획](MONTH-PLAN-2026-11-16.md) 3주차 3번이다. 한 커밋을 릴리스 후보로 부르려면 아래가 **그 커밋에서** 모두 통과해야 한다. 다른 커밋의 결과는 가져오지 않는다. 통과하면 4주차에 태그를 달고 [CURRENT_CAPABILITIES](CURRENT_CAPABILITIES.md)를 그 커밋 기준으로 맞춘다.
 
 ## 1. 자동 검사 (GitHub Actions)
 
-`main`에 들어간 그 커밋의 실행이 모두 초록이어야 한다. 경로 조건 때문에 돌지 않은 워크플로는 `workflow_dispatch`로 그 커밋에서 직접 돌린다.
+그 커밋에서 아래 워크플로를 `workflow_dispatch`로 돌려 모두 초록이어야 한다. merge는 검사를 다시 돌리지 않고, PR은 이미 통과한 E2E 명세를 건너뛴다. 손으로 돌리면 빼는 것 없이 다 돈다([CI가 다시 돌리지 않는 것](../operations/ci-selection.md)).
 
 | # | 검사 | 워크플로 | 통과 기준 |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 | 3 | 모의 API 브라우저 테스트 | `mock-e2e.yml` | 세 조각 모두 실패 0(재시도로 통과한 것은 원인을 적는다) |
 | 4 | 실 API 브라우저 테스트 | `browser-e2e.yml` | 모든 단계 통과. 두 여정의 `purchase-warehouse-live`, `production-quality-live`가 들어 있다. 이 워크플로는 스펙을 하나씩 적으므로, 새 실 API 스펙은 단계를 더해야 돈다. `labor-premium-cost-real-api`만 빠져 있다: 일회용 환경 전용 표시(`FLOWMAT_*_E2E_DISPOSABLE`)가 있어야 도는 스펙이다 |
 | 5 | 작성자 표기 | `commit-attribution.yml` | 통과([AGENTS.md](../../AGENTS.md)) |
-| 6 | 의존성 감사 | `security.yml` | `npm audit --audit-level=moderate` 0건, `dependencyCheckAnalyze`(OWASP) 보고서에 새 높음·치명 항목 없음. 남기는 항목은 이유를 적는다. OWASP는 저장소 secret `NVD_API_KEY`가 있으면 빠르고, 없으면 첫 동기화가 오래 걸린다(그다음은 캐시) |
+| 6 | 의존성 감사 | `security.yml` | `npm audit --audit-level=moderate` 0건. OWASP 요약(List findings)에 새 높음·치명 항목 없음. 남기는 항목은 이유를 적는다. OWASP가 `Vulnerability data unavailable`로 실패하면 발견이 아니라 돌지 못한 것이다: 칸에 "미실행(NVD)"을 적고 후보 태그는 단다. 배포 결정 전에는 키(`NVD_API_KEY`, 활성화한 API 키)나 NVD를 고쳐 돌린 결과가 있어야 한다. 키가 없으면 첫 동기화가 오래 걸린다(그다음은 캐시) |
 
 ## 2. 두 여정
 

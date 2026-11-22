@@ -2,9 +2,13 @@ name: Mock Browser E2E
 
 # The browser checks that mock the API. They need only the frontend, so they run when it or this file changes; they were
 # a job of browser-e2e.yml, which runs for backend changes too.
+#
+# A pull request runs only the spec files that have not yet passed against the same code (docs/operations/ci-selection.md):
+# a spec that passed before, with the same spec, the same support files and the same built files loaded, is left out.
+# The merge to main does not run them again; every spec runs each night on main, and on a manual run.
 on:
   push:
-    branches: [ main, develop, 'release-validation/**' ]
+    branches: [ 'release-validation/**' ]
     paths:
       - 'flowmat_frontend/**'
       - '.github/workflows/mock-e2e.yml'
@@ -13,9 +17,13 @@ on:
     paths:
       - 'flowmat_frontend/**'
       - '.github/workflows/mock-e2e.yml'
+  schedule:
+    # Every spec, each night on main: catches what the selection cannot see (the date, a new browser, two pull requests
+    # that passed apart).
+    - cron: '43 17 * * *'
   workflow_dispatch:
 
-# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+# A newer push to the same pull request replaces the older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -36,6 +44,11 @@ jobs:
     env:
       REAL_API_E2E: ''
       E2E_WEB_SERVER: preview
+      # A shard takes whole spec files, so it knows whether all of a file's tests passed.
+      E2E_FILE_SHARDS: '1'
+      E2E_CHUNK_MAP: playwright-results/already-passed/chunk-map.json
+      E2E_ASSET_LOG: playwright-results/already-passed/requests.log
+      E2E_PASSED_LOG: playwright-results/already-passed/tests.jsonl
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -45,6 +58,43 @@ jobs:
           node-version: '22.x'
           cache: npm
           cache-dependency-path: flowmat_frontend/package-lock.json
+
+      # Each shard keeps its own record of the spec files that passed; a pull request reads all three.
+      - name: Restore passed specs (shard 1)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-1.json
+          key: e2e-passed-mock-1-${{ github.run_id }}
+          restore-keys: e2e-passed-mock-1-
+      - name: Restore passed specs (shard 2)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-2.json
+          key: e2e-passed-mock-2-${{ github.run_id }}
+          restore-keys: e2e-passed-mock-2-
+      - name: Restore passed specs (shard 3)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-3.json
+          key: e2e-passed-mock-3-${{ github.run_id }}
+          restore-keys: e2e-passed-mock-3-
+
+      # The shard's spec files are chosen by name alone; a pull request leaves out the ones that already passed.
+      - name: Choose this shard's specs
+        working-directory: flowmat_frontend
+        env:
+          FULL: ${{ github.event_name != 'pull_request' && '--full' || '' }}
+        run: |
+          node e2e/support/already-passed/select.mjs plan --scope mock --shard ${{ matrix.shard }}/3 $FULL \
+            --extra "$(git hash-object ../.github/workflows/mock-e2e.yml)" \
+            --records playwright-results/already-passed/passed-1.json \
+            --records playwright-results/already-passed/passed-2.json \
+            --records playwright-results/already-passed/passed-3.json \
+            --out playwright-results/already-passed/skip.json
+          echo "E2E_SKIP_FILE=$PWD/playwright-results/already-passed/skip.json" >> "$GITHUB_ENV"
 
       - name: Install frontend dependencies
         working-directory: flowmat_frontend
@@ -62,7 +112,7 @@ jobs:
         working-directory: flowmat_frontend
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-results/mock-${{ matrix.shard }}.json
-        run: npm run test:e2e -- --shard=${{ matrix.shard }}/3 --workers=1 --trace=off --reporter=line,json --output=test-results/mock-${{ matrix.shard }}
+        run: npm run test:e2e -- --workers=1 --trace=off --pass-with-no-tests --reporter=line,json,./e2e/support/already-passed/reporter.ts --output=test-results/mock-${{ matrix.shard }}
 
       # A failed check's page, as Playwright last saw it, goes into the log too, so a rare failure can be read without
       # downloading the artifacts.
@@ -75,6 +125,25 @@ jobs:
             sed -n '1,250p' "$file"
             echo "::endgroup::"
           done || true
+
+      # Spec files that passed are recorded with what they loaded; a failure is recorded too, so it runs again.
+      - name: Record passed specs
+        if: ${{ !cancelled() }}
+        working-directory: flowmat_frontend
+        run: |
+          node e2e/support/already-passed/select.mjs record --scope mock \
+            --extra "$(git hash-object ../.github/workflows/mock-e2e.yml)" \
+            --records playwright-results/already-passed/passed-1.json \
+            --records playwright-results/already-passed/passed-2.json \
+            --records playwright-results/already-passed/passed-3.json \
+            --chunks "$E2E_CHUNK_MAP" --assets "$E2E_ASSET_LOG" --tests "$E2E_PASSED_LOG" \
+            --out playwright-results/already-passed/passed-${{ matrix.shard }}.json
+      - name: Save passed specs
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: flowmat_frontend/playwright-results/already-passed/passed-${{ matrix.shard }}.json
+          key: e2e-passed-mock-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload mocked Playwright artifacts
         if: always()

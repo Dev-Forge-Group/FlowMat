@@ -195,7 +195,7 @@ def moduleSources = files(contextModules.collect { it.file('src/main/java') })
 }
 
 dependencyCheck {
-	formats = ['HTML', 'SARIF']
+	formats = ['HTML', 'SARIF', 'JSON']
 	// Kept under the Gradle user home so CI can cache it between weekly runs (security.yml).
 	data {
 		directory = "${gradle.gradleUserHomeDir}/dependency-check-data"

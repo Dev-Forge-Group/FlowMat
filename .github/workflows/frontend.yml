@@ -4,7 +4,7 @@ name: Frontend Tests & Lint
 # are limited. A backend or docs change does not change these results.
 on:
   push:
-    branches: [ main, develop, 'release-validation/**' ]
+    branches: [ 'release-validation/**' ]
     paths:
       - 'flowmat_frontend/**'
       - 'modules.yml'
@@ -23,10 +23,13 @@ on:
       # flowKernel.test.ts and toKernelGraph.test.ts run the editor's flow kernel on these.
       - 'compute/flow-kernel/fixtures/**'
       - '.github/workflows/frontend.yml'
+  schedule:
+    # Each night on main; a pull request already ran this before its merge (docs/operations/ci-selection.md).
+    - cron: '27 17 * * *'
   # Runs it whatever changed.
   workflow_dispatch:
 
-# A newer push to the same pull request replaces the older run. Each push to main keeps its own run.
+# A newer push to the same pull request replaces the older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -70,6 +73,10 @@ jobs:
 
     - name: Run tests
       run: npm test
+
+    # The rules that let pull requests leave out E2E specs that already passed (docs/operations/ci-selection.md).
+    - name: Check the E2E selection
+      run: node --test e2e/support/already-passed/select-check.mjs
 
     - name: Build
       run: npm run build
