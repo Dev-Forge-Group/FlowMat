@@ -22,6 +22,8 @@ public record WorkflowRevisionSnapshot(
     List<NodeExecutionPolicyResponse> nodePolicies,
     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NodeExecutionBindingResponse> nodeBindings,
     /** The guided views as they were at publish (ADR-037); left out when there were none. */
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GuidedViewResponse> guidedViews
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GuidedViewResponse> guidedViews,
+    /** Nodes' execution requirements as fixed at publish (ADR-043 decision 4); left out when there were none. */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<ProcessRequirementResponse> processRequirements
 ) {
 }

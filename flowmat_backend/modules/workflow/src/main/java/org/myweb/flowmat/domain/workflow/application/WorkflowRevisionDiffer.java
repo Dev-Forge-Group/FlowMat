@@ -16,7 +16,8 @@ import org.myweb.flowmat.global.exception.ErrorCode;
 final class WorkflowRevisionDiffer {
     private static final Map<String, String> ID_FIELDS = Map.of(
         "processes", "processId", "processIos", "processIoId", "connections", "connectionId",
-        "annotations", "annotationId", "nodePolicies", "processId", "nodeBindings", "processId");
+        "annotations", "annotationId", "nodePolicies", "processId", "nodeBindings", "processId",
+        "processRequirements", "processRequirementId");
 
     private WorkflowRevisionDiffer() {}
 
