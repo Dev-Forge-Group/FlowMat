@@ -392,7 +392,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             order.getBomId(),
             order.getInstructionUrl(),
             order.getEquipmentId(),
-            List.copyOf(optionalItemIds)
+            List.copyOf(optionalItemIds),
+            order.getWorkflowRevisionId()
         );
     }
 

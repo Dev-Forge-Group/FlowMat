@@ -126,6 +126,11 @@ async function mockWorkspaceApi(page: Page) {
       }, message: null }) })
   })
 
+  await page.route(/\/api\/inventories(\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
   await page.route('**/api/processes/process-e2e/requirements', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ success: true, data: [], message: null }) })

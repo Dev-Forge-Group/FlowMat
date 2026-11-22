@@ -29,6 +29,8 @@ public record WorkOrderResponse(
     String instructionUrl,
     String equipmentId,
     /** Optional BOM materials the order takes, by item (ADR-033); empty for none. */
-    List<String> optionalItemIds
+    List<String> optionalItemIds,
+    /** The published revision its runs start on; null for the latest (ADR-043 decision 7). */
+    String workflowRevisionId
 ) {
 }
