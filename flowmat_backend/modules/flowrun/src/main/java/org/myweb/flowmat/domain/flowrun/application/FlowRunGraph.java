@@ -3,7 +3,6 @@ package org.myweb.flowmat.domain.flowrun.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -14,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowShares;
 import org.myweb.flowmat.domain.workflow.domain.contract.PortSchema;
 import org.myweb.flowmat.domain.workflow.domain.expression.ConditionExpression;
 import org.myweb.flowmat.global.exception.BusinessException;
@@ -47,8 +47,6 @@ final class FlowRunGraph {
             this(connectionId, targetNodeId, willRoute, null, null, null);
         }
     }
-
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     /**
      * A node's execution policy from its published revision; nodes without one run as before: no time limit, 3 retries
@@ -269,33 +267,18 @@ final class FlowRunGraph {
             // A Split that leads nowhere (SPLIT_SINGLE_ROUTE warns) ends here like any last step.
             return List.of();
         }
-        Map<String, BigDecimal> amounts = new HashMap<>();
-        BigDecimal assigned = BigDecimal.ZERO;
-        Edge rest = null;
-        Edge lastShare = null;
-        for (Edge edge : edges) {
-            if ("rest".equals(edge.splitKind())) {
-                rest = edge;
-                continue;
-            }
-            BigDecimal amount;
-            if ("share".equals(edge.splitKind()) && edge.splitValue() != null) {
-                amount = total.multiply(edge.splitValue()).divide(HUNDRED, 4, RoundingMode.HALF_UP);
-                lastShare = edge;
-            } else if ("fixed".equals(edge.splitKind()) && edge.splitValue() != null) {
-                amount = edge.splitValue();
-            } else {
-                throw conflict("Published revision Split " + nodeId + " connection " + edge.id() + " has no share.");
-            }
-            amounts.put(edge.id(), amount);
-            assigned = assigned.add(amount);
+        FlowShares.Division division;
+        try {
+            division = FlowShares.split(total, edges.stream()
+                .map(edge -> new FlowShares.Share(edge.id(), edge.splitKind(), edge.splitValue())).toList());
+        } catch (IllegalArgumentException missing) {
+            throw conflict("Published revision Split " + nodeId + " connection " + missing.getMessage() + " has no share.");
         }
-        BigDecimal left = total.subtract(assigned);
-        if (rest != null) {
-            amounts.put(rest.id(), left);
-        } else if (lastShare != null) {
-            amounts.merge(lastShare.id(), left, BigDecimal::add);
-        } else if (left.signum() != 0) {
+        Map<String, BigDecimal> amounts = division.amounts();
+        BigDecimal assigned = division.given();
+        BigDecimal left = total.subtract(amounts.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (left.signum() != 0) {
+            // Neither a rest nor a percent took what is left.
             throw conflict("Split " + nodeId + " leaves " + plain(left) + " undivided.");
         }
         if (amounts.values().stream().anyMatch(amount -> amount.signum() < 0)) {
@@ -339,11 +322,7 @@ final class FlowRunGraph {
         if (edge.lossRate() == null || !(values.get("quantity") instanceof BigDecimal sent) || sent.signum() <= 0) {
             return null;
         }
-        BigDecimal arrived = sent.multiply(BigDecimal.ONE.subtract(edge.lossRate())).setScale(4, RoundingMode.HALF_UP);
-        // A quantity with more than 4 decimals can round up past itself; no more arrives than was sent.
-        if (arrived.compareTo(sent) > 0) {
-            arrived = sent;
-        }
+        BigDecimal arrived = FlowShares.arrived(sent, edge.lossRate());
         return new Loss(sent, edge.lossRate(), sent.subtract(arrived), arrived);
     }
 
