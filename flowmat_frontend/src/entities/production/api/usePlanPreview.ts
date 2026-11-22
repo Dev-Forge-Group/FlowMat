@@ -31,6 +31,9 @@ export interface PlanNode {
   through: number | null
   unit: string | null
   minutes: number | null
+  /** When it runs, in its equipment's working time; absent before the plan placed steps in time. */
+  startAt?: string | null
+  endAt?: string | null
 }
 
 export interface PlanLimit {
@@ -51,6 +54,8 @@ export interface PlanPreview {
   limits: PlanLimit[]
   assumptions: { kind: string; at: string; value: string }[]
   basis: { revisionId: string; available: Record<string, number> }
+  /** When the last step ends; null when some equipment has too little working time in a year. */
+  finishAt?: string | null
 }
 
 export interface PlanTarget {

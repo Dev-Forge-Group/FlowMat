@@ -10,6 +10,7 @@ interface Props {
 }
 
 const amount = (value: number | null | undefined) => value == null ? '' : String(Number(value.toFixed(4)))
+const at = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 /**
  * Planning from a target in the editor (docs/status/ROADMAP-2026-11-23.md §8 week 3, ADR-043): pick an output and a
@@ -91,6 +92,7 @@ export function PlanPanel({ canvas, nameOf }: Props) {
         <div style={{ marginTop: '8px' }}>
           {plan.buildable != null && <p style={{ margin: '4px 0' }}>Can make {amount(plan.buildable)} now</p>}
           {bottleneck?.processId && <p style={{ margin: '4px 0' }}>Bottleneck: {nameOf(bottleneck.processId)}</p>}
+          {plan.finishAt && <p style={{ margin: '4px 0' }}>Finishes {at(plan.finishAt)} if started now</p>}
           {!plan.feasible && <p role="alert">This graph cannot bring the target as planned.</p>}
           <table style={{ borderCollapse: 'collapse', marginTop: '6px' }}>
             <thead><tr><th align="left">Material</th><th align="right">Needed</th><th align="right">In stock</th><th align="right">Short</th></tr></thead>
@@ -111,6 +113,7 @@ export function PlanPanel({ canvas, nameOf }: Props) {
               <li key={node.processId}>
                 {nameOf(node.processId)}: {node.batches != null ? `${amount(node.batches)} batches` : `${amount(node.through)} ${node.unit ?? ''}`}
                 {node.minutes != null ? `, ${amount(node.minutes)} min` : ''}
+                {node.minutes != null && node.startAt && node.endAt ? ` (${at(node.startAt)} – ${at(node.endAt)})` : ''}
               </li>
             ))}
           </ul>

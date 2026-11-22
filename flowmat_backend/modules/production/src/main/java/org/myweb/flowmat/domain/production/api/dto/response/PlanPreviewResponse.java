@@ -27,7 +27,9 @@ public record PlanPreviewResponse(
     List<Surplus> surplus,
     List<Limit> limits,
     List<Assumption> assumptions,
-    Basis basis
+    Basis basis,
+    /** When the last step ends; null when a step's equipment has too little working time in a year. */
+    java.time.OffsetDateTime finishAt
 ) {
 
     /**
@@ -43,9 +45,20 @@ public record PlanPreviewResponse(
     public record TraceStep(String at, String processId, String rule, BigDecimal from, BigDecimal to, BigDecimal factor) {
     }
 
-    /** {@code minutes}: the node's time requirements in minutes, null when it has none. */
+    /**
+     * {@code minutes}: the node's time requirements in minutes, null when it has none. {@code startAt} and {@code endAt}: when
+     * it runs, in its equipment's working time (ADR-043 decision 5).
+     */
     public record Node(String processId, BigDecimal batches, BigDecimal through, String unit, BigDecimal minutes,
-        List<Port> ports, List<Execution> execution) {
+        List<Port> ports, List<Execution> execution, java.time.OffsetDateTime startAt, java.time.OffsetDateTime endAt) {
+
+        public Node placed(PlanSchedulePlace place) {
+            return new Node(processId, batches, through, unit, minutes, ports, execution, place.startAt(), place.endAt());
+        }
+    }
+
+    /** Where a node falls in time. */
+    public record PlanSchedulePlace(java.time.OffsetDateTime startAt, java.time.OffsetDateTime endAt) {
     }
 
     public record Port(String processIoId, String direction, BigDecimal quantity, String unit) {

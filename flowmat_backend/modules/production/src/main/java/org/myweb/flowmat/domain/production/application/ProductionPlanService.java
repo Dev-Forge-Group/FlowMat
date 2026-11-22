@@ -52,6 +52,7 @@ public class ProductionPlanService {
     private final UnitConversion unitConversion;
     private final UsableStock usableStock;
     private final ObjectMapper objectMapper;
+    private final PlanSchedule schedule;
 
     public PlanPreviewResponse preview(String workflowId, PlanPreviewRequest request) {
         WorkflowAccessView workflow = workflowAccess.requireRead(workflowId);
@@ -75,7 +76,8 @@ public class ProductionPlanService {
         Map<String, String> owner = owners(graph);
         Map<String, BigDecimal> usable = itemIds.isEmpty() ? Map.of() : usableStock.byItem(workflow.projectId(), itemIds);
         List<PlanPreviewResponse.Requirement> requirements = requirements(result, items, usable, owner, table);
-        List<PlanPreviewResponse.Node> nodes = result.nodes().stream().map(ProductionPlanService::node).toList();
+        List<PlanPreviewResponse.Node> nodes = placed(graph, snapshot,
+            result.nodes().stream().map(ProductionPlanService::node).toList(), request.startAt());
         List<PlanPreviewResponse.Limit> limits = new ArrayList<>();
         requirements.stream()
             .filter(row -> row.shortage() != null && row.shortage().signum() > 0)
@@ -93,13 +95,32 @@ public class ProductionPlanService {
             result.surplus().stream().map(s -> new PlanPreviewResponse.Surplus(s.at(), s.kind(), s.quantity(), s.unit())).toList(),
             List.copyOf(limits),
             result.assumptions().stream().map(a -> new PlanPreviewResponse.Assumption(a.kind(), a.at(), a.value())).toList(),
-            new PlanPreviewResponse.Basis(revision.workflowRevisionId(), basis));
+            new PlanPreviewResponse.Basis(revision.workflowRevisionId(), basis),
+            nodes.stream().anyMatch(node -> node.minutes() != null && node.endAt() == null) ? null
+                : nodes.stream().map(PlanPreviewResponse.Node::endAt).filter(Objects::nonNull).max(java.util.Comparator.naturalOrder())
+                    .orElse(null));
     }
 
     /** The item at a target of a revision the caller has already planned. */
     public String targetItemOf(String workflowId, String revisionId, PlanPreviewRequest.Target target) {
         return revisions.findRevision(revisionId, workflowId)
             .map(revision -> targetItem(FlowDemandGraphs.fromSnapshot(snapshot(revision)), target)).orElse(null);
+    }
+
+    /** The nodes placed in time from {@code startAt} (now when left out), in the plan's order (ADR-043 decision 5). */
+    private List<PlanPreviewResponse.Node> placed(FlowDemand.Graph graph, JsonNode snapshot, List<PlanPreviewResponse.Node> nodes,
+        java.time.OffsetDateTime startAt) {
+        Map<String, BigDecimal> minutes = new HashMap<>();
+        nodes.forEach(node -> { if (node.minutes() != null) minutes.put(node.processId(), node.minutes()); });
+        java.time.Instant from = startAt == null ? java.time.Instant.now() : startAt.toInstant();
+        Map<String, PlanSchedule.Placed> placed = schedule.place(graph, snapshot,
+            nodes.stream().map(PlanPreviewResponse.Node::processId).toList(), minutes, from);
+        java.time.ZoneOffset offset = startAt == null ? java.time.ZoneOffset.UTC : startAt.getOffset();
+        return nodes.stream().map(node -> {
+            PlanSchedule.Placed at = placed.get(node.processId());
+            return at == null ? node : node.placed(new PlanPreviewResponse.PlanSchedulePlace(
+                at.start() == null ? null : at.start().atOffset(offset), at.end() == null ? null : at.end().atOffset(offset)));
+        }).toList();
     }
 
     private WorkflowProductionQuery.Revision revision(String workflowId, String revisionId) {
@@ -234,7 +255,7 @@ public class ProductionPlanService {
         return new PlanPreviewResponse.Node(node.nodeId(), node.batches(), node.through(), node.unit(),
             minutes == null ? null : minutes.setScale(SCALE, RoundingMode.CEILING),
             node.ports().stream().map(p -> new PlanPreviewResponse.Port(p.portId(), p.direction(), p.quantity(), p.unit())).toList(),
-            node.execution().stream().map(e -> new PlanPreviewResponse.Execution(e.kind(), e.ref(), e.amount(), e.unit())).toList());
+            node.execution().stream().map(e -> new PlanPreviewResponse.Execution(e.kind(), e.ref(), e.amount(), e.unit())).toList(), null, null);
     }
 
     private static BigDecimal minutes(BigDecimal amount, String unit) {

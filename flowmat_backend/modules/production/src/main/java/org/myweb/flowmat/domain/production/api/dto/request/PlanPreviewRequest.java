@@ -12,8 +12,14 @@ import java.util.Map;
 public record PlanPreviewRequest(
     String revisionId,
     @NotNull @Valid Target target,
-    Map<String, String> exclusiveChoices
+    Map<String, String> exclusiveChoices,
+    /** When the first step may start; now when left out. */
+    java.time.OffsetDateTime startAt
 ) {
+
+    public PlanPreviewRequest(String revisionId, Target target, Map<String, String> exclusiveChoices) {
+        this(revisionId, target, exclusiveChoices, null);
+    }
 
     /** {@code unit} null means the port's or connection's own. */
     public record Target(String processIoId, String connectionId, @NotNull BigDecimal quantity, String unit) {
