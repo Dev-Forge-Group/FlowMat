@@ -166,7 +166,7 @@ public class UserServiceImpl implements UserService {
             if (!passwordEncoder.matches(request.currentPassword().trim(), user.getUserPwd())) {
                 throw new BusinessException(ErrorCode.INVALID_PASSWORD);
             }
-            user.setUserPwd(passwordEncoder.encode(request.newPassword().trim()));
+            user.setUserPwd(passwordEncoder.encode(PasswordPolicy.require(request.newPassword(), user.getUserId(), user.getUserEmail())));
             user.setPwdUpdatedAt(OffsetDateTime.now());
         }
 
