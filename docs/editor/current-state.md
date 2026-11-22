@@ -45,8 +45,9 @@ React Flow에는 공정 노드만 등록돼 있다(`flowmatNode`). 공정 노드
 
 편집 문서 저장은 보내기 전에 편집 결과를 화면 캐시에 먼저 넣는다. 그래서 드래그를 끝낸 순간 옛 위치로 튀지 않는다.
 
-- 응답 없음·429·5xx로 실패하면 편집을 화면에 남기고 "Your change is kept and will be saved with your next edit."를 알린다. 다음 저장이 문서 전체를 보내므로 그 편집도 함께 저장된다(`keepsUnsavedEdit`).
-- 409(다른 사람이 먼저 저장)와 그 밖의 4xx는 서버 문서를 다시 받아 보여 준다.
+- 저장은 요소 변경이다([ADR-042](../architecture/adr/ADR-042-drawing-layer-element-changes.md), 2026-11-22). 서버가 마지막으로 준 문서와 비교해 추가·바꾸기·지우기만 `PATCH …/editor-document/elements`로 보낸다. 그래서 다른 사람이 다른 요소를 바꾼 것은 그대로 남는다. 저장은 하나씩 차례로 한다.
+- 응답 없음·429·5xx로 실패하면 편집을 화면에 남기고 "Your change is kept and will be saved with your next edit."를 알린다. 다음 저장이 차이를 다시 계산하므로 그 편집도 함께 저장된다(`keepsUnsavedEdit`).
+- 같은 요소를 다른 사람이 먼저 바꿨으면 409다. 서버 문서를 다시 받아 보여 주고 "… was changed by someone else. Their version is shown."를 알린다. 그 밖의 4xx도 서버 문서를 다시 받아 보여 준다.
 - 한계: 남겨 둔 편집은 다음 편집 전까지 저장되지 않는다. 그 사이 문서를 다시 받으면(창 포커스·실시간 동기화) 사라진다.
 - 기존 주석 경로(`PATCH …/annotations/{id}`)는 바꾸지 않았다.
 
