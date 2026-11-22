@@ -135,7 +135,10 @@ tasks.named('test') {
 	// -Dcondition.fixtures.update=true rewrites those fixtures' answers; -Dcondition.bench=true runs the timing comparison;
 	// -Dsequence.fixtures.update=true rewrites the sequence optimizer's baselines; -Dflow.fixtures.update=true the flow
 	// kernel's validation answers.
-	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update', 'flow.fixtures.update', 'flow.bench'].each { name ->
+	// The published API contract OpenApiContractTest compares the served document with (docs/api/README.md).
+	inputs.files(file('../docs/api/openapi.json')).withPropertyName('apiContract')
+	['condition.fixtures.update', 'condition.bench', 'sequence.fixtures.update', 'flow.fixtures.update', 'flow.bench',
+		'openapi.update'].each { name ->
 		def value = providers.systemProperty(name).orNull
 		if (value != null) systemProperty name, value
 	}
@@ -223,8 +226,9 @@ if (testImpactRecord) {
 	def testImpactOut = testImpactDir.get().asFile
 	tasks.named('test') {
 		systemProperty 'testImpact.out', testImpactOut.absolutePath
-		// Starts the shared context and checks the schema, whatever else is left out.
-		systemProperty 'testImpact.alwaysRun', 'org.myweb.flowmat.FlowMatSmokeTest'
+		// Starts the shared context and checks the schema, whatever else is left out. The API contract test too:
+		// springdoc only reflects on controllers, so a changed controller would not mark it to run.
+		systemProperty 'testImpact.alwaysRun', 'org.myweb.flowmat.FlowMatSmokeTest,org.myweb.flowmat.OpenApiContractTest'
 		if (testImpactPrevious.isPresent()) {
 			systemProperty 'testImpact.previous', file(testImpactPrevious.get()).absolutePath
 			// When every class already passed, nothing is left to discover but the smoke test.
