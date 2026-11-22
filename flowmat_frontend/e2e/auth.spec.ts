@@ -126,6 +126,16 @@ async function mockWorkspaceApi(page: Page) {
       }, message: null }) })
   })
 
+  await page.route('**/api/processes/process-e2e/requirements', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
+  await page.route(/\/api\/equipments(\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [], message: null }) })
+  })
+
   await page.route('**/api/processes/process-e2e/execution-binding', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ success: true, data: {
@@ -568,6 +578,8 @@ test('authenticated user can open workspace, select a node, and switch canvas to
       '/api/processes/process-e2e/execution-policy',
       '/api/project-members',
       '/api/processes/process-e2e/execution-binding',
+      '/api/processes/process-e2e/requirements',
+      '/api/equipments',
       '/api/projects/prj-e2e/http-profiles',
     ].map(async (path) => {
       const response = await page.waitForResponse((response) =>
