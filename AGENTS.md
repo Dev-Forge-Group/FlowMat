@@ -46,6 +46,7 @@ cd flowmat_backend && ./gradlew test jacocoTestCoverageVerification && ./gradlew
 - PR은 같은 코드로 이미 통과한 E2E 명세 파일과 백엔드 테스트 클래스를 건너뛰고, merge는 검사를 다시 돌리지 않으며, 매일 밤 `main`에서 전부 돈다([CI가 다시 돌리지 않는 것](docs/operations/ci-selection.md)). 건너뛴 명세는 통과 기록이 있는 것이고, 그 규칙을 넓혀 실패를 숨기지 않는다. 의존성 감사(OWASP)는 PR merge의 조건이 아니다.
 - 릴리스 후보는 [점검표](docs/status/RELEASE-CHECKLIST.md)가 같은 커밋에서 모두 통과해야 한다. 초록 배지 하나로 대신하지 않는다.
 - JaCoCo 기준(줄 45%, 분기 30%)을 낮추지 않는다.
+- 새 테스트는 위험 등급만큼 쓴다. 낮음·중간은 기능마다 되는 길 하나와 핵심 거절 하나, 화면은 새 흐름마다 모의 E2E 하나, 실 API 브라우저 테스트는 여정에만 쓴다. 높음은 원장·권한 불변식을 지금처럼 다 본다([로드맵 §12](docs/status/ROADMAP-2026-11-23.md) P1).
 
 ## 위험 등급과 사람의 승인
 
