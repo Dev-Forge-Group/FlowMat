@@ -6,15 +6,14 @@ import type { WorkflowCanvasViewModel } from '../../../entities/workflow/model/t
 
 interface Props {
   canvas: WorkflowCanvasViewModel
-  onPlan(): void
 }
 
 /**
  * The first run in order (docs/status/ROADMAP-2026-11-23.md §8, next month 1): items, steps with measured ports, stock,
  * publishing, then a plan. Each step says whether it is done from what the project already has; the guide goes away once
- * everything a plan needs is there.
+ * everything a plan needs is there. It sits in the inspector while nothing is selected, so it never takes canvas space.
  */
-export function FirstRunGuide({ canvas, onPlan }: Props) {
+export function FirstRunGuide({ canvas }: Props) {
   const projectId = canvas.workflow.projectId
   const items = useItemsQuery(projectId)
   const stock = useInventoriesQuery(projectId)
@@ -35,7 +34,7 @@ export function FirstRunGuide({ canvas, onPlan }: Props) {
   if (done === steps.length) return null
 
   return (
-    <details aria-label="Start here" style={{ margin: '8px 16px 0', border: '1px solid #e2e8f0', padding: '6px 10px' }}>
+    <details aria-label="Start here" open={done < 2} style={{ marginTop: '12px', border: '1px solid #e2e8f0', padding: '6px 10px' }}>
       <summary>Start here · {done} of {steps.length + 1} done</summary>
       <ol style={{ margin: '6px 0 0', paddingLeft: '20px' }}>
         {steps.map((step) => (
@@ -43,9 +42,7 @@ export function FirstRunGuide({ canvas, onPlan }: Props) {
             {step.done ? '✓ ' : ''}{step.label}{step.link ? <> · {step.link}</> : null}
           </li>
         ))}
-        <li>Plan a target: what it needs, what is short, how long it takes ·{' '}
-          <button type="button" onClick={onPlan} disabled={!published}>Open the Plan panel</button>
-        </li>
+        <li>Plan a target with Plan above the canvas: what it needs, what is short, how long it takes</li>
       </ol>
     </details>
   )

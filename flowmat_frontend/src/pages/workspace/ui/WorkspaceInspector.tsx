@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../model/workspaceStore'
 import type { ConnectionInspector as ConnectionInspectorView } from './ConnectionInspector'
 import { EditorElementInspector } from './EditorElementInspector'
 import type { NodeInspector as NodeInspectorView } from './NodeInspector'
+import { FirstRunGuide } from './FirstRunGuide'
 import { preloadConnectionInspector, preloadNodeInspector } from './workspacePreload'
 import type { WorkspaceEditorCommandApi, WorkspaceEditorSelectionSnapshot } from './WorkspaceEditorLayer'
 
@@ -107,6 +108,7 @@ export function WorkspaceInspector({ canvas, editorSelection, editorCommandsRef,
         {canvas.nodes.length} nodes | {canvas.edges.length} connections
       </p>
       <p className="inspector-hint">Click a node or connection to inspect it.</p>
+      <FirstRunGuide canvas={canvas} />
     </div>
   )
 }

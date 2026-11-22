@@ -3,7 +3,7 @@ import { answerAuth, mockedLogin, ok } from './support/mockApi'
 
 /**
  * The first run in order (docs/status/ROADMAP-2026-11-23.md §8, next month 1) against a mocked API: the guide counts what
- * the project already has, links to where the rest is done, and offers the plan only once a revision is published.
+ * the project already has and links to where the rest is done, in the inspector while nothing is selected.
  */
 test('the Start here guide counts what is done and leads to the rest', async ({ page }) => {
   const workflow = { workflowId: 'wf-start', projectId: 'prj-e2e', workflowName: 'New flow', workflowDesc: null,
@@ -41,5 +41,7 @@ test('the Start here guide counts what is done and leads to the rest', async ({ 
   await expect(guide.locator('summary')).toHaveText('Start here · 2 of 5 done', { timeout: 15_000 })
   await guide.locator('summary').click()
   await expect(guide.getByRole('link', { name: 'Stock' })).toHaveAttribute('href', '/projects/prj-e2e/inventory?tab=stock')
-  await expect(guide.getByRole('button', { name: 'Open the Plan panel' })).toBeDisabled()
+  // It lives in the inspector while nothing is selected; selecting a process replaces it.
+  await page.locator('.react-flow__node').filter({ hasText: 'Mix' }).click()
+  await expect(guide).toHaveCount(0)
 })
