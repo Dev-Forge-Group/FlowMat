@@ -12,6 +12,7 @@ import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../mode
 import { validationSelection } from '../model/validationPanelModel'
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { EditorPublish } from './EditorPublish'
+import { FirstRunGuide } from './FirstRunGuide'
 import { LayoutWarningList } from './LayoutWarningList'
 import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { PlanPanel } from './PlanPanel'
@@ -103,6 +104,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
         )}
       </section>
 
+      {editable && <FirstRunGuide canvas={canvas} onPlan={() => setPlanOpen(true)} />}
       {liveOpen && <LiveValidation report={liveValidation} nameOf={nameOf} onSelect={selectIssue} />}
       {tryOpen && <TryFlowPanel canvas={canvas} nameOf={nameOf} onSelectProcess={selectNode} />}
       {planOpen && <PlanPanel canvas={canvas} nameOf={nameOf} />}
