@@ -343,6 +343,14 @@ jobs:
           FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
         run: npm run test:e2e -- e2e/gateway-delay-real-api.spec.ts e2e/equipment-concurrency-limit-real-api.spec.ts e2e/production-steps-real-api.spec.ts e2e/worker-schedule-history-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
+      - name: Run the melon milk journey (ROADMAP §8, ADR-043)
+        if: matrix.shard == 2
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/melon-milk-journey-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
+
       - name: Run real worker rota browser acceptance
         if: matrix.shard == 1
         working-directory: flowmat_frontend

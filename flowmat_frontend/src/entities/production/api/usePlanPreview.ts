@@ -59,6 +59,22 @@ export interface PlanTarget {
   unit?: string | null
 }
 
+export interface PlanConfirmation {
+  requestId: string
+  revisionId: string
+  workOrderId: string
+  purchaseOrderIds: string[]
+}
+
+/** Confirms a plan seen before into a draft work order and a draft purchase order for its shortages; safe to send again. */
+export function usePlanConfirmMutation(workflowId: string) {
+  return useMutation({
+    mutationFn: async (input: { target: PlanTarget; basis: PlanPreview['basis']; requestId: string; supplierName?: string | null }) =>
+      unwrapApiResponse(await httpClient.post<ApiEnvelope<PlanConfirmation>>(
+        `/workflows/${encodeURIComponent(workflowId)}/plan-confirmations`, input)),
+  })
+}
+
 export function usePlanPreviewMutation(workflowId: string) {
   return useMutation({
     mutationFn: async (target: PlanTarget) => unwrapApiResponse(await httpClient.post<ApiEnvelope<PlanPreview>>(
