@@ -54,6 +54,56 @@ export interface BackendEditorDocumentSaveInput {
 
 export type BackendEditorElementInput = Omit<BackendEditorElementDto, 'version' | 'versionNonce'>
 
+/**
+ * One element change (docs/architecture/adr/ADR-042-drawing-layer-element-changes.md): an addition (no `baseVersion`), a
+ * replacement edited from `baseVersion`, or a deletion of `deleteId` edited from `baseVersion`.
+ */
+export type BackendEditorElementChange =
+  | { element: BackendEditorElementInput; baseVersion?: number }
+  | { deleteId: string; baseVersion: number }
+
+export interface BackendEditorElementChangesInput {
+  changes: BackendEditorElementChange[]
+  nextElementSeq: number
+}
+
+/** A document as the server last gave it, with each element's version beside it. */
+export type ServerEditorDocument = EditorDocument & { elementVersions: Readonly<Record<string, number>> }
+
+/** Documents the server gave, as opposed to drafts made from them on screen. */
+const fromServer = new WeakSet<object>()
+
+/** Whether the document is one the server gave (so its element versions are the server's), not a draft made from it. */
+export function isServerEditorDocument(document: EditorDocument | undefined | null): document is ServerEditorDocument {
+  return document != null && fromServer.has(document)
+}
+
+/**
+ * What changed between the server's document and an edited one, as element changes: elements that are new, that differ,
+ * or that are gone, each with the server version it was edited from. Elements alike in both are left out.
+ */
+export function editorElementChanges(base: ServerEditorDocument, next: EditorDocument): BackendEditorElementChangesInput {
+  const before = new Map(toSerializedEditorDocument(base).elements.map((element) => {
+    const input = serializedElementToBackendInput(element)
+    return [input.id, input] as const
+  }))
+  const changes: BackendEditorElementChange[] = []
+  const seen = new Set<string>()
+  for (const element of toSerializedEditorDocument(next).elements) {
+    const input = serializedElementToBackendInput(element)
+    seen.add(input.id)
+    const was = before.get(input.id)
+    if (!was) changes.push({ element: input })
+    else if (JSON.stringify(was) !== JSON.stringify(input)) {
+      changes.push({ element: input, baseVersion: base.elementVersions[input.id] ?? 0 })
+    }
+  }
+  for (const id of before.keys()) {
+    if (!seen.has(id)) changes.push({ deleteId: id, baseVersion: base.elementVersions[id] ?? 0 })
+  }
+  return { changes, nextElementSeq: Math.max(base.nextElementSeq, next.nextElementSeq) }
+}
+
 export function editorDocumentToBackendSaveInput(doc: EditorDocument): BackendEditorDocumentSaveInput {
   const serialized = toSerializedEditorDocument(doc)
   return {
@@ -65,7 +115,7 @@ export function editorDocumentToBackendSaveInput(doc: EditorDocument): BackendEd
   }
 }
 
-export function backendDtoToEditorDocument(dto: BackendEditorDocumentDto): EditorDocument {
+export function backendDtoToEditorDocument(dto: BackendEditorDocumentDto): ServerEditorDocument {
   const serialized: SerializedEditorDocument = {
     schemaVersion: dto.schemaVersion,
     selectedIds: [],
@@ -77,10 +127,13 @@ export function backendDtoToEditorDocument(dto: BackendEditorDocumentDto): Edito
     nextElementSeq: dto.nextElementSeq,
     elements: dto.elements.map(backendElementToSerialized),
   }
-  return {
+  const document: ServerEditorDocument = {
     ...fromSerializedEditorDocument(serialized),
     version: dto.version,
+    elementVersions: Object.fromEntries(dto.elements.map((element) => [element.id, element.version])),
   }
+  fromServer.add(document)
+  return document
 }
 
 function serializedElementToBackendInput(element: SerializedEditorElement): BackendEditorElementInput {

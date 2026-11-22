@@ -1,9 +1,17 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { EditorDocument, ElementId } from '../../../lib/flowmat-editor'
 import type { PatchCanvasAnnotationInput } from '../../../entities/canvas-annotation/api/canvasAnnotationApi'
 import { editorElementToPatchAnnotationInput } from '../../../entities/canvas-annotation/model/annotationEditorAdapter'
-import { editorDocumentQueryKey, useSaveEditorDocumentMutation } from '../../../entities/editor-document/api/editorDocumentApi'
+import {
+  editorDocumentQueryKey,
+  patchEditorElements,
+  saveEditorDocument,
+} from '../../../entities/editor-document/api/editorDocumentApi'
+import {
+  isServerEditorDocument,
+  type ServerEditorDocument,
+} from '../../../entities/editor-document/model/editorDocumentBackendAdapter'
 import type { CanvasAnnotationViewModel } from '../../../entities/workflow/model/types'
 import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
 import { keepsUnsavedEdit } from './workspaceEditorDocument'
@@ -26,34 +34,51 @@ export interface LayerChanges {
 }
 
 /**
- * Saving the drawing layer. The editor document is saved whole and shown at once; a passing failure keeps the edit on
- * screen for the next save, a conflict or a refusal shows the server's version again. Annotations are patched one by
- * one from their elements, and deleted by id.
+ * Saving the drawing layer. An edit shows at once and is saved as element changes against the document the server last
+ * gave (docs/architecture/adr/ADR-042-drawing-layer-element-changes.md), so someone else's edits to other elements are
+ * kept. Saves go one after another, each against the answer to the one before. A passing failure keeps the edit on screen
+ * for the next save; a conflict (someone changed the same element first) or a refusal shows the server's version again.
+ * Annotations are patched one by one from their elements, and deleted by id.
  */
 export function useEditorLayerPersistence({ workflowId, annotationByElementId, onError, onUpdateAnnotation,
   onDeleteAnnotations }: Options) {
   const queryClient = useQueryClient()
-  const saveMutation = useSaveEditorDocumentMutation(workflowId)
+  /** The document the server last gave: what the next save's changes are worked out against. */
+  const serverRef = useRef<ServerEditorDocument | null>(null)
+  const savingRef = useRef<Promise<void>>(Promise.resolve())
 
-  const persistDocument = useCallback(async (nextDocument: EditorDocument) => {
+  const persistDocument = useCallback((nextDocument: EditorDocument) => {
     const key = editorDocumentQueryKey(workflowId)
+    const cached = queryClient.getQueryData<EditorDocument>(key)
+    if (isServerEditorDocument(cached)) serverRef.current = cached
     // Show the edit at once: a drag clears its draft before this save returns, and the cache is what is drawn then.
     queryClient.setQueryData(key, { ...nextDocument, selectedIds: [] })
-    try {
-      const savedDocument = await saveMutation.mutateAsync({ ...nextDocument, selectedIds: [] })
-      queryClient.setQueryData(key, savedDocument)
-    } catch (error) {
-      const message = errorMessage(error, 'Failed to save editor document.')
-      if (keepsUnsavedEdit(errorStatus(error))) {
-        // A passing failure: keep the edit on screen; the next save sends the whole document, this edit included.
-        onError?.(`${message} Your change is kept and will be saved with your next edit.`)
-      } else {
-        // A conflict or a refused document: the server's version is the one to show.
-        void queryClient.invalidateQueries({ queryKey: key })
-        onError?.(message)
+    const save = async () => {
+      // A fetch that landed while the save before was on its way is the newer base.
+      const latest = queryClient.getQueryData<EditorDocument>(key)
+      if (isServerEditorDocument(latest)) serverRef.current = latest
+      const base = serverRef.current
+      try {
+        const next = { ...nextDocument, selectedIds: [] }
+        const savedDocument = base ? await patchEditorElements(workflowId, base, next) : await saveEditorDocument(workflowId, next)
+        serverRef.current = savedDocument
+        queryClient.setQueryData(key, savedDocument)
+      } catch (error) {
+        const message = errorMessage(error, 'Failed to save editor document.')
+        const status = errorStatus(error)
+        if (keepsUnsavedEdit(status)) {
+          // A passing failure: keep the edit on screen; the next save works out its changes again, this edit included.
+          onError?.(`${message} Your change is kept and will be saved with your next edit.`)
+        } else {
+          // Someone changed the same element first, or the change was refused: the server's version is the one to show.
+          void queryClient.invalidateQueries({ queryKey: key })
+          onError?.(status === 409 ? `${message} Their version is shown.` : message)
+        }
       }
     }
-  }, [onError, queryClient, saveMutation, workflowId])
+    savingRef.current = savingRef.current.then(save)
+    return savingRef.current
+  }, [onError, queryClient, workflowId])
 
   const persistAnnotationDocument = useCallback(async (nextDocument: EditorDocument, annotationIds: readonly ElementId[],
     zIndexById?: ReadonlyMap<ElementId, string>) => {

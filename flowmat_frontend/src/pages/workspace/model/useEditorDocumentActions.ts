@@ -3,6 +3,7 @@ import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import {
   editorDocumentQueryKey,
   fetchEditorDocument,
+  patchEditorElements,
   saveEditorDocument,
 } from '../../../entities/editor-document/api/editorDocumentApi'
 import type { WorkflowEditorTool, WorkflowPaletteTool } from '../../../entities/workflow/model/nodeCatalog'
@@ -87,7 +88,8 @@ export function useEditorDocumentActions({ workflowId, canEdit, editorCommandApi
       const snappedPosition = snapPoint(position, { enabled: true, gridSize: WORKSPACE_EDITOR_GRID_SIZE })
       const { element, nextElementSeq } = createWorkspaceEditorElement(tool, snappedPosition, editorDocument)
       const nextDocument = { ...insertElement(editorDocument, element), nextElementSeq }
-      const savedDocument = await saveEditorDocument(workflowId, nextDocument)
+      // Only the new element goes, so someone else's edits made meanwhile are kept (ADR-042).
+      const savedDocument = await patchEditorElements(workflowId, editorDocument, nextDocument)
       editorCommandApiRef.current?.recordBackendSnapshot(editorDocument, [])
       queryClient.setQueryData(editorDocumentQueryKey(workflowId), savedDocument)
       markSaved()
