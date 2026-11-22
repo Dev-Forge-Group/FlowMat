@@ -5,6 +5,9 @@
 //
 //   FLOWMAT_API=http://127.0.0.1:8080/api FLOWMAT_USER=demo-owner FLOWMAT_PASSWORD=... node scripts/demo/assembly.mjs
 
+// Home's "견본으로 시작" builds the same sample from data (flowmat_frontend/src/features/sample-start/model/samples.ts):
+// change both.
+
 import { connect, printPlan, sample } from './lib.mjs'
 
 const { call, user } = await connect()
