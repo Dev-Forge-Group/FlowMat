@@ -2227,3 +2227,10 @@ code {
     bottom: 10px;
   }
 }
+
+/* Plan panel: the path of the chosen material (docs/architecture/adr/ADR-043-plan-backwards-from-a-target.md decision 6). */
+.workspace-canvas-viewport .react-flow__node.is-traced {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 10px;
+}

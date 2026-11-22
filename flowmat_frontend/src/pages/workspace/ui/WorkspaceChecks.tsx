@@ -14,6 +14,7 @@ import { useWorkspaceStore } from '../model/workspaceStore'
 import { EditorPublish } from './EditorPublish'
 import { LayoutWarningList } from './LayoutWarningList'
 import { LiveValidation, LiveValidationButton } from './LiveValidation'
+import { PlanPanel } from './PlanPanel'
 import { TryFlowPanel } from './TryFlowPanel'
 import { ValidationIssueList } from './ValidationIssueList'
 
@@ -40,6 +41,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
   const liveValidation = useLiveValidation(canvas)
   const [liveOpen, setLiveOpen] = useState(false)
   const [tryOpen, setTryOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
 
   // A change to the graph makes the server's last answer stale.
   const queryClient = useQueryClient()
@@ -76,6 +78,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
         <EditorPublish workflowId={workflowId} projectId={canvas.workflow.projectId} editable={editable} onRefused={check} />
         <LiveValidationButton report={liveValidation} open={liveOpen} onToggle={() => setLiveOpen((open) => !open)} />
         <button type="button" aria-expanded={tryOpen} onClick={() => setTryOpen((open) => !open)}>Try it</button>
+        <button type="button" aria-expanded={planOpen} onClick={() => setPlanOpen((open) => !open)}>Plan</button>
         {showValidation && (
           <div role="status" style={{ marginTop: 8 }}>
             {validationQuery.isPending && <p>Checking workflow...</p>}
@@ -102,6 +105,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
 
       {liveOpen && <LiveValidation report={liveValidation} nameOf={nameOf} onSelect={selectIssue} />}
       {tryOpen && <TryFlowPanel canvas={canvas} nameOf={nameOf} onSelectProcess={selectNode} />}
+      {planOpen && <PlanPanel canvas={canvas} nameOf={nameOf} />}
     </>
   )
 }

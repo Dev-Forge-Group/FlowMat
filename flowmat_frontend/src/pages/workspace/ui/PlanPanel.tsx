@@ -1,0 +1,109 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { usePlanPreviewMutation, type PlanRequirement } from '../../../entities/production/api/usePlanPreview'
+import type { WorkflowCanvasViewModel } from '../../../entities/workflow/model/types'
+import { errorMessage } from '../../../shared/lib/errorMessage'
+import { usePlanTraceStore } from '../model/planTrace'
+
+interface Props {
+  canvas: WorkflowCanvasViewModel
+  nameOf(processId: string): string
+}
+
+const amount = (value: number | null | undefined) => value == null ? '' : String(Number(value.toFixed(4)))
+
+/**
+ * Planning from a target in the editor (docs/status/ROADMAP-2026-11-23.md §8 week 3, ADR-043): pick an output and a
+ * quantity, and see what each start needs against stock, what can be made now, each step's time and what limits the
+ * plan. Choosing a material lights its path on the canvas. The plan reads the published revision, not the drawing.
+ */
+export function PlanPanel({ canvas, nameOf }: Props) {
+  const outputs = useMemo(() => {
+    const leaving = new Set(canvas.edges.map((edge) => edge.fromIoId).filter(Boolean))
+    const all = canvas.nodes.flatMap((node) => node.outputs.map((port) => ({ node, port })))
+    // The last output nothing continues from comes first: usually the product.
+    return [...all.filter(({ port }) => !leaving.has(port.processIoId)).reverse(), ...all.filter(({ port }) => leaving.has(port.processIoId))]
+  }, [canvas.nodes, canvas.edges])
+  const [portId, setPortId] = useState(outputs[0]?.port.processIoId ?? '')
+  const [quantity, setQuantity] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const preview = usePlanPreviewMutation(canvas.workflow.workflowId)
+  const setTraced = usePlanTraceStore((s) => s.setTraced)
+  const plan = preview.data
+  const unit = outputs.find(({ port }) => port.processIoId === portId)?.port.unit ?? ''
+  useEffect(() => () => setTraced([]), [setTraced])
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    const target = Number(quantity)
+    if (!portId) return setProblem('Add an output port to plan for.')
+    if (!quantity.trim() || !Number.isFinite(target) || target <= 0) return setProblem('The target must be more than 0.')
+    setProblem(null)
+    setChosen(null)
+    setTraced([])
+    preview.mutate({ processIoId: portId, quantity: target, unit: unit || null })
+  }
+
+  function choose(row: PlanRequirement) {
+    setChosen(row.at)
+    setTraced(row.trace.map((step) => step.processId).filter((id): id is string => Boolean(id)))
+  }
+
+  const bottleneck = plan?.limits.find((limit) => limit.kind === 'equipment-time')
+  const failure = problem ?? (preview.isError ? errorMessage(preview.error) : null)
+
+  return (
+    <section aria-label="Plan the flow" style={{ margin: '12px 16px 0', border: '1px solid #e2e8f0', padding: '10px' }}>
+      <form onSubmit={submit} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end' }}>
+        <label style={{ display: 'grid', gap: '4px' }}><span>Output</span>
+          <select value={portId} onChange={(event) => setPortId(event.target.value)}>
+            {outputs.map(({ node, port }) => (
+              <option key={port.processIoId} value={port.processIoId}>{node.name} · {port.name || port.processIoId}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: '4px' }}><span>Target</span>
+          <input inputMode="decimal" value={quantity} placeholder={unit ? `quantity in ${unit}` : 'quantity'}
+            onChange={(event) => setQuantity(event.target.value)} />
+        </label>
+        <button type="submit" disabled={preview.isPending}>{preview.isPending ? 'Planning...' : 'Plan'}</button>
+      </form>
+      <p className="inspector-hint" style={{ margin: '6px 0 0' }}>Plans use the published revision. Nothing is reserved.</p>
+      {failure && <p role="alert" style={{ color: '#991b1b' }}>{failure}</p>}
+      {plan && (
+        <div style={{ marginTop: '8px' }}>
+          {plan.buildable != null && <p style={{ margin: '4px 0' }}>Can make {amount(plan.buildable)} now</p>}
+          {bottleneck?.processId && <p style={{ margin: '4px 0' }}>Bottleneck: {nameOf(bottleneck.processId)}</p>}
+          {!plan.feasible && <p role="alert">This graph cannot bring the target as planned.</p>}
+          <table style={{ borderCollapse: 'collapse', marginTop: '6px' }}>
+            <thead><tr><th align="left">Material</th><th align="right">Needed</th><th align="right">In stock</th><th align="right">Short</th></tr></thead>
+            <tbody>
+              {plan.requirements.map((row) => (
+                <tr key={row.at} aria-label={row.itemName ?? nameOf(row.processId)} onClick={() => choose(row)}
+                  style={{ cursor: 'pointer', background: chosen === row.at ? '#eff6ff' : undefined }}>
+                  <td>{row.itemName ?? nameOf(row.processId)}</td>
+                  <td align="right">{amount(row.needed)} {row.unit}</td>
+                  <td align="right">{row.available == null ? '—' : `${amount(row.available)} ${row.unit ?? ''}`}</td>
+                  <td align="right">{row.shortage ? `${amount(row.shortage)} ${row.unit ?? ''} short` : 'enough'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul aria-label="Steps" style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
+            {plan.nodes.filter((node) => node.batches != null || node.minutes != null).map((node) => (
+              <li key={node.processId}>
+                {nameOf(node.processId)}: {node.batches != null ? `${amount(node.batches)} batches` : `${amount(node.through)} ${node.unit ?? ''}`}
+                {node.minutes != null ? `, ${amount(node.minutes)} min` : ''}
+              </li>
+            ))}
+          </ul>
+          {plan.limits.length > 0 && (
+            <ul aria-label="Limits" style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
+              {plan.limits.map((limit, index) => <li key={index}>{limit.message}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}

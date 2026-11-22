@@ -54,6 +54,7 @@ import {
   type GraphChangeMessage,
 } from '../../../entities/workflow/api/useWorkflowSync'
 import { snapGuidesFor, type SnapGuide } from '../model/snapGuides'
+import { usePlanTraceStore } from '../model/planTrace'
 import { connectionMarkClass, processMarkClass, type ChangeMarks } from '../model/canvasMarks'
 import { useFreehandDrawing } from '../model/useFreehandDrawing'
 import { useCanvasViewHandles, type CanvasCamera } from './useCanvasViewHandles'
@@ -603,9 +604,11 @@ export function CanvasViewport({
   // Reading marks every process and connection as part of what is read or receding (index.css "Canvas reading").
   // A run shown over the canvas adds each process's mark beside it ("run-mark run-<mark>"); a compared revision adds
   // what changed since it on the other corner ("change-mark change-<mark>") and on connections ("change-<mark>").
-  const readingNodes = useMemo(() => (reading || runMarks || changeMarks
-    ? localNodes.map((node) => ({ ...node, className: processMarkClass(node.id, reading, runMarks, changeMarks) }))
-    : localNodes), [localNodes, reading, runMarks, changeMarks])
+  const traced = usePlanTraceStore((s) => s.traced)
+  const readingNodes = useMemo(() => (reading || runMarks || changeMarks || traced.size > 0
+    ? localNodes.map((node) => ({ ...node, className: [processMarkClass(node.id, reading, runMarks, changeMarks),
+      traced.has(node.id) ? 'is-traced' : ''].filter(Boolean).join(' ') }))
+    : localNodes), [localNodes, reading, runMarks, changeMarks, traced])
   const readingEdges = useMemo(() => (reading || changeMarks
     ? localEdges.map((edge) => ({ ...edge, className: connectionMarkClass(edge.id, reading, changeMarks) }))
     : localEdges), [localEdges, reading, changeMarks])
