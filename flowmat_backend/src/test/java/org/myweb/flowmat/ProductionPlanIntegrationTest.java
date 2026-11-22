@@ -145,12 +145,13 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
     @Test
     void aConfirmedPlanMakesDraftsOnceAndMovesNoStock() throws Exception {
         String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
-        String flour = item("PC-FLOUR-" + tag, "unit_kg");
-        String bread = item("PC-BREAD-" + tag, "unit_ea");
-        stock(flour, 10, tag);
-        // Listed, since a project that lists suppliers takes only listed ones (PO20).
-        call(post("/suppliers"), json(Map.of("projectId", DEMO_PROJECT, "supplierName", "Mill " + tag))).andExpect(status().isOk());
-        Graph graph = new Graph("Bread " + tag);
+        // Its own project: listing a supplier makes a project take only listed ones (PO20), which other tests would feel.
+        String project = id(call(post("/projects"), json(Map.of("projectName", "Plan confirm " + tag, "ownerId", DEMO_OWNER))), "projectId");
+        String flour = item(project, "PC-FLOUR-" + tag, "unit_kg");
+        String bread = item(project, "PC-BREAD-" + tag, "unit_ea");
+        stock(project, flour, 10, tag);
+        call(post("/suppliers"), json(Map.of("projectId", project, "supplierName", "Mill " + tag))).andExpect(status().isOk());
+        Graph graph = new Graph(project, "Bread " + tag);
         String bake = graph.node("Bake");
         graph.port(bake, "input", flour, 2, "kg");
         String loaves = graph.port(bake, "output", bread, 1, "ea");
@@ -180,7 +181,7 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.status").value("draft"))
             .andExpect(jsonPath("$.data.lines[0].itemId").value(flour))
             .andExpect(jsonPath("$.data.lines[0].quantity").value(10.0));
-        call(get("/inventories").param("projectId", DEMO_PROJECT))
+        call(get("/inventories").param("projectId", project))
             .andExpect(jsonPath("$.data[?(@.itemId == '" + flour + "')].quantity").value(hasItem(10.0)));
 
         // A newer revision: the old plan is refused and nothing more is made.
@@ -191,11 +192,11 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         // Planned again but stock moved meanwhile: refused too.
         var fresh = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of("target", target)))
             .andReturn().getResponse().getContentAsString()).path("data");
-        stock(flour, 1, tag + "B");
+        stock(project, flour, 1, tag + "B");
         Map<String, Object> moved = new HashMap<>(stale);
         moved.put("basis", objectMapper.convertValue(fresh.path("basis"), Map.class));
         call(post(url), json(moved)).andExpect(status().isConflict());
-        call(get("/purchase-orders").param("projectId", DEMO_PROJECT))
+        call(get("/purchase-orders").param("projectId", project))
             .andExpect(jsonPath("$.data[?(@.supplierName == 'Mill " + tag + "')]").value(org.hamcrest.Matchers.hasSize(1)));
     }
 
@@ -203,7 +204,11 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         private final String workflow;
 
         Graph(String name) throws Exception {
-            workflow = id(call(post("/workflows"), json(Map.of("projectId", DEMO_PROJECT, "workflowName", name))), "workflowId");
+            this(DEMO_PROJECT, name);
+        }
+
+        Graph(String project, String name) throws Exception {
+            workflow = id(call(post("/workflows"), json(Map.of("projectId", project, "workflowName", name))), "workflowId");
         }
 
         String node(String name) throws Exception {
@@ -241,12 +246,20 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
     }
 
     private void stock(String itemId, double quantity, String tag) throws Exception {
-        call(post("/inventories"), json(Map.of("projectId", DEMO_PROJECT, "itemId", itemId, "quantity", quantity,
+        stock(DEMO_PROJECT, itemId, quantity, tag);
+    }
+
+    private void stock(String project, String itemId, double quantity, String tag) throws Exception {
+        call(post("/inventories"), json(Map.of("projectId", project, "itemId", itemId, "quantity", quantity,
             "location", "PL-" + tag))).andExpect(status().isOk());
     }
 
     private String item(String code, String unitId) throws Exception {
-        return id(call(post("/items"), json(Map.of("projectId", DEMO_PROJECT, "itemCode", code, "itemName", code.toLowerCase(),
+        return item(DEMO_PROJECT, code, unitId);
+    }
+
+    private String item(String project, String code, String unitId) throws Exception {
+        return id(call(post("/items"), json(Map.of("projectId", project, "itemCode", code, "itemName", code.toLowerCase(),
             "unitId", unitId))), "itemId");
     }
 
