@@ -143,7 +143,8 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     expect(confirmed.purchaseOrderIds).toHaveLength(1)
     expect(await api('POST', `/workflows/${workflowId}/plan-confirmations`, confirmation)).toEqual(confirmed)
     expect(await api('GET', `/work-orders/${confirmed.workOrderId}`)).toMatchObject({
-      workflowId, targetItemId: melonMilk, targetQuantity: 1000, workOrderStatus: 'draft',
+      workflowId, workflowRevisionId: revision.workflowRevisionId, targetItemId: melonMilk, targetQuantity: 1000,
+      workOrderStatus: 'draft',
     })
     expect(await api('GET', `/purchase-orders/${confirmed.purchaseOrderIds[0]}`)).toMatchObject({
       status: 'draft', lines: [expect.objectContaining({ itemId: milk, quantity: 34.0564 })],

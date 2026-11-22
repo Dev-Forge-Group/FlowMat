@@ -44,6 +44,7 @@ public class ProductionPlanConfirmationService {
     private final WorkOrderService workOrders;
     private final PurchaseDraftCommand purchaseDrafts;
     private final PlanConfirmationRepository confirmations;
+    private final org.myweb.flowmat.domain.production.repository.WorkOrderRepository workOrderRows;
     private final CatalogQuery catalogQuery;
     private final ProjectAccess projectAccess;
 
@@ -79,7 +80,7 @@ public class ProductionPlanConfirmationService {
         }
         List<PurchaseDraftCommand.Line> shortages = plan.requirements().stream()
             .filter(row -> row.itemId() != null && row.shortage() != null && row.shortage().signum() > 0)
-            .map(row -> new PurchaseDraftCommand.Line(row.itemId(), row.shortage())).toList();
+            .map(row -> new PurchaseDraftCommand.Line(row.itemId(), inPurchaseUnits(row.itemId(), row.shortage()))).toList();
         if (!shortages.isEmpty() && (request.supplierName() == null || request.supplierName().isBlank())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Name the supplier for the draft purchase order of the shortages.");
         }
@@ -90,6 +91,7 @@ public class ProductionPlanConfirmationService {
         String workOrderId = workOrders.createWorkOrder(new WorkOrderCreateRequest(workflow.projectId(), title, workflow.workflowId(),
             null, targetItem, plan.target(), null, null, null, "From the plan of revision " + plan.revisionId() + ".", null, null))
             .workOrderId();
+        workOrderRows.findById(workOrderId).ifPresent(order -> order.setWorkflowRevisionId(plan.revisionId()));
         String purchaseOrderId = shortages.isEmpty() ? null
             : purchaseDrafts.draft(workflow.projectId(), request.supplierName(), "For the planned work order " + title, shortages);
 
@@ -126,6 +128,16 @@ public class ProductionPlanConfirmationService {
         return Objects.equals(earlier.getTargetPortId(), target.processIoId())
             && Objects.equals(earlier.getTargetConnectionId(), target.connectionId())
             && earlier.getTargetQuantity().compareTo(target.quantity()) == 0;
+    }
+
+    /** The shortage rounded up to whole purchase units when the item has one, as the screen's draft does (PO12). */
+    private BigDecimal inPurchaseUnits(String itemId, BigDecimal shortage) {
+        CatalogItemView item = catalogQuery.findItems(Set.of(itemId)).get(itemId);
+        if (item == null || item.purchaseUnit() == null || item.conversionRate() == null || item.conversionRate().signum() <= 0) {
+            return shortage;
+        }
+        BigDecimal packs = shortage.divide(item.conversionRate(), 0, java.math.RoundingMode.CEILING);
+        return packs.multiply(item.conversionRate());
     }
 
     private String itemName(String itemId) {

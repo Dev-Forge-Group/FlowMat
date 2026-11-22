@@ -126,8 +126,17 @@ public class ProductionRunServiceImpl implements ProductionRunService {
         // Publish and retire lock the workflow; resolve its revision under the same lock.
         workflow = workflowRuns.lockWorkflow(workflow.workflowId());
         validateSameProject(request.projectId(), workflow.projectId());
-        WorkflowProductionQuery.Revision workflowRevision = resolveWorkflowRevision(workflow.workflowId(), request.workflowRevisionId());
         WorkOrder workOrder = findRunnableWorkOrder(request.workOrderId(), request.projectId(), workflow);
+        String revisionId = request.workflowRevisionId();
+        if (workOrder != null && workOrder.getWorkflowRevisionId() != null) {
+            // A confirmed plan's order runs on the revision the plan read (ADR-043 decision 7).
+            if (revisionId != null && !revisionId.isBlank() && !revisionId.trim().equals(workOrder.getWorkflowRevisionId())) {
+                throw new BusinessException(ErrorCode.CONFLICT, "The work order is planned on revision "
+                    + workOrder.getWorkflowRevisionId() + "; start its runs on that revision.");
+            }
+            revisionId = workOrder.getWorkflowRevisionId();
+        }
+        WorkflowProductionQuery.Revision workflowRevision = resolveWorkflowRevision(workflow.workflowId(), revisionId);
         String targetItemId = trimToNull(request.targetItemId());
         if (targetItemId == null && workOrder != null) {
             targetItemId = workOrder.getTargetItemId();

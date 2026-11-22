@@ -152,7 +152,9 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
         // Its own project: listing a supplier makes a project take only listed ones (PO20), which other tests would feel.
         String project = id(call(post("/projects"), json(Map.of("projectName", "Plan confirm " + tag, "ownerId", DEMO_OWNER))), "projectId");
-        String flour = item(project, "PC-FLOUR-" + tag, "unit_kg");
+        // Flour comes in 25 kg bags: the 10 kg short is ordered as one bag (PO12).
+        String flour = id(call(post("/items"), json(Map.of("projectId", project, "itemCode", "PC-FLOUR-" + tag, "itemName", "flour",
+            "unitId", "unit_kg", "purchaseUnit", "bag", "purchaseUnitQty", 25))), "itemId");
         String bread = item(project, "PC-BREAD-" + tag, "unit_ea");
         stock(project, flour, 10, tag);
         call(post("/suppliers"), json(Map.of("projectId", project, "supplierName", "Mill " + tag))).andExpect(status().isOk());
@@ -180,12 +182,13 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.purchaseOrderIds[0]").value(order));
         call(get("/work-orders/" + workOrder)).andExpect(status().isOk())
             .andExpect(jsonPath("$.data.workOrderStatus").value("draft"))
+            .andExpect(jsonPath("$.data.workflowRevisionId").value(plan.path("revisionId").asText()))
             .andExpect(jsonPath("$.data.targetItemId").value(bread))
             .andExpect(jsonPath("$.data.targetQuantity").value(10.0));
         call(get("/purchase-orders/" + order)).andExpect(status().isOk())
             .andExpect(jsonPath("$.data.status").value("draft"))
             .andExpect(jsonPath("$.data.lines[0].itemId").value(flour))
-            .andExpect(jsonPath("$.data.lines[0].quantity").value(10.0));
+            .andExpect(jsonPath("$.data.lines[0].quantity").value(25.0));
         call(get("/inventories").param("projectId", project))
             .andExpect(jsonPath("$.data[?(@.itemId == '" + flour + "')].quantity").value(hasItem(10.0)));
 

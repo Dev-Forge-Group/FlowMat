@@ -21,6 +21,8 @@ public class WorkOrder extends CreatedUpdatedAuditEntity {
 
     private String projectId;
     private String workflowId;
+    /** The published revision the order is planned on; null takes the latest at run start (ADR-043 decision 7). */
+    private String workflowRevisionId;
     private String bomId;
     private String workOrderNumber;
     private String workOrderTitle;

@@ -35,7 +35,7 @@ export function FirstRunGuide({ canvas, onPlan }: Props) {
   if (done === steps.length) return null
 
   return (
-    <details aria-label="Start here" open={done === 0} style={{ margin: '8px 16px 0', border: '1px solid #e2e8f0', padding: '6px 10px' }}>
+    <details aria-label="Start here" style={{ margin: '8px 16px 0', border: '1px solid #e2e8f0', padding: '6px 10px' }}>
       <summary>Start here · {done} of {steps.length + 1} done</summary>
       <ol style={{ margin: '6px 0 0', paddingLeft: '20px' }}>
         {steps.map((step) => (
