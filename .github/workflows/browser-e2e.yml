@@ -58,7 +58,7 @@ jobs:
         env:
           FULL: ${{ github.event_name != 'pull_request' && '--full' || '' }}
         run: |
-          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts) $(git hash-object ../.github/workflows/browser-e2e.yml)"
+          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts | tr '\n' ' ')$(git hash-object ../.github/workflows/browser-e2e.yml)"
           echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
           node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
             --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
@@ -116,7 +116,7 @@ jobs:
         env:
           FULL: ${{ github.event_name != 'pull_request' && '--full' || '' }}
         run: |
-          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts) $(git hash-object ../.github/workflows/browser-e2e.yml)"
+          extra="$(git rev-parse HEAD:flowmat_backend HEAD:scripts | tr '\n' ' ')$(git hash-object ../.github/workflows/browser-e2e.yml)"
           echo "E2E_EXTRA=$extra" >> "$GITHUB_ENV"
           node e2e/support/already-passed/select.mjs plan --scope real --extra "$extra" $FULL \
             --records playwright-results/already-passed/passed.json --out playwright-results/already-passed/skip.json
