@@ -84,9 +84,14 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
 
         String row = "$.data.requirements[?(@.itemId == '%s')]";
         call(post("/workflows/" + graph.workflow + "/plan-previews"),
-            json(Map.of("target", Map.of("processIoId", packOut, "quantity", 1000, "unit", "ea"))))
+            json(Map.of("target", Map.of("processIoId", packOut, "quantity", 1000, "unit", "ea"), "startAt", "2030-01-07T09:00:00Z")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.revisionId").value(revision))
+            // In time (equipment without a calendar works around the clock): Mix 55.2169 min from 09:00, then Fill on the
+            // filler 50.5051 min, then Pack 41.6667 min.
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + mix + "')].endAt").value(hasItem(org.hamcrest.Matchers.startsWith("2030-01-07T09:55:13.014"))))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + fill + "')].startAt").value(hasItem(org.hamcrest.Matchers.startsWith("2030-01-07T09:55:13.014"))))
+            .andExpect(jsonPath("$.data.finishAt").value(org.hamcrest.Matchers.startsWith("2030-01-07T11:27:23.322")))
             .andExpect(jsonPath("$.data.feasible").value(true))
             // 150 kg of milk makes 814.968 bottles; bottles are counted, so 814.
             .andExpect(jsonPath("$.data.buildable").value(814))
