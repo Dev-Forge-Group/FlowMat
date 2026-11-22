@@ -53,7 +53,10 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     })).processId
     const port = async (processId: string, direction: 'input' | 'output', itemId: string, quantity: number, unit: string,
       resourceType = direction === 'output' && itemId === melonMilk ? 'product' : 'material') =>
-      (await api<{ processIoId: string }>('POST', '/process-ios', { processId, itemId, direction, quantity, unit, resourceType })).processIoId
+      (await api<{ processIoId: string }>('POST', '/process-ios', {
+        // Materials drawn from stock have no connection in, so they are not required inputs.
+        processId, itemId, direction, quantity, unit, resourceType, requiredYn: 'N',
+      })).processIoId
     const receive = await node('Receive milk', 80)
     const mix = await node('Mix', 420)
     const fill = await node('Fill', 760)
@@ -107,7 +110,8 @@ test('melon milk: from a target of 1,000 bottles to a confirmed draft plan', asy
     })
     // The milk's reason: from the target back through Pack, the breakage, Fill, the loss, Mix and Receive.
     const milkRow = (plan.requirements as any[]).find((row) => row.itemId === milk)
-    expect((milkRow.trace as { at: string }[]).map((step) => step.at)).toEqual(expect.arrayContaining([pack, fill, mix, receiveIn]))
+    expect((milkRow.trace as { processId: string }[]).map((step) => step.processId))
+      .toEqual(expect.arrayContaining([pack, fill, mix, receive]))
     expect(plan.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ processId: mix, batches: 1.8406, minutes: 55.2169 }),
       expect.objectContaining({ processId: fill, batches: 1010.1011, minutes: 50.5051 }),
