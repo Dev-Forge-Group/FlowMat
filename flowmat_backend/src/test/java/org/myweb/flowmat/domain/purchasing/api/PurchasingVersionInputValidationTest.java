@@ -23,6 +23,7 @@ import org.myweb.flowmat.domain.purchasing.application.SupplierItemService;
 import org.myweb.flowmat.domain.purchasing.application.SupplierService;
 import org.myweb.flowmat.global.exception.GlobalExceptionHandler;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -39,7 +40,8 @@ class PurchasingVersionInputValidationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(new PurchaseSettingController(settings), new SupplierController(suppliers),
-            new SupplierItemController(supplierItems)).setControllerAdvice(new GlobalExceptionHandler()).build();
+            new SupplierItemController(supplierItems)).setControllerAdvice(new GlobalExceptionHandler())
+            .setMessageConverters(new MappingJackson2HttpMessageConverter()).build();
     }
 
     @ParameterizedTest(name = "{0} refuses fractional expectedVersion {1}")

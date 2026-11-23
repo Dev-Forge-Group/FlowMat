@@ -21,6 +21,8 @@ OWASP 의존성 검사가 처음으로 끝까지 돌았다(2026-11-23, run 249).
    - Boot 4의 기본은 Jackson 3(`tools.jackson`)이다. 하지만 코드(본 코드 137개, 테스트 376개 파일)가 Jackson 2(`com.fasterxml.jackson`)를 쓰고, JSON 계약(정밀도·날짜 형식)도 Jackson 2 기준으로 고정돼 있다.
    - 그래서 `spring-boot-jackson2`를 더하고, HTTP 메시지도 같은 ObjectMapper를 쓰게 한다(`spring.http.converters.preferred-json-mapper: jackson2`).
    - Jackson 2 설정 키는 `spring.jackson2.*`다. 지금은 따로 둔 설정이 없다.
+   - Framework 7의 `MockMvcBuilders.standaloneSetup`은 기본으로 Jackson 3 변환기를 쓴다. 그래서 엄격한 입력 검증(소수 버전, 빈 정책 등)을 보는 단독 테스트 셋은 `MappingJackson2HttpMessageConverter`를 직접 넣는다. 다른 단독 테스트는 이미 넣고 있었다.
+   - 이 설정이 없었던 첫 전체 실행에서는 343건이 실패했다. 대부분이 400 대신 200이었고, Jackson 2 전용 입력 검증이 빠졌기 때문이다. 넣은 뒤에는 0건이다.
    - Jackson 3으로 옮기는 일은 따로 한다. Boot가 Jackson 2 지원을 거두기 전에 한다.
 3. **Boot 4의 나뉜 모듈과 starter를 쓴다.**
    - `spring-boot-starter-web` → `spring-boot-starter-webmvc`
