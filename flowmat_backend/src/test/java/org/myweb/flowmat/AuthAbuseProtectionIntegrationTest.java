@@ -11,7 +11,12 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntFunction;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.myweb.flowmat.domain.user.api.dto.request.UserLoginRequest;
+import org.myweb.flowmat.global.security.JwtProvider;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MvcResult;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetConfirmRequest;
 import org.myweb.flowmat.domain.user.application.AuthRedisStore;
 import org.myweb.flowmat.domain.user.application.AuthService;
@@ -36,6 +41,8 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
     @Autowired AuthRedisStore store;
     @Autowired AuthService auth;
     @Autowired UserRepository users;
+    @Autowired PasswordEncoder encoder;
+    @Autowired JwtProvider jwt;
 
     @Test
     void fiveWrongCodesDeleteTheCodeSoTheRightOneFailsToo() throws Exception {
@@ -101,6 +108,37 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
         assertThat(store.getRefreshToken("jti-a-" + userId)).isNull();
         assertThat(store.getRefreshToken("jti-b-" + userId)).isNull();
         assertThat(store.getPasswordResetUserId(token)).isNull();
+    }
+
+    @Test
+    void changingThePasswordSignsOutOtherDevicesAndKeepsThisOne() throws Exception {
+        String userId = "pwchg_" + unique().substring(0, 12);
+        saveUser(userId);
+        User user = users.findByUserId(userId).orElseThrow();
+        user.setUserPwd(encoder.encode("Old-password-2026!"));
+        users.saveAndFlush(user);
+        String here = auth.login(new UserLoginRequest(userId, "Old-password-2026!", "device-here"), "JUnit", "127.0.0.1").refreshToken();
+        String there = auth.login(new UserLoginRequest(userId, "Old-password-2026!", "device-there"), "JUnit", "127.0.0.1").refreshToken();
+        String access = "Bearer " + jwt.generateAccessToken(userId);
+
+        // The wrong current password changes nothing (login-security.md §2).
+        mvc.perform(json(post("/auth/password"), address(), "{\"currentPassword\":\"guess-guess\",\"newPassword\":\"New-password-2026!\"}")
+                .header("Authorization", access).cookie(new Cookie("flowmat_rt", here)))
+            .andExpect(status().isBadRequest());
+        assertThat(store.getRefreshToken(jwt.resolveJti(there))).isNotNull();
+
+        MvcResult changed = mvc.perform(json(post("/auth/password"), address(),
+                "{\"currentPassword\":\"Old-password-2026!\",\"newPassword\":\"New-password-2026!\"}")
+                .header("Authorization", access).cookie(new Cookie("flowmat_rt", here)))
+            .andExpect(status().isOk()).andReturn();
+        // Both old sessions are gone; this device has a new refresh token in its cookie, on the same device.
+        assertThat(store.getRefreshToken(jwt.resolveJti(here))).isNull();
+        assertThat(store.getRefreshToken(jwt.resolveJti(there))).isNull();
+        String cookie = changed.getResponse().getHeaders("Set-Cookie").stream()
+            .filter(header -> header.startsWith("flowmat_rt=")).findFirst().orElseThrow();
+        String renewed = cookie.substring("flowmat_rt=".length(), cookie.indexOf(';'));
+        assertThat(store.getRefreshToken(jwt.resolveJti(renewed)).deviceId()).isEqualTo("device-here");
+        assertThat(encoder.matches("New-password-2026!", users.findByUserId(userId).orElseThrow().getUserPwd())).isTrue();
     }
 
     private void assertLimited(String path, int limit, IntFunction<String> body) throws Exception {

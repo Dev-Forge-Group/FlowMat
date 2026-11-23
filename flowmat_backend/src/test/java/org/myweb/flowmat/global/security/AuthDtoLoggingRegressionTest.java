@@ -21,6 +21,7 @@ import org.myweb.flowmat.domain.user.api.dto.request.FaceSelectRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.LogoutRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthExchangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthSignupCompleteRequest;
+import org.myweb.flowmat.domain.user.api.dto.request.PasswordChangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetConfirmRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.RefreshTokenRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.SocialLinkStartRequest;
@@ -57,7 +58,7 @@ class AuthDtoLoggingRegressionTest {
         List<Case> values = new ArrayList<>();
         for (Class<?> type : List.of(UserLoginRequest.class, RefreshTokenRequest.class, UserTokenResponse.class,
             OAuthExchangeResponse.class, UserSignupRequest.class, UserUpdateRequest.class, OAuthSignupCompleteRequest.class,
-            OAuthExchangeRequest.class, DormantTokenRequest.class, LogoutRequest.class, PasswordResetConfirmRequest.class,
+            OAuthExchangeRequest.class, DormantTokenRequest.class, LogoutRequest.class, PasswordResetConfirmRequest.class, PasswordChangeRequest.class,
             EmailCodeVerifyRequest.class, SocialLinkStartRequest.class, SocialLinkUnlinkRequest.class)) {
             var components = type.getRecordComponents();
             Class<?>[] types = new Class<?>[components.length];

@@ -168,6 +168,9 @@ public class UserServiceImpl implements UserService {
             }
             user.setUserPwd(passwordEncoder.encode(PasswordPolicy.require(request.newPassword(), user.getUserId(), user.getUserEmail())));
             user.setPwdUpdatedAt(OffsetDateTime.now());
+            // Every device signed in with the old password is signed out, this one too once its access token ends;
+            // POST /auth/password keeps this device signed in (docs/operations/login-security.md §2).
+            authRedisStore.revokeAllRefreshTokensOrFail(user.getUserId());
         }
 
         return toResponse(user);
