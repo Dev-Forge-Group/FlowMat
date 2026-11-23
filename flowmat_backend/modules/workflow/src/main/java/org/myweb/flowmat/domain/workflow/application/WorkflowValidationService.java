@@ -213,10 +213,13 @@ public class WorkflowValidationService {
         }
         endpointIssues(activeProcesses, links, isolated, names, issues);
         gatewayIssues(activeProcesses, usableConnections, links, names, issues);
-        List<String> cycle = cycleMembers(processIds, usableConnections);
+        Map<String, String> kinds = new HashMap<>();
+        for (Process process : activeProcesses) kinds.put(process.getProcessId(), kind(process));
+        List<String> cycle = blockedLoopMembers(processIds, usableConnections, kinds);
         if (!cycle.isEmpty()) {
             issues.add(issue("warning", "CYCLE", null, null, null,
-                "Workflow contains a directed cycle; automatic execution must define loop semantics.")
+                "Workflow contains a loop that cannot run; give it an Exclusive or Split gateway with a connection out of "
+                    + "the loop, and keep Joins off it.")
                 .with("processIds", cycle));
         }
         List<WorkflowValidationIssue> sorted = issues.stream()
@@ -478,6 +481,49 @@ public class WorkflowValidationService {
 
     private static boolean unknownUnit(WorkflowUnits units, String unit) {
         return text(unit) && !units.known(unit);
+    }
+
+    /**
+     * The processes on loops that cannot run, in creation order (docs/architecture/adr/ADR-045-closed-loops.md decision 6):
+     * a loop is the processes that reach each other, and it runs when an Exclusive or Split gateway on it has a connection
+     * out of it and no Join is on it. Empty when every loop can run or there is none.
+     */
+    private static List<String> blockedLoopMembers(Set<String> processIds, List<ProcessConnection> connections,
+        Map<String, String> kinds) {
+        List<String> members = cycleMembers(processIds, connections);
+        if (members.isEmpty()) return members;
+        Map<String, List<String>> outgoing = new HashMap<>();
+        for (ProcessConnection connection : connections) {
+            outgoing.computeIfAbsent(connection.getFromProcessId(), ignored -> new ArrayList<>()).add(connection.getToProcessId());
+        }
+        Map<String, Set<String>> reach = new HashMap<>();
+        for (String id : members) reach.put(id, reachable(outgoing, id));
+        Set<String> blocked = new HashSet<>();
+        Set<String> done = new HashSet<>();
+        for (String id : members) {
+            if (done.contains(id)) continue;
+            Set<String> loop = new LinkedHashSet<>();
+            for (String other : members) {
+                if (reach.get(id).contains(other) && reach.get(other).contains(id)) loop.add(other);
+            }
+            done.addAll(loop);
+            boolean join = loop.stream().anyMatch(node -> "join".equals(kinds.get(node)));
+            boolean wayOut = loop.stream()
+                .filter(node -> "exclusive".equals(kinds.get(node)) || "split".equals(kinds.get(node)))
+                .anyMatch(node -> outgoing.getOrDefault(node, List.of()).stream().anyMatch(target -> !loop.contains(target)));
+            if (join || !wayOut) blocked.addAll(loop);
+        }
+        return members.stream().filter(blocked::contains).toList();
+    }
+
+    private static Set<String> reachable(Map<String, List<String>> outgoing, String start) {
+        Set<String> seen = new HashSet<>();
+        ArrayDeque<String> pending = new ArrayDeque<>(outgoing.getOrDefault(start, List.of()));
+        while (!pending.isEmpty()) {
+            String current = pending.remove();
+            if (seen.add(current)) pending.addAll(outgoing.getOrDefault(current, List.of()));
+        }
+        return seen;
     }
 
     /**

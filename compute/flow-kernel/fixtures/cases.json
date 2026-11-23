@@ -119,6 +119,68 @@
         {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "b", "toProcessId": "out", "defaultRoute": false}
       ]
     }},
+    {"id": "loop-rework", "note": "A rework loop (ADR-045): Inspect, then an Exclusive gateway sends a low grade to Rework and back to Inspect, anything else on to Ship by default. It runs; a grade that stays low goes round until the pass limit.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "inspect", "processName": "Inspect", "nodeType": "process"},
+        {"processId": "gate", "processName": "Grade ok?", "nodeType": "exclusive"},
+        {"processId": "rework", "processName": "Rework", "nodeType": "process"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}
+      ],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "inspect", "defaultRoute": false},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "inspect", "toProcessId": "gate", "defaultRoute": false},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "gate", "toProcessId": "rework", "conditionExpr": "attrs.grade < 3", "priority": 0, "defaultRoute": false},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "gate", "toProcessId": "out", "priority": 1, "defaultRoute": true},
+        {"connectionId": "c5", "workflowId": "wf", "fromProcessId": "rework", "toProcessId": "inspect", "defaultRoute": false}
+      ]
+    }},
+    {"id": "loop-limit", "note": "A loop whose Exclusive gateway always sends back (ADR-045 decision 3): Rework and its gateway run ten times each, then the way back is filtered as loop_limit and the run ends.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "rework", "processName": "Rework", "nodeType": "process"},
+        {"processId": "gate", "processName": "Again?", "nodeType": "exclusive"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}
+      ],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "rework", "defaultRoute": false},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "rework", "toProcessId": "gate", "defaultRoute": false},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "gate", "toProcessId": "rework", "priority": 0, "defaultRoute": false},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "gate", "toProcessId": "out", "priority": 1, "defaultRoute": true}
+      ]
+    }},
+    {"id": "loop-recycle", "note": "A recycling loop (ADR-045): a Split sends 20% of what Cut makes back to Cut and the rest on, so what comes back shrinks until it rounds to nothing.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "cut", "processName": "Cut", "nodeType": "process"},
+        {"processId": "sp", "processName": "Offcuts back", "nodeType": "split"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}
+      ],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "cut", "defaultRoute": false},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "cut", "toProcessId": "sp", "defaultRoute": false},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "cut", "splitKind": "share", "splitValue": 20, "defaultRoute": false},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "out", "splitKind": "rest", "defaultRoute": false}
+      ]
+    }},
+    {"id": "loop-join", "note": "A Join on a loop (ADR-045 decision 1): refused, since a Join is passed once a run.", "graph": {
+      "processes": [
+        {"processId": "in", "processName": "Receive", "nodeType": "input"},
+        {"processId": "jn", "processName": "Gather", "nodeType": "join"},
+        {"processId": "sp", "processName": "Some back", "nodeType": "split"},
+        {"processId": "out", "processName": "Ship", "nodeType": "output"}
+      ],
+      "ports": [],
+      "connections": [
+        {"connectionId": "c1", "workflowId": "wf", "fromProcessId": "in", "toProcessId": "jn", "defaultRoute": false},
+        {"connectionId": "c2", "workflowId": "wf", "fromProcessId": "jn", "toProcessId": "sp", "defaultRoute": false},
+        {"connectionId": "c3", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "jn", "splitKind": "share", "splitValue": 10, "defaultRoute": false},
+        {"connectionId": "c4", "workflowId": "wf", "fromProcessId": "sp", "toProcessId": "out", "splitKind": "rest", "defaultRoute": false}
+      ]
+    }},
     {"id": "loss-rounds-away", "note": "A 75% loss on a connection: a tiny quantity is all lost to rounding and nothing goes on, a larger one arrives less the loss.", "probes": [
         {"nodeId": "in", "output": {"quantity": 0.0001, "unit": "kg"}},
         {"nodeId": "in", "output": {"quantity": 12.34567, "unit": "kg"}}

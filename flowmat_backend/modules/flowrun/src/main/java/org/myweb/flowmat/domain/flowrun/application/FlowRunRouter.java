@@ -45,6 +45,7 @@ class FlowRunRouter {
     static final String NO_ROUTE = "NO_ROUTE";
     static final String JOIN_TRANSFER_REJECTED = "JOIN_TRANSFER_REJECTED";
     static final String SPLIT_REJECTED = "SPLIT_REJECTED";
+    static final String LOOP_LIMIT = "loop_limit";
 
     /** Why routing ended the run: an Exclusive gateway without a connection, or a gateway whose output could not go on. */
     record Failure(String code, String message) {}
@@ -65,6 +66,19 @@ class FlowRunRouter {
     Failure follow(String runId, FlowRunGraph graph, String sourceStepId, List<FlowRunGraph.Decision> decisions,
         JsonNode output, String actorId, boolean rejectTransfer) {
         for (FlowRunGraph.Decision decision : decisions) {
+            if (decision.willRoute() && graph.onLoop(decision.targetNodeId())
+                && stepRepository.countByFlowRunIdAndNodeId(runId, decision.targetNodeId()) >= FlowRunGraph.MAX_PASSES) {
+                // The loop's pass limit (ADR-045 decision 3): nothing goes on, and what would have is kept on record.
+                ObjectNode limited = objectMapper.createObjectNode()
+                    .put("connectionId", decision.connectionId())
+                    .put("targetNodeId", decision.targetNodeId())
+                    .put("reason", LOOP_LIMIT);
+                JsonNode quantity = (decision.quantity() == null ? output
+                    : FlowRunGraph.withQuantity(output, decision.quantity())).get("quantity");
+                if (quantity != null) limited.set("quantity", quantity);
+                eventRecorder.record(runId, sourceStepId, "connection_filtered", limited, actorId);
+                continue;
+            }
             if (decision.loss() != null) {
                 transferLoss(runId, sourceStepId, decision, output, actorId);
             }

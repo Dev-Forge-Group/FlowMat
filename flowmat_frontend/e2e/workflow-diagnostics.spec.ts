@@ -17,7 +17,7 @@ const validation = {
   warnings: 2,
   issues: [
     { severity: 'warning', code: 'CYCLE', processId: null, ioId: null, connectionId: null,
-      message: 'Workflow contains a directed cycle; automatic execution must define loop semantics.' },
+      message: 'Workflow contains a loop that cannot run; give it an Exclusive or Split gateway with a connection out of the loop, and keep Joins off it.' },
     { severity: 'warning', code: 'UNEXPECTED_TERMINAL', processId: 'proc-left', ioId: null, connectionId: null,
       message: 'Process proc-left has no outgoing connection, but this workflow marks where results leave with Output nodes.',
       evidence: { nodeType: 'process', outgoing: 0, outputNodes: 1, allowedTerminalKinds: ['output', 'storage'] },

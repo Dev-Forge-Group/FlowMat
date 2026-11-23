@@ -9,7 +9,7 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
 | 모듈 | Java 원본 | 하는 일 |
 |---|---|---|
 | `validation` | `WorkflowValidationService.check`, `ConnectionContract` | 초안 검증 31규칙. 이슈의 코드·대상·메시지·근거·고치는 법·숨기는 경고·순서가 같다 |
-| `routing` | `PublishedFlowRunGraphReader`, `FlowRunGraph`, `FlowRunPortContracts` | 발행된 판 읽기, 출력 하나가 나가는 연결마다 하는 일(이유·양·손실), 합류에 아직 올 수 있는 연결 수 |
+| `routing` | `PublishedFlowRunGraphReader`, `FlowRunGraph`, `FlowRunPortContracts` | 발행된 판 읽기(실행할 수 있는 고리, [ADR-045](../../docs/architecture/adr/ADR-045-closed-loops.md)), 출력 하나가 나가는 연결마다 하는 일(이유·양·손실), 합류에 아직 올 수 있는 연결 수 |
 | `schema` | `PortSchema` | 포트 스키마 읽기와 호환 |
 | `ports` | `ProcessIoServiceImpl.validatePortValues`, `ResourceTypes` | 포트 값과 표준 자원 종류 |
 | `decimal` | `BigDecimal` | 자리수(scale)를 지키는 십진수. 반올림은 HALF_UP, 출력은 `toPlainString`이다 |
@@ -27,6 +27,7 @@ FlowMat 흐름의 의미를 한 곳에 모을 Rust 크레이트다([ADR-040](../
   - 단계마다 노드·상태·입력·출력·출처, 거절된 보고(`refused`), 실행 실패.
   - 손실·걸러진 연결·게이트웨이 경로 기록.
 - 커널의 `walk`가 같은 일을 서버 없이 한다. 한 번의 완료는 서버처럼 한꺼번에 일어나고, 거절되면 그 완료는 없던 일이 된다.
+- 고리는 서버처럼 돈다([ADR-045](../../docs/architecture/adr/ADR-045-closed-loops.md)). 한 바퀴마다 단계가 하나 더 생기고, 고리 위 공정은 10단계까지다. 그다음으로 가는 연결은 `connection_filtered`(`loop_limit`, 가려던 양)로 남는다.
 
 돌려 보기의 시각(`time.json`의 `expected`, `schedule`·`time` 모듈, [ADR-041](../../docs/architecture/adr/ADR-041-try-it-time.md)):
 
@@ -92,7 +93,7 @@ cargo test
 | `fixtures/cases.json` | 손으로 고른 그래프 10개: 문제없는 줄·게이트웨이·분할과 합류, 기본 경로 둘, 분할 몫 초과, 스키마 불일치(하나, 둘), 순환, 반올림으로 다 잃는 손실, 빈 흐름. 몇 개는 보낼 출력(`probes`)도 있다 | 사람 |
 | `fixtures/validation.json` | 위의 그래프와 고정 시드(`20261123`)로 만든 그래프 160개, 각각에 `WorkflowValidationService`가 낸 답(`errors`, `warnings`, `issues`의 순서·근거·고치는 법·숨기는 경고), 알려진 단위(`context.knownUnits`) | `FlowKernelFixtureTest` |
 | `fixtures/routing.json` | 위의 그래프와 고정 시드(`20261124`)로 만든 그래프 120개, 노드마다 보낼 출력, 실행 그래프(`FlowRunGraph`)의 답 | `FlowKernelRouteFixtureTest` |
-| `fixtures/walk.json` | `routing.json`에서 판으로 읽히는 그래프 94개(지연은 뺀다)와 입력 하나씩. 서버가 실제로 돌린 그래프 실행의 결과다 | `FlowKernelWalkFixtureTest`(통합 테스트, 약 50초) |
+| `fixtures/walk.json` | `routing.json`에서 판으로 읽히는 그래프 98개(지연은 뺀다, 고리 셋 포함)와 입력 하나씩. 서버가 실제로 돌린 그래프 실행의 결과다 | `FlowKernelWalkFixtureTest`(통합 테스트, 약 50초) |
 | `fixtures/time.json` | `walk.json` 중 원래 그래프에 지연이 있는 67개. 시드(`20261221`)로 만든 시작 시각·구간·설비·인력과, 단계마다 `FlowRunTiming`이 낸 시각 | `FlowKernelTimeFixtureTest`(단위 테스트) |
 
 - 그래프 하나는 `{processes, ports, connections}`이고, 필드 이름은 서버의 공정·포트·연결과 같다. 알려진 단위는 파일의 `context.knownUnits` 하나다. 표준 자원 종류는 커널에 고정한다(`ResourceTypes`와 같은 목록).

@@ -18,6 +18,9 @@ public interface FlowRunStepRepository extends JpaRepository<FlowRunStep, String
     boolean existsByFlowRunIdAndStatusNotIn(String flowRunId, Set<String> statuses);
     long countByFlowRunId(String flowRunId);
 
+    /** A process's steps in a run: a process on a loop has at most FlowRunGraph.MAX_PASSES (ADR-045). */
+    long countByFlowRunIdAndNodeId(String flowRunId, String nodeId);
+
     /** Running steps of a node in the open generic graph runs of a revision (docs/domain/flow-run-execution-policy.md EP6). */
     @Query("select count(step) from FlowRunStep step, FlowRun run where run.flowRunId = step.flowRunId"
         + " and run.workflowRevisionId = :revisionId and run.status = 'running' and run.executionMode = 'graph'"
