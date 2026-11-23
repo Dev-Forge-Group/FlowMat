@@ -11,6 +11,7 @@ import { useRemoveMemberMutation } from '../../../entities/project/api/useRemove
 import type { ProjectMemberDto, ProjectInviteDto } from '../../../shared/types/api'
 
 import { ProjectTimeZonePanel } from './ProjectTimeZonePanel'
+import { ResourceCapacityPanel } from './ResourceCapacityPanel'
 import { NotificationSubscriptionsPanel } from './NotificationSubscriptionsPanel'
 import { WorkerCalendarsPanel } from './WorkerCalendarsPanel'
 import { LaborPremiumsPanel } from './LaborPremiumsPanel'
@@ -322,6 +323,7 @@ export function ProjectSettingsRoute() {
       </header>
 
       <ProjectTimeZonePanel key={projectId} projectId={projectId} />
+      <ResourceCapacityPanel key={`resources-${projectId}`} projectId={projectId} />
       <HTTPProfilesPanel key={`http-${projectId}`} projectId={projectId} />
       <IntegrationJobsPanel key={`integration-${projectId}`} projectId={projectId} />
       <NotificationSubscriptionsPanel key={`notifications-${projectId}`} projectId={projectId} />

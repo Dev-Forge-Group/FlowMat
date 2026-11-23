@@ -2072,6 +2072,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListResourceCapacityResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ResourceCapacityResponse"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListRoleResponse" : {
         "properties" : {
           "data" : {
@@ -4766,6 +4783,23 @@
             "type" : "string"
           },
           "zIndex" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Capacity" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "per" : {
+            "type" : "string"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "unit" : {
             "type" : "string"
           }
         },
@@ -11947,6 +11981,44 @@
             "type" : "string"
           },
           "unit" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ResourceCapacityRequest" : {
+        "properties" : {
+          "capacities" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Capacity"
+            },
+            "maxItems" : 20,
+            "minItems" : 0,
+            "type" : "array"
+          }
+        },
+        "required" : [ "capacities" ],
+        "type" : "object"
+      },
+      "ResourceCapacityResponse" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "per" : {
+            "type" : "string"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "unit" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "updatedBy" : {
             "type" : "string"
           }
         },
@@ -25102,6 +25174,64 @@
           }
         },
         "tags" : [ "labor-premium-controller" ]
+      }
+    },
+    "/projects/{projectId}/resource-capacities" : {
+      "get" : {
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "projectId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListResourceCapacityResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-capacity-controller" ]
+      },
+      "put" : {
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "projectId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ResourceCapacityRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListResourceCapacityResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-capacity-controller" ]
       }
     },
     "/projects/{projectId}/time-zone" : {

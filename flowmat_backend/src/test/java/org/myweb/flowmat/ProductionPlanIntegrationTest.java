@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -323,7 +324,8 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
     /**
      * Resources first class (docs/architecture/adr/ADR-046-resources-first-class.md): 10 loaves need 10 kg of dough at 2.5,
      * 30 kWh of electricity at 0.2 and 20 l of water without a price. Electricity and water are not stocked: no shortage, no
-     * stock limit, no draft purchase; the plan costs 25 + 6 = 31 with one row unknown.
+     * stock limit, no draft purchase; the plan costs 25 + 6 = 31 with one row unknown. Against the factory's limits, the energy
+     * is above 10 kWh an hour and the water within 100 l a day.
      */
     @Test
     void energyAndWaterAreDrawnNotStockedAndThePlanCostsWhatItKnows() throws Exception {
@@ -349,7 +351,21 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         call(post("/process-ios"), json(Map.of("processId", bake, "direction", "input", "itemId", water, "quantity", 2, "unit", "l",
             "resourceType", "water", "requiredYn", "N"))).andExpect(status().isOk());
         String loaves = graph.port(bake, "output", bread, 1, "ea");
+        // 3 minutes a loaf: 10 loaves take half an hour, so 30 kWh averages 60 kWh per hour.
+        requirements(bake, Map.of("kind", "time", "amount", 3, "unit", "min", "per", "output_unit"));
         graph.publish();
+        // The factory's limits (decision 5): its owner only, energy or water.
+        String limits = "/projects/" + project + "/resource-capacities";
+        Map<String, Object> energyLimit = Map.of("resourceType", "energy", "unit", kwh, "amount", 10, "per", "hour");
+        mockMvc.perform(put(limits).contentType(MediaType.APPLICATION_JSON).content(json(Map.of("capacities", List.of(energyLimit))))
+                .header("Authorization", "Bearer " + jwtProvider.generateAccessToken("plan-outsider")))
+            .andExpect(status().isForbidden());
+        call(put(limits), json(Map.of("capacities", List.of(Map.of("resourceType", "steam", "unit", "kg", "amount", 1, "per", "hour")))))
+            .andExpect(status().isBadRequest());
+        call(put(limits), json(Map.of("capacities", List.of(energyLimit,
+                Map.of("resourceType", "water", "unit", "l", "amount", 100, "per", "day")))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(2));
+        call(get(limits)).andExpect(jsonPath("$.data[?(@.resourceType == 'energy')].amount").value(hasItem(10.0)));
 
         Map<String, Object> target = Map.of("processIoId", loaves, "quantity", 10, "unit", "ea");
         String row = "$.data.requirements[?(@.itemId == '%s')]";
@@ -367,6 +383,11 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath(row.formatted(water) + ".resourceType").value(hasItem("water")))
             .andExpect(jsonPath(row.formatted(water) + ".cost").value(hasItem(org.hamcrest.Matchers.nullValue())))
             .andExpect(jsonPath("$.data.limits[?(@.kind == 'stock')]").value(org.hamcrest.Matchers.hasSize(1)))
+            // 60 kWh an hour is above the 10 the factory has; 20 l in a day is within 100.
+            .andExpect(jsonPath("$.data.limits[?(@.kind == 'resource-capacity')].at").value(org.hamcrest.Matchers.contains("energy")))
+            .andExpect(jsonPath("$.data.limits[?(@.kind == 'resource-capacity')].message").value(hasItem(
+                "Energy averages 60 " + kwh + " per hour over the plan, above the factory's 10 " + kwh + " per hour.")))
+            .andExpect(jsonPath("$.data.feasible").value(true))
             .andExpect(jsonPath("$.data.buildable").value(5))
             .andExpect(jsonPath("$.data.resources[?(@.resourceType == 'energy')].needed").value(hasItem(30.0)))
             .andExpect(jsonPath("$.data.resources[?(@.resourceType == 'energy')].cost").value(hasItem(6.0)))
