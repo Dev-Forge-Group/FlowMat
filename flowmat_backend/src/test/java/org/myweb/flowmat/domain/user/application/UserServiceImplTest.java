@@ -1,5 +1,7 @@
 package org.myweb.flowmat.domain.user.application;
 
+import org.myweb.flowmat.domain.user.api.dto.request.UserUpdateRequest;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -60,6 +62,20 @@ class UserServiceImplTest {
         user.setUserId("tester");
         user.setUserStatus("active");
         user.setDeleteYn("N");
+    }
+
+    @Test
+    void aNewPasswordFromTheProfileSignsOutEveryDevice() {
+        user.setUserPwd("encoded-old");
+        when(userRepository.findByUserId("tester")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Old-password-2026!", "encoded-old")).thenReturn(true);
+        when(passwordEncoder.encode("New-password-2026!")).thenReturn("encoded-new");
+
+        userService.updateMe("tester", new UserUpdateRequest(null, null, null, null, null, null,
+            "Old-password-2026!", "New-password-2026!"));
+
+        assertThat(user.getUserPwd()).isEqualTo("encoded-new");
+        verify(authRedisStore).revokeAllRefreshTokensOrFail("tester");
     }
 
     @Test

@@ -4,6 +4,7 @@ import org.myweb.flowmat.domain.user.api.dto.request.FindEmailRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.DormantReactivationRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.DormantTokenRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthSignupCompleteRequest;
+import org.myweb.flowmat.domain.user.api.dto.request.PasswordChangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetConfirmRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.RefreshTokenRequest;
@@ -32,6 +33,12 @@ public interface AuthService {
     void logout(String refreshToken);
 
     void logoutAll(String userId);
+
+    /**
+     * Changes a signed-in user's password: every other device is signed out, and the device the request came from (its
+     * refresh token, when it sent one) gets new tokens, so it stays signed in (docs/operations/login-security.md §2).
+     */
+    UserTokenResponse changePassword(String userId, PasswordChangeRequest request, String currentRefreshToken);
 
     String findEmail(FindEmailRequest request);
 

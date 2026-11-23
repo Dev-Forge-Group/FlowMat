@@ -11,6 +11,7 @@ import org.myweb.flowmat.domain.user.api.dto.request.FindEmailRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.DormantReactivationRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.DormantTokenRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthSignupCompleteRequest;
+import org.myweb.flowmat.domain.user.api.dto.request.PasswordChangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetConfirmRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.RefreshTokenRequest;
@@ -270,6 +271,43 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logoutAll(String userId) {
         authRedisStore.revokeAllRefreshTokensOrFail(userId);
+    }
+
+    @Override
+    public UserTokenResponse changePassword(String userId, PasswordChangeRequest request, String currentRefreshToken) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        User user = userRepository.findByUserId(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        if (!canLogin(user)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        if (!passwordEncoder.matches(normalizeRequired(request.currentPassword(), "Current password is required."), user.getUserPwd())) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+        user.setUserPwd(passwordEncoder.encode(PasswordPolicy.require(request.newPassword(), user.getUserId(), user.getUserEmail())));
+        user.setPwdUpdatedAt(OffsetDateTime.now());
+        String deviceId = currentDevice(userId, currentRefreshToken);
+        // Every session opened with the old password ends; a failure rolls the new password back.
+        authRedisStore.revokeAllRefreshTokensOrFail(userId);
+        return issueTokens(user, deviceId);
+    }
+
+    /** The device of the caller's own refresh token, or null when it sent none or one that is not theirs. */
+    private String currentDevice(String userId, String refreshToken) {
+        if (!hasText(refreshToken)) {
+            return null;
+        }
+        try {
+            jwtProvider.validate(refreshToken);
+            if (!jwtProvider.isRefreshToken(refreshToken) || !userId.equals(jwtProvider.resolveUserId(refreshToken))) {
+                return null;
+            }
+            AuthRedisStore.RefreshTokenEntry entry = authRedisStore.getRefreshToken(jwtProvider.resolveJti(refreshToken));
+            return entry != null && userId.equals(entry.userId()) ? entry.deviceId() : null;
+        } catch (RuntimeException invalid) {
+            return null;
+        }
     }
 
     @Override

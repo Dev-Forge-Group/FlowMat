@@ -16,6 +16,7 @@ import org.myweb.flowmat.domain.user.api.dto.request.FindEmailRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.LogoutRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthExchangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.OAuthSignupCompleteRequest;
+import org.myweb.flowmat.domain.user.api.dto.request.PasswordChangeRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetConfirmRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.PasswordResetRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.RefreshTokenRequest;
@@ -59,6 +60,8 @@ public class AuthController {
     private static final int DORMANT_REQUEST_IP_LIMIT = 8;
     private static final int DORMANT_REQUEST_ACCOUNT_LIMIT = 5;
     private static final Duration LOGIN_RATE_WINDOW = Duration.ofMinutes(10);
+    private static final int PASSWORD_CHANGE_LIMIT = 5;
+    private static final Duration PASSWORD_CHANGE_RATE_WINDOW = Duration.ofMinutes(10);
     private static final Duration EMAIL_CODE_RATE_WINDOW = Duration.ofHours(1);
     private static final Duration DORMANT_REQUEST_RATE_WINDOW = Duration.ofHours(1);
     private static final int EMAIL_VERIFY_IP_LIMIT = 30;
@@ -199,6 +202,23 @@ public class AuthController {
         authService.logout(refreshToken);
         refreshTokenCookieService.clearRefreshToken(httpRequest, httpResponse);
         return ApiResponse.ok(null);
+    }
+
+    /** A new password; other devices are signed out and this one gets new tokens (login-security.md §2). */
+    @PostMapping("/password")
+    public ApiResponse<UserTokenResponse> changePassword(
+        @AuthenticationPrincipal AuthUser authUser,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse,
+        @Valid @RequestBody PasswordChangeRequest request
+    ) {
+        requireAuth(authUser);
+        // Someone holding a stolen access token must not guess the current password at leisure.
+        enforceRateLimit("password-change-account", normalizeRateKey(authUser.getUserId()), PASSWORD_CHANGE_LIMIT, PASSWORD_CHANGE_RATE_WINDOW);
+        UserTokenResponse response = authService.changePassword(authUser.getUserId(), request,
+            refreshTokenCookieService.resolveRefreshToken(httpRequest));
+        writeRefreshCookie(httpRequest, httpResponse, response);
+        return ApiResponse.ok(cookieBackedResponse(response));
     }
 
     @PostMapping("/logout-all")
