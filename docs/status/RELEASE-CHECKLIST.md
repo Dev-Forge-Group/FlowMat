@@ -45,9 +45,9 @@
 
 | 일 | 기다리는 것 |
 |---|---|
-| 자동 6(OWASP) | 돌았다(2026-11-23, run 249). 패치판이 있는 것은 올렸다(PR #169). 남은 높음·치명은 Spring Framework 6.2.19와 Security 6.5.11뿐이고, Spring Boot 4로 올릴지 사람이 정한다 |
+| ~~자동 6(OWASP)~~ | 끝(2026-11-23): Spring Boot 4.1.3으로 올렸다(사용자 결정, [ADR-044](../architecture/adr/ADR-044-spring-boot-4.md), PR #171). merge 커밋 `18d06ed`에서 높음·치명 0(run 254). §4의 기록 줄 |
 | ~~손 2(업그레이드)~~ | 끝(2026-11-22): 개발 DB 덤프로 리허설한 뒤 V132 → V140 적용(backup-restore §6). 후보 커밋에서 손 2를 다시 할 때는 이 DB(V140)가 원본이다 |
-| ~~손 1·5~~ | 끝(2026-11-23, `74b8e21`): §4의 기록 줄 |
+| ~~손 1·5~~ | 끝(2026-11-23, `74b8e21`), Boot 4 뒤에 `18d06ed`에서 다시 했다: §4의 기록 줄 |
 | 파일럿 배포 | 배포 장소·예산(로드맵 §9). 정해지면 [로그인 보안](../operations/login-security.md) §4를 확인하고 [매일 백업](../operations/backup-restore.md) §7을 건다 |
 
 ## 4. 기록
@@ -56,6 +56,7 @@
 
 | 날짜 | 커밋 | 자동 1~6 | 여정 | 복원 | 업그레이드 | 설정 개정 | 성능 | 판정 |
 |---|---|---|---|---|---|---|---|---|
+| 2026-11-23 | `main` `18d06ed`(PR #171, Spring Boot 4.1.3) | 1~5 통과(손으로 돌린 실행: backend 302, frontend 305, mock-e2e 109, browser-e2e 310, compute 50, sequence-optimizer 12, 작성자 표기 push 260). 6: npm audit 통과, OWASP 높음·치명 0(run 254, 브랜치의 run 253도 0). Boot 4로 Spring 6.2/6.5의 213건이 사라졌다(run 252). 남은 셋은 Swagger UI를 5.35.1로 고정하고, 출하하지 않는 devtools를 검사에서 빼서 정리했다(ADR-044 결정 6) | 통과(browser-e2e 310: 구매·창고, 생산·품질, 메론우유 계획 여정) | 통과(표 129개·내용 해시 15개·프로젝트 21개 같음, 적용 0, 여정 프로젝트 2개의 재고가 DB와 같음) | 통과 V134 → V140(6개 적용, 실패 0, 빈 표 12개만 삭제, 다시 띄우면 up to date) | `a30ff06863a0`(설정 6개, 지난 후보와 같음) | 전개 42.2 ms, MRP 49.7 ms, 시뮬레이션 15.5 ms(지난 후보 36.4·42·14.3 ms, 2배 안) | v1.0 후보 조건을 모두 채웠다. 태그는 사람이 단다. 같은 jar로 Swagger UI가 열리는 것도 봤다 |
 | 2026-11-23 | `main` `42dc573`(PR #169) | 6: OWASP가 처음으로 끝까지 돌았다(run 249, 키 정상). 첫 스캔에서 높음·치명이 나온 의존성은 다음과 같다. Tomcat 10.1.55, Netty 4.1.135, PostgreSQL 42.7.11, Swagger UI의 DOMPurify, Spring Framework 6.2.19, Spring Security 6.5.11. 같은 줄의 패치판으로 올린 뒤 남은 것은 CRITICAL 103·HIGH 110·MEDIUM 79·LOW 16이다. 높음·치명은 모두 Spring Framework 6.2.19와 Spring Security 6.5.11이다(고유 CVE 15개). 두 판은 각 줄의 마지막 판이라 패치가 없다. npm audit 통과 | — | — | — | — | — | v1.0 전에 Spring 6.2/6.5의 높음·치명을 판정해야 한다. Spring Boot 4(Framework 7·Security 7)로 올리거나, 위험을 받아들이고 근거를 적는다(사람 결정) |
 | 2026-11-23 | `main` `74b8e21` | 1~5 통과(손으로 돌린 실행: backend 290, frontend 298, mock-e2e 101, browser-e2e 293, compute 48, sequence-optimizer 11, 작성자 표기 push 235). 6: npm audit 통과, OWASP 미실행(NVD): NVD가 `NVD_API_KEY`를 거절했다(run 234, 활성화한 API 키가 아님) | 통과(browser-e2e 293: 구매·창고, 생산·품질, 메론우유 계획 여정) | 통과(표 129개·내용 해시 15개·프로젝트 20개 같음, 적용 0, 여정 프로젝트 2개의 재고가 DB와 같음) | 통과 V134 → V140(6개 적용, 실패 0, 빈 표 12개만 삭제, 다시 띄우면 up to date). 개발 DB는 2026-11-22에 V140으로 올렸다 | `a30ff06863a0`(설정 6개, 지난 후보와 같음) | 전개 36.4 ms, MRP 42 ms, 시뮬레이션 14.3 ms(지난 후보 37·43·15 ms) | v1.0 후보로 부르기 전에 남은 것은 OWASP 하나다(활성화한 NVD 키) |
 | 2026-11-22 | `main` `4d08345` | 1~5 통과(손으로 돌린 실행: backend 267, frontend 277, mock-e2e 80, browser-e2e 260 명세 43개, compute 46, sequence-optimizer 9, 작성자 표기 push 178). 6: npm audit 0건, OWASP 미실행(NVD): NVD가 `NVD_API_KEY`를 거절했다(run 233, 활성화한 API 키가 아님) | 통과(백엔드의 두 여정 테스트, 실 API `purchase-warehouse-live`·`production-quality-live`) | 통과(지문 같음, 적용 0, 여정 재고가 DB와 같음) | 통과 V134 → V137(빈 표 12개만 삭제, 다시 띄우면 up to date) | `a30ff06863a0`(설정 6개) | 전개 37 ms, MRP 43 ms, 시뮬레이션 15 ms(기록 표 마지막 줄 43·59·17 ms) | 후보 `v0.9.0-rc.1`(태그 2026-11-22, 사용자 push). 배포 결정 전에 OWASP를 돌린다 |
