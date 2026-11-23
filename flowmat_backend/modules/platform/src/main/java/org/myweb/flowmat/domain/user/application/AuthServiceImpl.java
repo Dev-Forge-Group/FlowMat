@@ -4,7 +4,9 @@ import io.jsonwebtoken.Claims;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.myweb.flowmat.domain.user.api.dto.request.FindEmailRequest;
@@ -44,6 +46,10 @@ public class AuthServiceImpl implements AuthService {
     private static final String GUEST_USER_ID_PREFIX = "GUEST_";
     private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(5);
     private static final Duration LOGIN_LOCK_DURATION = Duration.ofMinutes(5);
+    /** A refresh token sent again this soon after its exchange is a race between tabs, not a stolen copy. */
+    static final Duration REFRESH_REUSE_GRACE = Duration.ofSeconds(30);
+    /** Lockout keys for names no account has, so a lock does not tell which accounts exist. */
+    private static final String ABSENT_LOGIN_PREFIX = "absent:";
     private static final Duration EMAIL_CODE_TTL = Duration.ofMinutes(5);
     private static final Duration EMAIL_CODE_COOLDOWN = Duration.ofSeconds(60);
     private static final Duration EMAIL_VERIFIED_TTL = Duration.ofMinutes(30);
@@ -151,8 +157,16 @@ public class AuthServiceImpl implements AuthService {
 
         User user = resolveLoginUser(userIdOrEmail);
         if (user == null) {
-            // As slow as a wrong password, so the answer's timing does not tell which accounts exist.
+            // A name no account has answers as an account would: as slow as a wrong password, and locked after as
+            // many failures, so neither the timing nor a lock tells which accounts exist (login-security.md §2).
+            String absent = ABSENT_LOGIN_PREFIX + userIdOrEmail.trim().toLowerCase(Locale.ROOT);
+            if (authRedisStore.isLoginLocked(absent)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "Account is temporarily locked. Try again later.");
+            }
             passwordEncoder.matches(password, unknownUserHash());
+            if (authRedisStore.recordLoginFailure(absent, LOGIN_FAIL_THRESHOLD, LOGIN_FAIL_WINDOW, LOGIN_LOCK_DURATION)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "Too many failed login attempts. Account is temporarily locked.");
+            }
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "User ID/email or password is incorrect.");
         }
         if (authRedisStore.isLoginLocked(user.getUserId())) {
@@ -239,6 +253,12 @@ public class AuthServiceImpl implements AuthService {
         String jti = jwtProvider.resolveJti(refreshToken);
         AuthRedisStore.RefreshTokenEntry entry = authRedisStore.consumeRefreshToken(jti, userId);
         if (entry == null) {
+            Instant usedAt = authRedisStore.refreshTokenUsedAt(jti, userId);
+            if (usedAt != null && usedAt.isBefore(Instant.now().minus(REFRESH_REUSE_GRACE))) {
+                // Exchanged once already and back later: a copy is in someone else's hands, so every session ends
+                // (docs/operations/login-security.md §2). Two tabs sending the same cookie at once fall inside the grace.
+                authRedisStore.revokeAllRefreshTokens(userId);
+            }
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         if (!userId.equals(entry.userId())) {

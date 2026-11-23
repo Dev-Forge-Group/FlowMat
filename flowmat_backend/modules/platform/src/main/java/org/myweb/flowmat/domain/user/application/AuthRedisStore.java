@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -23,6 +24,8 @@ public class AuthRedisStore {
 
     private static final String RT_PREFIX = "auth:rt:";
     private static final String RT_USER_PREFIX = "auth:rt:user:";
+    /** A refresh token already exchanged: who and when, kept for the rest of its life (docs/operations/login-security.md §2). */
+    private static final String RT_USED_PREFIX = "auth:rt:used:";
     private static final String EMAIL_CODE_PREFIX = "auth:email:code:";
     private static final String EMAIL_COOLDOWN_PREFIX = "auth:email:cooldown:";
     private static final String EMAIL_VERIFIED_PREFIX = "auth:email:verified:";
@@ -60,6 +63,7 @@ public class AuthRedisStore {
 
     public RefreshTokenEntry consumeRefreshToken(String jti, String userId) {
         return execute(() -> {
+            Long life = redisTemplate.getExpire(rtKey(jti));
             String payload = redisTemplate.opsForValue().getAndDelete(rtKey(jti));
             if (payload == null || payload.isBlank()) {
                 return null;
@@ -69,7 +73,29 @@ public class AuthRedisStore {
                 throw new BusinessException(ErrorCode.TOKEN_INVALID);
             }
             redisTemplate.opsForSet().remove(rtUserKey(userId), jti);
+            // Remembered until the token would have expired, so a copy that comes back later is recognised.
+            redisTemplate.opsForValue().set(rtUsedKey(jti), userId + "|" + System.currentTimeMillis(),
+                Duration.ofSeconds(life != null && life > 60 ? life : 60));
             return new RefreshTokenEntry(parts[0], parts.length > 1 && !parts[1].isBlank() ? parts[1] : null);
+        });
+    }
+
+    /** When a refresh token of this user was exchanged, or null when it never was (or that is forgotten). */
+    public Instant refreshTokenUsedAt(String jti, String userId) {
+        return execute(() -> {
+            String payload = redisTemplate.opsForValue().get(rtUsedKey(jti));
+            if (payload == null) {
+                return null;
+            }
+            String[] parts = payload.split("\\|", 2);
+            if (parts.length < 2 || !parts[0].equals(userId)) {
+                return null;
+            }
+            try {
+                return Instant.ofEpochMilli(Long.parseLong(parts[1]));
+            } catch (NumberFormatException broken) {
+                return null;
+            }
         });
     }
 
@@ -272,6 +298,7 @@ public class AuthRedisStore {
 
     private String rtKey(String jti) { return RT_PREFIX + jti; }
     private String rtUserKey(String userId) { return RT_USER_PREFIX + userId; }
+    private String rtUsedKey(String jti) { return RT_USED_PREFIX + jti; }
     private String emailCodeKey(String email) { return EMAIL_CODE_PREFIX + email; }
     private String emailCooldownKey(String email) { return EMAIL_COOLDOWN_PREFIX + email; }
     private String emailVerifiedKey(String email) { return EMAIL_VERIFIED_PREFIX + email; }
