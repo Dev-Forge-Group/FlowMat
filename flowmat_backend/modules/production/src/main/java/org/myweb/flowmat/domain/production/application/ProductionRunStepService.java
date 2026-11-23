@@ -75,7 +75,7 @@ public class ProductionRunStepService {
                 + " for " + (step.nodeName() != null ? step.nodeName() : step.nodeId()) + " first.");
         }
         JsonNode output = request != null && request.outputSnapshot() != null
-            ? request.outputSnapshot() : recordedOutput(run, step.nodeId());
+            ? request.outputSnapshot() : recordedOutput(run, step, linkedSteps.steps(productionRunId));
         return response(linkedSteps.complete(productionRunId, stepId, output), instructions.byNode(run), run.getProjectId());
     }
 
@@ -101,8 +101,30 @@ public class ProductionRunStepService {
 
     /**
      * What was recorded for the process (decision 3): the quantity, unit and item of its outputs that were not cancelled,
-     * when they are one item in one unit; otherwise nothing.
+     * when they are one item in one unit; otherwise nothing. A process with an earlier step done in the run, on a loop or
+     * reached twice, takes what is left after those steps took theirs (docs/architecture/adr/ADR-045-closed-loops.md
+     * decision 5).
      */
+    private JsonNode recordedOutput(ProductionRun run, LinkedRunStep step, List<LinkedRunStep> steps) {
+        JsonNode recorded = recordedOutput(run, step.nodeId());
+        if (!recorded.has("quantity")) {
+            return recorded;
+        }
+        BigDecimal taken = BigDecimal.ZERO;
+        for (LinkedRunStep earlier : steps) {
+            JsonNode out = earlier.outputSnapshot();
+            if (earlier.stepId().equals(step.stepId()) || !earlier.nodeId().equals(step.nodeId())
+                || !"completed".equals(earlier.status()) || out == null || !out.path("quantity").isNumber()
+                || !recorded.path("unit").asText().equals(out.path("unit").asText(null))
+                || !recorded.path("item").asText().equals(out.path("item").asText(null))) {
+                continue;
+            }
+            taken = taken.add(out.path("quantity").decimalValue());
+        }
+        BigDecimal left = recorded.path("quantity").decimalValue().subtract(taken).max(BigDecimal.ZERO);
+        return ((ObjectNode) recorded).put("quantity", left);
+    }
+
     private JsonNode recordedOutput(ProductionRun run, String nodeId) {
         List<ProductionRunItem> outputs = itemRepository.findAllByProductionRunIdOrderByProductionRunItemIdAsc(run.getProductionRunId())
             .stream()

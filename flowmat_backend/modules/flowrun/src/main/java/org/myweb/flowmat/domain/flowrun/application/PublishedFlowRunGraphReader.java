@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -181,22 +182,57 @@ final class PublishedFlowRunGraphReader {
         }
         List<String> roots = indegree.entrySet().stream()
             .filter(entry -> entry.getValue() == 0).map(Map.Entry::getKey).toList();
-        Map<String, Integer> remaining = new HashMap<>(indegree);
-        ArrayDeque<String> queue = new ArrayDeque<>(roots);
-        int visited = 0;
-        while (!queue.isEmpty()) {
-            String node = queue.removeFirst();
-            visited++;
-            for (Edge edge : outgoing.getOrDefault(node, List.of())) {
-                int count = remaining.merge(edge.target(), -1, Integer::sum);
-                if (count == 0) queue.addLast(edge.target());
-            }
-        }
-        if (visited != indegree.size()) {
-            throw conflict("Graph revisions with cycles cannot execute.");
+        Set<String> loopNodes = loopNodes(new ArrayList<>(indegree.keySet()), outgoing, exclusiveNodes, joinNodes, splitNodes);
+        if (roots.isEmpty()) {
+            throw conflict("Graph revisions without a start cannot execute.");
         }
         return new FlowRunGraph(roots, outgoing, byId, portRules, portSchemas, policies, exclusiveNodes, joinNodes, incoming,
-            splitNodes);
+            splitNodes, loopNodes);
+    }
+
+    /**
+     * The processes on loops that can run (docs/architecture/adr/ADR-045-closed-loops.md decision 1): a loop is the
+     * processes that reach each other, and it runs when an Exclusive or Split gateway on it has a connection out of it and
+     * no Join is on it. A Join on a loop is refused first, in the order drawn, then a loop without a way out by the process
+     * of it drawn first.
+     */
+    static Set<String> loopNodes(List<String> order, Map<String, List<Edge>> outgoing, Set<String> exclusiveNodes,
+        Set<String> joinNodes, Set<String> splitNodes) {
+        Map<String, Set<String>> reach = new HashMap<>();
+        for (String node : order) {
+            Set<String> seen = new HashSet<>();
+            ArrayDeque<String> pending = new ArrayDeque<>();
+            outgoing.getOrDefault(node, List.of()).forEach(edge -> pending.addLast(edge.target()));
+            while (!pending.isEmpty()) {
+                String next = pending.removeFirst();
+                if (seen.add(next)) outgoing.getOrDefault(next, List.of()).forEach(edge -> pending.addLast(edge.target()));
+            }
+            reach.put(node, seen);
+        }
+        List<List<String>> loops = new ArrayList<>();
+        Set<String> onLoop = new LinkedHashSet<>();
+        for (String node : order) {
+            if (onLoop.contains(node) || !reach.get(node).contains(node)) continue;
+            List<String> loop = order.stream()
+                .filter(other -> reach.get(node).contains(other) && reach.get(other).contains(node)).toList();
+            loops.add(loop);
+            onLoop.addAll(loop);
+        }
+        for (String join : joinNodes) {
+            if (onLoop.contains(join)) {
+                throw conflict("Published revision Join " + join + " is on a loop.");
+            }
+        }
+        for (List<String> loop : loops) {
+            Set<String> members = new HashSet<>(loop);
+            boolean wayOut = loop.stream()
+                .filter(node -> exclusiveNodes.contains(node) || splitNodes.contains(node))
+                .anyMatch(node -> outgoing.getOrDefault(node, List.of()).stream().anyMatch(edge -> !members.contains(edge.target())));
+            if (!wayOut) {
+                throw conflict("Published revision loop through " + loop.get(0) + " has no way out.");
+            }
+        }
+        return onLoop;
     }
 
     private static NodePolicy policy(JsonNode node, String processId) {

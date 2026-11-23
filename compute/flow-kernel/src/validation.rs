@@ -333,7 +333,7 @@ pub fn validate(graph: &Graph, units: &Units) -> Json {
     }
     endpoint_issues(&graph.processes, &links, &isolated, &names, &mut issues);
     gateway_issues(&graph.processes, &usable, &links, &names, &mut issues);
-    let cycle = cycle_members(&process_ids, &usable);
+    let cycle = blocked_loop_members(&process_ids, &usable, &names);
     if !cycle.is_empty() {
         issues.push(
             Draft::new(
@@ -342,7 +342,9 @@ pub fn validate(graph: &Graph, units: &Units) -> Json {
                 None,
                 None,
                 None,
-                "Workflow contains a directed cycle; automatic execution must define loop semantics.".into(),
+                "Workflow contains a loop that cannot run; give it an Exclusive or Split gateway with a connection out of \
+                 the loop, and keep Joins off it."
+                    .into(),
             )
             .with("processIds", json!(cycle)),
         );
@@ -1049,8 +1051,72 @@ fn loss_fraction(rate: &Decimal) -> Option<Decimal> {
     None
 }
 
+/// The processes on loops that cannot run, in creation order (ADR-045 decision 6): a loop is the processes that reach each
+/// other, and it runs when an Exclusive or Split gateway on it has a connection out of it and no Join is on it.
+fn blocked_loop_members(process_ids: &[Option<String>], connections: &[&Connection], names: &Names) -> Vec<String> {
+    let members = cycle_members(process_ids, connections);
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let mut outgoing: HashMap<&Option<String>, Vec<&Option<String>>> = HashMap::new();
+    for connection in connections {
+        outgoing
+            .entry(&connection.from_process_id)
+            .or_default()
+            .push(&connection.to_process_id);
+    }
+    let reach: HashMap<&Option<String>, HashSet<&Option<String>>> =
+        members.iter().map(|id| (*id, reachable(&outgoing, id))).collect();
+    let mut blocked: HashSet<&Option<String>> = HashSet::new();
+    let mut done: HashSet<&Option<String>> = HashSet::new();
+    for id in &members {
+        if done.contains(id) {
+            continue;
+        }
+        let members_of_loop: Vec<&Option<String>> = members
+            .iter()
+            .copied()
+            .filter(|other| reach[id].contains(other) && reach[other].contains(id))
+            .collect();
+        done.extend(members_of_loop.iter().copied());
+        let join = members_of_loop
+            .iter()
+            .any(|node| names.kind(node).as_deref() == Some("join"));
+        let way_out = members_of_loop
+            .iter()
+            .filter(|node| matches!(names.kind(node).as_deref(), Some("exclusive") | Some("split")))
+            .any(|node| {
+                outgoing
+                    .get(*node)
+                    .is_some_and(|targets| targets.iter().any(|target| !members_of_loop.contains(target)))
+            });
+        if join || !way_out {
+            blocked.extend(members_of_loop.iter().copied());
+        }
+    }
+    members
+        .into_iter()
+        .filter(|id| blocked.contains(id))
+        .map(|id| or_null(id.as_deref()).to_string())
+        .collect()
+}
+
+fn reachable<'a>(
+    outgoing: &HashMap<&'a Option<String>, Vec<&'a Option<String>>>,
+    start: &Option<String>,
+) -> HashSet<&'a Option<String>> {
+    let mut seen: HashSet<&Option<String>> = HashSet::new();
+    let mut pending: VecDeque<&Option<String>> = outgoing.get(start).cloned().unwrap_or_default().into();
+    while let Some(current) = pending.pop_front() {
+        if seen.insert(current) {
+            pending.extend(outgoing.get(current).cloned().unwrap_or_default());
+        }
+    }
+    seen
+}
+
 /// The processes on a directed cycle, in creation order; empty when there is none.
-fn cycle_members(process_ids: &[Option<String>], connections: &[&Connection]) -> Vec<String> {
+fn cycle_members<'a>(process_ids: &'a [Option<String>], connections: &[&Connection]) -> Vec<&'a Option<String>> {
     let mut indegrees: HashMap<&Option<String>, i64> = process_ids.iter().map(|id| (id, 0)).collect();
     let mut outgoing: HashMap<&Option<String>, Vec<&Option<String>>> = HashMap::new();
     for connection in connections {
@@ -1081,7 +1147,6 @@ fn cycle_members(process_ids: &[Option<String>], connections: &[&Connection]) ->
     process_ids
         .iter()
         .filter(|id| !placed.contains(id) && reaches_itself(&outgoing, id))
-        .map(|id| or_null(id.as_deref()).to_string())
         .collect()
 }
 

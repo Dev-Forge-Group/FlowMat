@@ -71,6 +71,89 @@ pub struct RunGraph {
     exclusive: HashSet<String>,
     joins: HashSet<String>,
     splits: HashSet<String>,
+    /// The processes on loops, which may have at most [`MAX_PASSES`] steps each in a run (ADR-045 decision 3).
+    loops: HashSet<String>,
+}
+
+/// How many steps a process on a loop may have in one run (`FlowRunGraph.MAX_PASSES`, ADR-045 decision 3).
+pub const MAX_PASSES: usize = 10;
+
+/// The processes on loops that can run (`PublishedFlowRunGraphReader.loopNodes`, ADR-045 decision 1): a loop is the
+/// processes that reach each other, and it runs when an Exclusive or Split gateway on it has a connection out of it and no
+/// Join is on it. A Join on a loop is refused first, in the order drawn, then a loop without a way out by the process of
+/// it drawn first.
+fn loop_nodes(
+    order: &[String],
+    outgoing: &HashMap<String, Vec<Edge>>,
+    exclusive: &HashSet<String>,
+    joins: &HashSet<String>,
+    splits: &HashSet<String>,
+) -> Result<HashSet<String>, Refusal> {
+    let mut reach: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for node in order {
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut pending: VecDeque<&str> = outgoing
+            .get(node)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+            .iter()
+            .map(|edge| edge.target.as_str())
+            .collect();
+        while let Some(next) = pending.pop_front() {
+            if seen.insert(next) {
+                pending.extend(
+                    outgoing
+                        .get(next)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|edge| edge.target.as_str()),
+                );
+            }
+        }
+        reach.insert(node.as_str(), seen);
+    }
+    let mut loops: Vec<Vec<&str>> = Vec::new();
+    let mut on_loop: HashSet<String> = HashSet::new();
+    for node in order {
+        if on_loop.contains(node) || !reach[node.as_str()].contains(node.as_str()) {
+            continue;
+        }
+        let members: Vec<&str> = order
+            .iter()
+            .map(String::as_str)
+            .filter(|other| reach[node.as_str()].contains(other) && reach[other].contains(node.as_str()))
+            .collect();
+        on_loop.extend(members.iter().map(|member| member.to_string()));
+        loops.push(members);
+    }
+    for join in order.iter().filter(|id| joins.contains(*id)) {
+        if on_loop.contains(join) {
+            return Err(Refusal::conflict(format!(
+                "Published revision Join {join} is on a loop."
+            )));
+        }
+    }
+    for members in &loops {
+        let way_out = members
+            .iter()
+            .filter(|node| exclusive.contains(**node) || splits.contains(**node))
+            .any(|node| {
+                outgoing
+                    .get(*node)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|edge| !members.contains(&edge.target.as_str()))
+            });
+        if !way_out {
+            return Err(Refusal::conflict(format!(
+                "Published revision loop through {} has no way out.",
+                members[0]
+            )));
+        }
+    }
+    Ok(on_loop)
 }
 
 /// What a step's output does on one outgoing connection (`FlowRunGraph.Decision`).
@@ -341,21 +424,9 @@ impl RunGraph {
             }
         }
         let roots: Vec<String> = order.iter().filter(|id| indegree[*id] == 0).cloned().collect();
-        let mut remaining = indegree.clone();
-        let mut queue: VecDeque<String> = roots.iter().cloned().collect();
-        let mut visited = 0;
-        while let Some(node) = queue.pop_front() {
-            visited += 1;
-            for edge in outgoing.get(&node).map(Vec::as_slice).unwrap_or_default() {
-                let count = remaining.get_mut(&edge.target).expect("a known process");
-                *count -= 1;
-                if *count == 0 {
-                    queue.push_back(edge.target.clone());
-                }
-            }
-        }
-        if visited != indegree.len() {
-            return Err(Refusal::conflict("Graph revisions with cycles cannot execute."));
+        let loops = loop_nodes(&order, &outgoing, &exclusive, &joins, &splits)?;
+        if roots.is_empty() {
+            return Err(Refusal::conflict("Graph revisions without a start cannot execute."));
         }
         Ok(RunGraph {
             roots,
@@ -367,7 +438,13 @@ impl RunGraph {
             exclusive,
             joins,
             splits,
+            loops,
         })
+    }
+
+    /// Whether the node is on a loop that can run (ADR-045 decision 1).
+    pub fn on_loop(&self, node: &str) -> bool {
+        self.loops.contains(node)
     }
 
     /// The nodes nothing leads into, in the order drawn.

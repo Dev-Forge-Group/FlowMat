@@ -99,7 +99,7 @@ PC-21은 포트·연결 서비스와 revision 발행이 함께 쓰는 워크플�
 
 | 규칙 | 동작 | 위반 응답 |
 |---|---|---|
-| GR-01 | 순환 연결이 있거나 노드·연결 참조가 잘못된 revision은 그래프 실행을 시작하지 않는다. | 409 `Graph revisions with cycles cannot execute.` 등 |
+| GR-01 | 노드·연결 참조가 잘못됐거나, 실행할 수 없는 고리가 있거나, 시작이 없는 revision은 그래프 실행을 시작하지 않는다. 고리는 Exclusive·Split 게이트웨이가 고리 밖으로 가는 연결을 갖고 Join이 없을 때 실행하고, 고리 위 공정의 단계는 한 실행에 10개까지다([ADR-045](../architecture/adr/ADR-045-closed-loops.md)). | 409 `Published revision Join {id} is on a loop.`, `Published revision loop through {id} has no way out.`, `Graph revisions without a start cannot execute.` 등 |
 | GR-02 | 완료된 출발 단계의 `outputSnapshot` 객체에서 `quantity`, `unit`, `item`, `attrs`를 읽고 발행된 `conditionExpr`을 평가한다. 거짓이면 해당 연결은 통과하지 않는다. | 객체가 아니면 400 `Graph step outputSnapshot must be an object.` |
 | GR-03 | 조건을 통과한 연결만 `capacity`와 단위를 검사한다. `quantity`가 없거나 용량을 초과하면 출발 단계 완료 전체를 원자적으로 거절해 재입력할 수 있게 한다. | 409 `Connection <id> requires outputSnapshot.quantity for capacity.` 또는 `Connection <id> capacity exceeded.` / `unit does not match...` |
 | GR-04 | 통과한 연결마다 대상 `planned` 단계를 만들고 `sourceConnectionId`, `sourceStepId`, `inputSnapshot`, `step_created` 이벤트를 기록한다. 여러 진입 연결은 각각 별도 단계이며 V40의 같은 run FK가 정확한 원본 단계를 보존한다. | 단계 수 상한 초과 시 409 |

@@ -27,8 +27,8 @@ describe('a tried flow', () => {
     expect(summarizeWalk({ status: 'failed', events: [], failure: { code: 'NO_ROUTE', message: 'no route' },
       steps: [{ nodeId: 'sp', status: 'failed', input: {}, error: { code: 'NO_ROUTE', message: 'no route' } }] }, nameOf))
       .toEqual({ tone: 'failed', headline: 'Fails at Divide: no route' })
-    expect(summarizeWalk({ error: { code: 'CONFLICT', message: 'Graph revisions with cycles cannot execute.' } }, nameOf))
-      .toEqual({ tone: 'unreadable', headline: 'Cannot run: Graph revisions with cycles cannot execute.' })
+    expect(summarizeWalk({ error: { code: 'CONFLICT', message: 'Published revision loop through a has no way out.' } }, nameOf))
+      .toEqual({ tone: 'unreadable', headline: 'Cannot run: Published revision loop through a has no way out.' })
   })
 
   it('lists each step and puts what arrived on each connection', () => {
@@ -37,6 +37,22 @@ describe('a tried flow', () => {
         'Gather 9.4 kg completed'])
     expect(connectionFlows(finished)).toEqual({ c1: '10 kg', c2: '6 kg', c3: '4 kg', c4: '5.4 kg', c5: '4 kg' })
     expect(amount({ unit: 'kg' })).toBe('nothing measured')
+  })
+
+  it('goes round a loop and says when it stopped at the pass limit', () => {
+    const looped: KernelWalk = {
+      status: 'finished',
+      steps: [
+        { nodeId: 'in', status: 'completed', input: { quantity: 10, unit: 'kg' } },
+        { nodeId: 'cut', status: 'completed', source: 0, connectionId: 'c1', input: { quantity: 10, unit: 'kg' } },
+        { nodeId: 'cut', status: 'completed', source: 1, connectionId: 'c3', input: { quantity: 2, unit: 'kg' } },
+        { nodeId: 'cut', status: 'completed', source: 2, connectionId: 'c3', input: { quantity: 0.4, unit: 'kg' } },
+      ],
+      events: [{ step: 3, type: 'connection_filtered', payload: { connectionId: 'c3', targetNodeId: 'cut', reason: 'loop_limit', quantity: 0.08 } }],
+    }
+    expect(summarizeWalk(looped, (id) => ({ cut: 'Cut' } as Record<string, string>)[id] ?? id)).toEqual({ tone: 'finished',
+      headline: 'Reaches the end in 4 steps; the loop back to Cut stopped at its pass limit' })
+    expect(connectionFlows(looped)).toEqual({ c1: '10 kg', c3: '2 times, last 0.4 kg' })
   })
 
   it('reads the input as typed', () => {

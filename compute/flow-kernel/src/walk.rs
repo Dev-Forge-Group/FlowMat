@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use serde_json::{Map, Value as Json, json};
 
 use crate::decimal::Decimal;
-use crate::routing::{Decision, Refusal, RunGraph, with_quantity};
+use crate::routing::{Decision, MAX_PASSES, Refusal, RunGraph, with_quantity};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Status {
@@ -118,6 +118,28 @@ fn follow(
     output: &Json,
 ) -> Result<Option<Failure>, Refusal> {
     for decision in decisions {
+        if decision.will_route
+            && runtime.on_loop(&decision.target_node_id)
+            && state
+                .steps
+                .iter()
+                .filter(|step| step.node == decision.target_node_id)
+                .count()
+                >= MAX_PASSES
+        {
+            // The loop's pass limit (ADR-045 decision 3): nothing goes on, and what would have is kept on record.
+            let input = match &decision.quantity {
+                None => output.clone(),
+                Some(quantity) => with_quantity(output, quantity),
+            };
+            let mut payload = json!({"connectionId": decision.connection_id, "targetNodeId": decision.target_node_id,
+                "reason": "loop_limit"});
+            if let Some(quantity) = input.get("quantity") {
+                payload["quantity"] = quantity.clone();
+            }
+            event(state, source, "connection_filtered", payload);
+            continue;
+        }
         if let Some(loss) = &decision.loss {
             let mut payload = json!({
                 "connectionId": decision.connection_id,

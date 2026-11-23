@@ -240,7 +240,7 @@ class PublishedFlowRunGraphReaderTest {
     }
 
     @Test
-    void validatesDuplicateConnectionsAfterTheirFieldsAndRejectsPartialCycles() throws Exception {
+    void validatesDuplicateConnectionsAfterTheirFieldsAndRejectsLoopsWithoutAWayOut() throws Exception {
         ObjectNode snapshot = snapshot();
         ObjectNode duplicate = ((ObjectNode) snapshot.path("connections").get(0)).deepCopy();
         duplicate.put("conditionExpr", "quantity == 2");
@@ -252,7 +252,51 @@ class PublishedFlowRunGraphReaderTest {
             {"processes":[{"processId":"root"},{"processId":"a"},{"processId":"b"}],"connections":[
                {"connectionId":"ab","fromProcessId":"a","toProcessId":"b"},
                {"connectionId":"ba","fromProcessId":"b","toProcessId":"a"}]}
-            """, "Graph revisions with cycles cannot execute.");
+            """, "Published revision loop through a has no way out.");
+    }
+
+    /**
+     * Loops (docs/architecture/adr/ADR-045-closed-loops.md decision 1): one with an Exclusive or Split way out runs, one
+     * without is refused by the process of it drawn first, a Join on a loop is refused before that, and a graph with no
+     * start is refused after.
+     */
+    @Test
+    void runsALoopWithAGatewayWayOutAndRefusesTheOthers() throws Exception {
+        FlowRunGraph graph = FlowRunGraph.from(json("""
+            {"processes":[{"processId":"in"},{"processId":"inspect"},{"processId":"gate","nodeType":"exclusive"},
+               {"processId":"rework"},{"processId":"ship"}],"connections":[
+               {"connectionId":"c1","fromProcessId":"in","toProcessId":"inspect"},
+               {"connectionId":"c2","fromProcessId":"inspect","toProcessId":"gate"},
+               {"connectionId":"c3","fromProcessId":"gate","toProcessId":"rework","conditionExpr":"attrs.ok = false"},
+               {"connectionId":"c4","fromProcessId":"gate","toProcessId":"ship","defaultRoute":true},
+               {"connectionId":"c5","fromProcessId":"rework","toProcessId":"inspect"}]}
+            """));
+        assertEquals(List.of("in"), graph.roots());
+        assertTrue(List.of("inspect", "gate", "rework").stream().allMatch(graph::onLoop));
+        assertFalse(graph.onLoop("in") || graph.onLoop("ship"));
+
+        assertInvalid("""
+            {"processes":[{"processId":"in"},{"processId":"b"},{"processId":"a"},{"processId":"gate","nodeType":"exclusive"}],
+             "connections":[
+               {"connectionId":"c1","fromProcessId":"in","toProcessId":"a"},
+               {"connectionId":"c2","fromProcessId":"a","toProcessId":"b"},
+               {"connectionId":"c3","fromProcessId":"b","toProcessId":"a"},
+               {"connectionId":"c4","fromProcessId":"b","toProcessId":"gate"}]}
+            """, "Published revision loop through b has no way out.");
+        assertInvalid("""
+            {"processes":[{"processId":"in"},{"processId":"join","nodeType":"join"},{"processId":"split","nodeType":"split"},
+               {"processId":"out"}],"connections":[
+               {"connectionId":"c1","fromProcessId":"in","toProcessId":"join"},
+               {"connectionId":"c2","fromProcessId":"join","toProcessId":"split"},
+               {"connectionId":"c3","fromProcessId":"split","toProcessId":"join","splitKind":"percent","splitValue":10},
+               {"connectionId":"c4","fromProcessId":"split","toProcessId":"out","splitKind":"rest"}]}
+            """, "Published revision Join join is on a loop.");
+        assertInvalid("""
+            {"processes":[{"processId":"split","nodeType":"split"},{"processId":"a"},{"processId":"out"}],"connections":[
+               {"connectionId":"c1","fromProcessId":"a","toProcessId":"split"},
+               {"connectionId":"c2","fromProcessId":"split","toProcessId":"a","splitKind":"percent","splitValue":10},
+               {"connectionId":"c3","fromProcessId":"split","toProcessId":"out","splitKind":"rest"}]}
+            """, "Graph revisions without a start cannot execute.");
     }
 
     @Test

@@ -157,6 +157,61 @@ class ProductionRunStepsIntegrationTest extends IntegrationTestSupport {
         assertEquals("planned", forNode(steps(run), line.bake).path("status").asText());
     }
 
+    /**
+     * A rework loop (docs/architecture/adr/ADR-045-closed-loops.md): Receive, Make, then an Exclusive gateway sends more than 3 back to
+     * Make and anything else on to Pack. Make records 5 and goes round; its second step records 2 more and takes only those 2
+     * (decision 5), so the loop ends and Pack gets 2.
+     */
+    @Test
+    void aLoopRunsMakeAgainAndItsSecondStepTakesOnlyWhatIsNew() throws Exception {
+        String workflow = data(post("/workflows"), Map.of("projectId", DEMO_PROJECT, "workflowName", "Loop " + UUID.randomUUID()))
+            .path("workflowId").asText();
+        String receive = data(post("/processes"), Map.of("workflowId", workflow, "processName", "Receive", "nodeType", "process"))
+            .path("processId").asText();
+        String make = data(post("/processes"), Map.of("workflowId", workflow, "processName", "Make", "nodeType", "process"))
+            .path("processId").asText();
+        String gate = data(post("/processes"), Map.of("workflowId", workflow, "processName", "Enough?", "nodeType", "exclusive"))
+            .path("processId").asText();
+        String pack = data(post("/processes"), Map.of("workflowId", workflow, "processName", "Pack", "nodeType", "process"))
+            .path("processId").asText();
+        data(post("/process-connections"), Map.of("workflowId", workflow, "fromProcessId", receive, "toProcessId", make));
+        data(post("/process-connections"), Map.of("workflowId", workflow, "fromProcessId", make, "toProcessId", gate));
+        data(post("/process-connections"), Map.of("workflowId", workflow, "fromProcessId", gate, "toProcessId", make,
+            "conditionExpr", "quantity > 3", "priority", 0));
+        data(post("/process-connections"), Map.of("workflowId", workflow, "fromProcessId", gate, "toProcessId", pack,
+            "defaultRoute", true, "priority", 1));
+        JsonNode checked = data(get("/workflows/" + workflow + "/validation"), null);
+        checked.path("issues").forEach(issue -> assertFalse("CYCLE".equals(issue.path("code").asText()), issue.toString()));
+        String revision = data(post("/workflows/" + workflow + "/revisions"), null).path("workflowRevisionId").asText();
+        String bread = item("LOOP");
+        String run = data(post("/production-runs/start"), Map.of("projectId", DEMO_PROJECT, "workflowId", workflow,
+            "workflowRevisionId", revision, "targetItemId", bread, "plannedOutputQty", 7, "runType", "simulation"))
+            .path("productionRunId").asText();
+
+        // The loop needs a start before it: Receive, which nothing leads into (decision 1).
+        String receiving = only(steps(run)).path("stepId").asText();
+        data(post(step(run, receiving, "start")), null);
+        data(post(step(run, receiving, "complete")), Map.of());
+        String first = forNode(steps(run), make).path("stepId").asText();
+        data(post(step(run, first, "start")), null);
+        data(post("/production-runs/" + run + "/items"), Map.of("processId", make, "itemId", bread, "direction", "output",
+            "plannedQty", 5, "actualQty", 5, "unit", "kg"));
+        assertQuantity("5", data(post(step(run, first, "complete")), Map.of()).path("outputSnapshot"));
+
+        List<JsonNode> makes = new ArrayList<>();
+        steps(run).forEach(one -> { if (make.equals(one.path("nodeId").asText())) makes.add(one); });
+        assertEquals(2, makes.size(), makes.toString());
+        String second = makes.get(1).path("stepId").asText();
+        assertEquals("planned", makes.get(1).path("status").asText());
+        data(post(step(run, second, "start")), null);
+        data(post("/production-runs/" + run + "/items"), Map.of("processId", make, "itemId", bread, "direction", "output",
+            "plannedQty", 2, "actualQty", 2, "unit", "kg"));
+        assertQuantity("2", data(post(step(run, second, "complete")), Map.of()).path("outputSnapshot"));
+        JsonNode packing = forNode(steps(run), pack);
+        assertEquals("planned", packing.path("status").asText());
+        assertQuantity("2", packing.path("inputSnapshot"));
+    }
+
     @Test
     void aRevisionThatCannotRunAsAGraphKeepsNoSteps() throws Exception {
         String workflow = data(post("/workflows"), Map.of("projectId", DEMO_PROJECT, "workflowName", "Empty " + UUID.randomUUID()))

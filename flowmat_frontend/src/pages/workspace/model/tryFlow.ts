@@ -42,10 +42,13 @@ export function summarizeWalk(walk: KernelWalk, nameOf: (id: string) => string):
     return { tone: 'stopped', headline: waiting ? `${nameOf(waiting.nodeId)} still waits for a branch` : 'Stops before the end' }
   }
   const lost = lostByUnit(walk)
+  // A loop that kept going back until its pass limit (docs/architecture/adr/ADR-045-closed-loops.md decision 3).
+  const limited = walk.events.find((event) => event.type === 'connection_filtered' && event.payload.reason === 'loop_limit')
   return {
     tone: 'finished',
     headline: `Reaches the end in ${walk.steps.length} ${walk.steps.length === 1 ? 'step' : 'steps'}`
-      + (lost.length > 0 ? `, losing ${lost.join(' and ')} on the way` : ''),
+      + (lost.length > 0 ? `, losing ${lost.join(' and ')} on the way` : '')
+      + (limited ? `; the loop back to ${nameOf(String(limited.payload.targetNodeId))} stopped at its pass limit` : ''),
   }
 }
 
@@ -76,14 +79,20 @@ export function walkRows(walk: KernelWalk, nameOf: (id: string) => string): TryF
 export function connectionFlows(walk: KernelWalk): ConnectionFlows {
   if ('error' in walk) return {}
   const flows: ConnectionFlows = {}
+  // A connection on a loop carries once a pass (ADR-045): it says how many times, and the last amount.
+  const times: Record<string, number> = {}
+  const put = (connectionId: string, label: string) => {
+    times[connectionId] = (times[connectionId] ?? 0) + 1
+    flows[connectionId] = times[connectionId] > 1 ? `${times[connectionId]} times, last ${label}` : label
+  }
   for (const step of walk.steps) {
     const arrivals = step.input.arrivals
     if (Array.isArray(arrivals)) {
       for (const arrival of arrivals as Record<string, unknown>[]) {
-        if (typeof arrival.connectionId === 'string') flows[arrival.connectionId] = amount(arrival)
+        if (typeof arrival.connectionId === 'string') put(arrival.connectionId, amount(arrival))
       }
     } else if (step.connectionId) {
-      flows[step.connectionId] = amount(step.input)
+      put(step.connectionId, amount(step.input))
     }
   }
   return flows

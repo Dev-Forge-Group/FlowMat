@@ -82,10 +82,16 @@ final class FlowRunGraph {
     private final Set<String> splitNodes;
     /** The connections into each node, as drawn. */
     private final Map<String, List<String>> incoming;
+    /** The processes on loops, which may run at most {@link #MAX_PASSES} steps each in a run (ADR-045 decision 3). */
+    private final Set<String> loopNodes;
+
+    /** How many steps a process on a loop may have in one run (docs/architecture/adr/ADR-045-closed-loops.md decision 3). */
+    static final int MAX_PASSES = 10;
 
     FlowRunGraph(List<String> roots, Map<String, List<Edge>> outgoing, Map<String, Edge> byId,
         Map<String, ConditionExpression> portRules, Map<String, PortSchema> portSchemas, Map<String, NodePolicy> policies,
-        Set<String> exclusiveNodes, Set<String> joinNodes, Map<String, List<String>> incoming, Set<String> splitNodes) {
+        Set<String> exclusiveNodes, Set<String> joinNodes, Map<String, List<String>> incoming, Set<String> splitNodes,
+        Set<String> loopNodes) {
         this.roots = List.copyOf(roots);
         this.outgoing = outgoing;
         this.byId = byId;
@@ -95,6 +101,7 @@ final class FlowRunGraph {
         this.joinNodes = Set.copyOf(joinNodes);
         this.splitNodes = Set.copyOf(splitNodes);
         this.incoming = incoming;
+        this.loopNodes = Set.copyOf(loopNodes);
     }
 
     static FlowRunGraph from(JsonNode snapshot) {
@@ -151,6 +158,11 @@ final class FlowRunGraph {
         return copy;
     }
 
+    /** Whether the node is on a loop that can run (ADR-045 decision 1). */
+    boolean onLoop(String nodeId) {
+        return loopNodes.contains(nodeId);
+    }
+
     /** Whether the node is a Join gateway, which waits for its branches and the server passes on once (ADR-007). */
     boolean join(String nodeId) {
         return joinNodes.contains(nodeId);
@@ -158,7 +170,7 @@ final class FlowRunGraph {
 
     /**
      * How many connections into the Join a step at one of {@code liveNodes} can still route along, now or further on
-     * (ADR-007 decision 2). The graph has no cycles, so the walk ends; 0 means nothing more can arrive.
+     * (ADR-007 decision 2). Each node is walked once, loops included (ADR-045); 0 means nothing more can arrive.
      */
     int stillComing(String joinNodeId, Collection<String> liveNodes) {
         Set<String> reachable = new HashSet<>();
