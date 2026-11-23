@@ -39,7 +39,7 @@
 | 4 | 적용 설정 개정 | 후보를 띄운 로그의 `Applied runtime settings revision …` 한 줄(`AppliedSettings`) | 개정 값과 설정 목록을 릴리스 기록에 적는다. 인스턴스가 여럿이면 값이 같다 |
 | 5 | 성능 | `node scripts/perf/baseline.mjs`([기준선](../operations/performance-baseline.md)) | 전개·MRP 중앙값이 기록 표의 마지막 줄보다 2배 넘게 느려지지 않음. 느려졌으면 SQL 문 수를 센다 |
 
-## 3.5 v1.0 후보로 남은 것 (2026-11-22)
+## 3.5 v1.0 후보로 남은 것 (2026-11-22, 2026-11-23 갱신)
 
 `v0.9.0-rc.1` 뒤로 계획 여정(ADR-043)과 마이그레이션 V138–V140이 들어왔다. v1.0 후보로 부르기 전에 남은 것:
 
@@ -47,7 +47,7 @@
 |---|---|
 | 자동 6(OWASP) | 활성화한 NVD API 키(로드맵 §10) |
 | ~~손 2(업그레이드)~~ | 끝(2026-11-22): 개발 DB 덤프로 리허설한 뒤 V132 → V140 적용(backup-restore §6). 후보 커밋에서 손 2를 다시 할 때는 이 DB(V140)가 원본이다 |
-| 손 1·5 | 같은 커밋에서 다시 |
+| ~~손 1·5~~ | 끝(2026-11-23, `74b8e21`): §4의 기록 줄 |
 | 파일럿 배포 | 배포 장소·예산(로드맵 §9). 정해지면 [로그인 보안](../operations/login-security.md) §4를 확인하고 [매일 백업](../operations/backup-restore.md) §7을 건다 |
 
 ## 4. 기록
@@ -56,4 +56,5 @@
 
 | 날짜 | 커밋 | 자동 1~6 | 여정 | 복원 | 업그레이드 | 설정 개정 | 성능 | 판정 |
 |---|---|---|---|---|---|---|---|---|
+| 2026-11-23 | `main` `74b8e21` | 1~5 통과(손으로 돌린 실행: backend 290, frontend 298, mock-e2e 101, browser-e2e 293, compute 48, sequence-optimizer 11, 작성자 표기 push 235). 6: npm audit 통과, OWASP 미실행(NVD): NVD가 `NVD_API_KEY`를 거절했다(run 234, 활성화한 API 키가 아님) | 통과(browser-e2e 293: 구매·창고, 생산·품질, 메론우유 계획 여정) | 통과(표 129개·내용 해시 15개·프로젝트 20개 같음, 적용 0, 여정 프로젝트 2개의 재고가 DB와 같음) | 통과 V134 → V140(6개 적용, 실패 0, 빈 표 12개만 삭제, 다시 띄우면 up to date). 개발 DB는 2026-11-22에 V140으로 올렸다 | `a30ff06863a0`(설정 6개, 지난 후보와 같음) | 전개 36.4 ms, MRP 42 ms, 시뮬레이션 14.3 ms(지난 후보 37·43·15 ms) | v1.0 후보로 부르기 전에 남은 것은 OWASP 하나다(활성화한 NVD 키) |
 | 2026-11-22 | `main` `4d08345` | 1~5 통과(손으로 돌린 실행: backend 267, frontend 277, mock-e2e 80, browser-e2e 260 명세 43개, compute 46, sequence-optimizer 9, 작성자 표기 push 178). 6: npm audit 0건, OWASP 미실행(NVD): NVD가 `NVD_API_KEY`를 거절했다(run 233, 활성화한 API 키가 아님) | 통과(백엔드의 두 여정 테스트, 실 API `purchase-warehouse-live`·`production-quality-live`) | 통과(지문 같음, 적용 0, 여정 재고가 DB와 같음) | 통과 V134 → V137(빈 표 12개만 삭제, 다시 띄우면 up to date) | `a30ff06863a0`(설정 6개) | 전개 37 ms, MRP 43 ms, 시뮬레이션 15 ms(기록 표 마지막 줄 43·59·17 ms) | 후보 `v0.9.0-rc.1`(태그 2026-11-22, 사용자 push). 배포 결정 전에 OWASP를 돌린다 |
