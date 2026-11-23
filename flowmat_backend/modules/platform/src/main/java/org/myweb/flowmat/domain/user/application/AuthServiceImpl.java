@@ -140,6 +140,8 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    // A refused login still keeps what it wrote: the failure count and the lock time (docs/operations/login-security.md §2).
+    @Transactional(noRollbackFor = BusinessException.class)
     public UserTokenResponse login(UserLoginRequest request, String userAgent, String ipAddress) {
         if (request == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);

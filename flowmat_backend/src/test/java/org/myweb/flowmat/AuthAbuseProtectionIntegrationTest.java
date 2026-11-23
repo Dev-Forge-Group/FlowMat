@@ -111,6 +111,32 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void failedLoginsAreKeptOnTheUserRowAndASuccessClearsThem() {
+        String userId = "lockrow_" + unique().substring(0, 12);
+        saveUser(userId);
+        User user = users.findByUserId(userId).orElseThrow();
+        user.setUserPwd(encoder.encode("Right-password-2026!"));
+        users.saveAndFlush(user);
+
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            assertThatThrownBy(() -> auth.login(new UserLoginRequest(userId, "wrong-password", "d"), "JUnit", "127.0.0.1"))
+                .hasMessageContaining("incorrect");
+        }
+        assertThat(users.findByUserId(userId).orElseThrow().getFailedLoginCount()).isEqualTo(2);
+        for (int attempt = 3; attempt <= 5; attempt++) {
+            assertThatThrownBy(() -> auth.login(new UserLoginRequest(userId, "wrong-password", "d"), "JUnit", "127.0.0.1"));
+        }
+        // The fifth failure locks the account, and the row says when.
+        assertThat(users.findByUserId(userId).orElseThrow().getLockedAt()).isNotNull();
+
+        store.clearLoginFailures(userId);
+        auth.login(new UserLoginRequest(userId, "Right-password-2026!", "d"), "JUnit", "127.0.0.1");
+        User after = users.findByUserId(userId).orElseThrow();
+        assertThat(after.getFailedLoginCount()).isZero();
+        assertThat(after.getLockedAt()).isNull();
+    }
+
+    @Test
     void changingThePasswordSignsOutOtherDevicesAndKeepsThisOne() throws Exception {
         String userId = "pwchg_" + unique().substring(0, 12);
         saveUser(userId);
