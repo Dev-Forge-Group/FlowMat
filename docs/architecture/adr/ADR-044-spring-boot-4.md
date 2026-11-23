@@ -37,6 +37,9 @@ OWASP 의존성 검사가 처음으로 끝까지 돌았다(2026-11-23, run 249).
    - `@AutoConfigureObservability(tracing = false)` → `@AutoConfigureMetrics`
    - Framework 7에서 멀티파트 요청 빌더가 일반 빌더의 하위형이 아니게 됐다. 그래서 테스트 도우미가 `AbstractMockHttpServletRequestBuilder<?>`를 받게 했다.
 5. **3.5에서 둔 패치 덮어쓰기(Tomcat·Netty·PostgreSQL·Jackson·commons-lang3·log4j)는 지운다.** Boot 4 BOM이 더 새 줄을 관리하기 때문이다. httpclient5·httpcore5의 짝 맞춤은 그대로 둔다.
+6. **OWASP가 Boot 4에서 남긴 것을 정리한다(run 252: CRITICAL 3, HIGH 2).** Spring 6.2/6.5의 213건은 사라졌다.
+   - springdoc 3.1.1이 데려오는 Swagger UI 5.32.14의 DOMPurify(CVE-2026-116803·116804): webjar를 5.35.1로 고정한다(run 249에서 깨끗했다). springdoc은 `springdoc.swagger-ui.version`으로 페이지 경로를 만들므로 `application.yml`에 같은 판을 적는다. 둘이 어긋나면 `OpenApiContractTest.swaggerUiServesThePinnedWebjar`가 실패한다.
+   - spring-boot-devtools의 CVE-2022-31691: Spring Tools 편집기 확장의 CVE가 이름으로 잡힌 것이다. devtools는 `developmentOnly`라 Boot jar에 들어가지 않으므로 검사에서 그 구성을 뺀다(`skipConfigurations`). 출하물과 테스트가 쓰는 구성은 그대로 검사한다.
 
 ## 확인할 것
 

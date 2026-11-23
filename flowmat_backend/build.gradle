@@ -78,6 +78,9 @@ configure([rootProject] + contextModules) {
 
 		// API Documentation
 		implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
+		// springdoc 3.1.1 brings Swagger UI 5.32.14, whose DOMPurify OWASP flags (CVE-2026-116803/116804); 5.35.1 is clean (run 249).
+		// springdoc.swagger-ui.version in application.yml must name the same version, or the page is not found.
+		implementation 'org.webjars:swagger-ui:5.35.1'
 
 		// JWT
 		implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
@@ -258,6 +261,9 @@ dependencyCheck {
 	// Where security.yml reads the JSON to list findings by severity and uploads the reports. The plugin's default since
 	// 13.0 is build/reports/dependency-check, which left the summary empty and the artifact missing.
 	outputDirectory = layout.buildDirectory.dir('reports')
+	// Devtools runs only on a developer's machine and is not in the Boot jar; its finding (CVE-2022-31691) is the Spring
+	// Tools editor extension, matched by name. The scan covers what is shipped and what the tests run.
+	skipConfigurations = ['developmentOnly']
 	// Kept under the Gradle user home so CI can cache it between weekly runs (security.yml).
 	data {
 		directory = "${gradle.gradleUserHomeDir}/dependency-check-data"

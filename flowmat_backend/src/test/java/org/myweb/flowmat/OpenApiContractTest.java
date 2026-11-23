@@ -68,6 +68,19 @@ class OpenApiContractTest extends IntegrationTestSupport {
             + "(docs/api/README.md)").isEqualTo(Files.readString(CONTRACT));
     }
 
+    /**
+     * build.gradle pins the Swagger UI webjar past the one springdoc brings (OWASP, ADR-044), and springdoc builds the page's
+     * path from springdoc.swagger-ui.version: when the two disagree the page is not found.
+     */
+    @Test
+    void swaggerUiServesThePinnedWebjar() throws Exception {
+        var response = mockMvc.perform(get("/swagger-ui/index.html")
+                .header("Authorization", "Bearer " + jwtProvider.generateAccessToken(DEMO_OWNER)))
+            .andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("swagger-ui");
+    }
+
     @Test
     void anOperationOrFieldThatGoesAwayIsBreaking() throws Exception {
         JsonNode published = JSON.readTree("""
