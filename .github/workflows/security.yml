@@ -86,6 +86,15 @@ jobs:
         [ -n "$NVD_API_KEY" ] || unset NVD_API_KEY
         ./gradlew dependencyCheckAnalyze 2>&1 | tee /tmp/dependency-check.log
         status=${PIPESTATUS[0]}
+        # A refused key must not stop the scan: run again without it, at NVD's rate for anonymous clients (slower the
+        # first time, then quick from the cache).
+        if [ "$status" -ne 0 ] && [ -n "${NVD_API_KEY:-}" ] && grep -q 'Invalid API Key' /tmp/dependency-check.log; then
+          echo "::warning title=NVD key refused::NVD refused the NVD_API_KEY secret, so the scan runs again without a key (slower)."
+          { echo '### NVD key refused'; echo; echo 'NVD refused the NVD_API_KEY secret; the scan ran without a key.'; echo; } >> "$GITHUB_STEP_SUMMARY"
+          unset NVD_API_KEY
+          ./gradlew dependencyCheckAnalyze 2>&1 | tee /tmp/dependency-check.log
+          status=${PIPESTATUS[0]}
+        fi
         if [ "$status" -ne 0 ] && grep -qE 'NvdApiException|Error updating the NVD Data' /tmp/dependency-check.log; then
           if grep -q 'Invalid API Key' /tmp/dependency-check.log; then
             reason='NVD refused the NVD_API_KEY secret: it is not an activated API key'

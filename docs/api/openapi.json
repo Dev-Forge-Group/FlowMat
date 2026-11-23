@@ -113,6 +113,7 @@
             "type" : "string"
           },
           "quantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           },
           "requestId" : {
@@ -3355,9 +3356,7 @@
       },
       "ApiResponseVoid" : {
         "properties" : {
-          "data" : {
-            "type" : "object"
-          },
+          "data" : { },
           "message" : {
             "type" : "string"
           },
@@ -3904,6 +3903,7 @@
             "type" : "string"
           },
           "targetItemId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -3931,18 +3931,22 @@
             "type" : "number"
           },
           "baseUnit" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "bomName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "targetItemId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -4062,6 +4066,7 @@
       "BomLineCreateRequest" : {
         "properties" : {
           "childItemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "lineType" : {
@@ -4097,6 +4102,7 @@
             "type" : "string"
           },
           "unit" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -4562,6 +4568,7 @@
             "items" : {
               "$ref" : "#/components/schemas/CanvasAnnotationBatchItemRequest"
             },
+            "minItems" : 1,
             "type" : "array"
           }
         },
@@ -4571,6 +4578,7 @@
       "CanvasAnnotationCreateRequest" : {
         "properties" : {
           "annotationType" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "groupId" : {
@@ -4925,6 +4933,7 @@
       "CorrectiveActionRequest" : {
         "properties" : {
           "actionType" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "description" : {
@@ -5128,9 +5137,11 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           },
           "reason" : {
@@ -5158,6 +5169,7 @@
             "type" : "string"
           },
           "scrapQuantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           }
         },
@@ -5253,6 +5265,7 @@
       "DormantReactivationRequest" : {
         "properties" : {
           "userIdOrEmail" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -5262,6 +5275,7 @@
       "DormantTokenRequest" : {
         "properties" : {
           "token" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -5385,6 +5399,7 @@
             "type" : "boolean"
           },
           "id" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "locked" : {
@@ -5409,6 +5424,7 @@
             "$ref" : "#/components/schemas/JsonNode"
           },
           "type" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "width" : {
@@ -5515,6 +5531,8 @@
       "EmailCodeRequest" : {
         "properties" : {
           "userEmail" : {
+            "format" : "email",
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -5524,9 +5542,12 @@
       "EmailCodeVerifyRequest" : {
         "properties" : {
           "code" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userEmail" : {
+            "format" : "email",
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -5866,7 +5887,6 @@
       "EquipmentDetails" : {
         "properties" : {
           "capacityPerHour" : {
-            "exclusiveMinimum" : false,
             "minimum" : 0.0,
             "type" : "number"
           },
@@ -5878,10 +5898,8 @@
             "type" : "boolean"
           },
           "efficiencyPercent" : {
-            "exclusiveMaximum" : false,
-            "exclusiveMinimum" : true,
+            "exclusiveMinimum" : 0,
             "maximum" : 100,
-            "minimum" : 0,
             "type" : "number"
           },
           "location" : {
@@ -5900,7 +5918,6 @@
             "type" : "string"
           },
           "powerKwh" : {
-            "exclusiveMinimum" : false,
             "minimum" : 0.0,
             "type" : "number"
           },
@@ -5910,7 +5927,6 @@
             "type" : "string"
           },
           "waterLiter" : {
-            "exclusiveMinimum" : false,
             "minimum" : 0.0,
             "type" : "number"
           }
@@ -6222,6 +6238,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "requestId" : {
@@ -6261,6 +6278,7 @@
             "type" : "string"
           },
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
@@ -6269,11 +6287,11 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
-            "exclusiveMinimum" : true,
-            "minimum" : 0.0,
+            "exclusiveMinimum" : 0.0,
             "type" : "number"
           },
           "requestId" : {
@@ -6314,9 +6332,11 @@
       "FindEmailRequest" : {
         "properties" : {
           "userName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userTel" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -6332,6 +6352,7 @@
             "type" : "string"
           },
           "conditionExpression" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "conditionType" : {
@@ -6345,18 +6366,22 @@
             "type" : "integer"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "ruleDesc" : {
             "type" : "string"
           },
           "ruleName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "targetId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "targetType" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -6665,12 +6690,15 @@
             "$ref" : "#/components/schemas/JsonNode"
           },
           "runType" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowRevisionId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -6739,6 +6767,7 @@
             "$ref" : "#/components/schemas/JsonNode"
           },
           "nodeId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "scheduledAt" : {
@@ -6860,6 +6889,7 @@
       "GrantRoleRequest" : {
         "properties" : {
           "roleName" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -7401,6 +7431,7 @@
             "type" : "string"
           },
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "location" : {
@@ -7416,6 +7447,7 @@
             "type" : "number"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
@@ -7594,6 +7626,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "requestId" : {
@@ -7741,6 +7774,7 @@
             "type" : "string"
           },
           "inventoryId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
@@ -7761,6 +7795,7 @@
             "type" : "string"
           },
           "transactionType" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -7844,6 +7879,7 @@
       "InventoryTransferRequest" : {
         "properties" : {
           "fromInventoryId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
@@ -7852,6 +7888,7 @@
             "type" : "string"
           },
           "quantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           },
           "requestId" : {
@@ -7924,9 +7961,11 @@
             "$ref" : "#/components/schemas/ItemDetails"
           },
           "itemCode" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "itemName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "itemStatus" : {
@@ -7946,6 +7985,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "purchaseUnit" : {
@@ -8054,6 +8094,7 @@
             "type" : "boolean"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "rows" : {
@@ -8332,9 +8373,7 @@
         },
         "type" : "object"
       },
-      "JsonNode" : {
-        "type" : "object"
-      },
+      "JsonNode" : { },
       "LaborPremiumRuleRequest" : {
         "properties" : {
           "effectiveFrom" : {
@@ -8507,6 +8546,7 @@
             "type" : "string"
           },
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "lotNo" : {
@@ -8515,6 +8555,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "receivedAt" : {
@@ -8812,6 +8853,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "severity" : {
@@ -8849,6 +8891,7 @@
             "items" : {
               "type" : "string"
             },
+            "minItems" : 1,
             "type" : "array"
           }
         },
@@ -9088,6 +9131,7 @@
       "OAuthExchangeRequest" : {
         "properties" : {
           "code" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9120,9 +9164,11 @@
       "OAuthSignupCompleteRequest" : {
         "properties" : {
           "password" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "signupToken" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userBirth" : {
@@ -9130,15 +9176,19 @@
             "type" : "string"
           },
           "userId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userNickname" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userTel" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9280,9 +9330,11 @@
       "PasswordChangeRequest" : {
         "properties" : {
           "currentPassword" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "newPassword" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9292,9 +9344,11 @@
       "PasswordResetConfirmRequest" : {
         "properties" : {
           "newPassword" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "token" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9304,6 +9358,8 @@
       "PasswordResetRequest" : {
         "properties" : {
           "userEmail" : {
+            "format" : "email",
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9387,9 +9443,11 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           },
           "stagingLocation" : {
@@ -9424,12 +9482,15 @@
       "PlaceSafetyStockRequest" : {
         "properties" : {
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "locationId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "safetyStockQty" : {
@@ -9511,6 +9572,7 @@
             "type" : "object"
           },
           "requestId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "supplierName" : {
@@ -9763,7 +9825,6 @@
       "ProcessConnectionCreateRequest" : {
         "properties" : {
           "capacity" : {
-            "exclusiveMinimum" : false,
             "minimum" : 0.0,
             "type" : "number"
           },
@@ -9801,6 +9862,7 @@
             "type" : "string"
           },
           "fromProcessId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "itemId" : {
@@ -9833,6 +9895,7 @@
             "type" : "string"
           },
           "toProcessId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "unit" : {
@@ -9841,6 +9904,7 @@
             "type" : "string"
           },
           "workflowId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -9936,7 +10000,6 @@
       "ProcessConnectionUpdateRequest" : {
         "properties" : {
           "capacity" : {
-            "exclusiveMinimum" : false,
             "minimum" : 0.0,
             "type" : "number"
           },
@@ -10035,6 +10098,7 @@
             "type" : "string"
           },
           "processName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "processType" : {
@@ -10045,6 +10109,7 @@
             "type" : "number"
           },
           "workflowId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -10162,6 +10227,7 @@
             "type" : "string"
           },
           "direction" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "formula" : {
@@ -10181,6 +10247,7 @@
             "type" : "string"
           },
           "processId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
@@ -10472,6 +10539,7 @@
             "type" : "string"
           },
           "workflowId" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -10508,9 +10576,11 @@
             "type" : "integer"
           },
           "templateCategory" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "templateName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "templateType" : {
@@ -10661,12 +10731,14 @@
             "type" : "number"
           },
           "direction" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "inventoryId" : {
             "type" : "string"
           },
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "plannedQty" : {
@@ -10682,6 +10754,7 @@
             "type" : "string"
           },
           "unit" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -10812,6 +10885,7 @@
             "type" : "number"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "runType" : {
@@ -10827,6 +10901,7 @@
             "type" : "string"
           },
           "workflowId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowRevisionId" : {
@@ -10943,12 +11018,14 @@
             "type" : "string"
           },
           "ownerId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "projectDesc" : {
             "type" : "string"
           },
           "projectName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "visibility" : {
@@ -10961,6 +11038,7 @@
       "ProjectInviteAcceptRequest" : {
         "properties" : {
           "inviteToken" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -11000,9 +11078,12 @@
       "ProjectInviteRequest" : {
         "properties" : {
           "invitedEmail" : {
+            "format" : "email",
+            "minLength" : 1,
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "projectRole" : {
@@ -11073,6 +11154,7 @@
       "ProjectMemberRoleUpdateRequest" : {
         "properties" : {
           "projectRole" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -11443,6 +11525,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quarantineLot" : {
@@ -11972,6 +12055,7 @@
             "type" : "string"
           },
           "kind" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "qty" : {
@@ -12171,20 +12255,21 @@
       "RunInputAllocationRequest" : {
         "properties" : {
           "itemId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "processId" : {
             "type" : "string"
           },
           "quantity" : {
-            "exclusiveMinimum" : true,
-            "minimum" : 0.0,
+            "exclusiveMinimum" : 0.0,
             "type" : "number"
           },
           "requestId" : {
             "type" : "string"
           },
           "unit" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -12487,9 +12572,11 @@
             "type" : "string"
           },
           "productionRunId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "snapshotData" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "snapshotName" : {
@@ -12723,9 +12810,11 @@
       "SocialLinkStartRequest" : {
         "properties" : {
           "currentPassword" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "provider" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "returnTo" : {
@@ -12746,9 +12835,11 @@
       "SocialLinkUnlinkRequest" : {
         "properties" : {
           "currentPassword" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "provider" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -12877,6 +12968,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "rows" : {
@@ -13069,6 +13161,7 @@
             "type" : "string"
           },
           "locationType" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
@@ -13080,6 +13173,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "storageCondition" : {
@@ -13484,12 +13578,15 @@
             "type" : "number"
           },
           "unitCode" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "unitName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "unitType" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -13600,9 +13697,11 @@
             "type" : "string"
           },
           "password" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userIdOrEmail" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -13696,6 +13795,7 @@
       "UserSignupRequest" : {
         "properties" : {
           "password" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userBirth" : {
@@ -13703,18 +13803,24 @@
             "type" : "string"
           },
           "userEmail" : {
+            "format" : "email",
+            "minLength" : 1,
             "type" : "string"
           },
           "userId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userNickname" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "userTel" : {
+            "minLength" : 1,
             "type" : "string"
           }
         },
@@ -13754,6 +13860,7 @@
             "type" : "string"
           },
           "userEmail" : {
+            "format" : "email",
             "type" : "string"
           },
           "userName" : {
@@ -13791,8 +13898,6 @@
       "WarehouseTaskCompleteRequest" : {
         "properties" : {
           "expectedQuantity" : {
-            "exclusiveMaximum" : false,
-            "exclusiveMinimum" : false,
             "maximum" : 9.9999999999999E9,
             "minimum" : 1.0E-4,
             "type" : "number"
@@ -13811,6 +13916,7 @@
       "WarehouseTaskCreateRequest" : {
         "properties" : {
           "inventoryId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "note" : {
@@ -13819,9 +13925,11 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "quantity" : {
+            "exclusiveMinimum" : 0,
             "type" : "number"
           },
           "taskType" : {
@@ -14104,6 +14212,7 @@
             "type" : "string"
           },
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "targetItemId" : {
@@ -14113,6 +14222,7 @@
             "type" : "number"
           },
           "workOrderTitle" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowId" : {
@@ -15247,12 +15357,14 @@
       "WorkflowCreateRequest" : {
         "properties" : {
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowDesc" : {
             "type" : "string"
           },
           "workflowName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowType" : {
@@ -15409,6 +15521,7 @@
       "WorkflowTemplateApplyRequest" : {
         "properties" : {
           "projectId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "workflowName" : {
@@ -15445,9 +15558,11 @@
             "type" : "integer"
           },
           "templateCategory" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "templateName" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "templateType" : {
@@ -15562,9 +15677,7 @@
             "type" : "string"
           },
           "evidence" : {
-            "additionalProperties" : {
-              "type" : "object"
-            },
+            "additionalProperties" : { },
             "type" : "object"
           },
           "ioId" : {
@@ -15637,7 +15750,7 @@
     "title" : "FlowMat API",
     "version" : "1.0.0"
   },
-  "openapi" : "3.0.1",
+  "openapi" : "3.1.0",
   "paths" : {
     "/admin/projects" : {
       "get" : {
@@ -16033,6 +16146,64 @@
           }
         },
         "tags" : [ "auth-controller" ]
+      }
+    },
+    "/auth/face/**" : {
+      "delete" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "head" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "options" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "patch" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "post" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
+      },
+      "put" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "face-login-disabled-controller" ]
       }
     },
     "/auth/find-email" : {

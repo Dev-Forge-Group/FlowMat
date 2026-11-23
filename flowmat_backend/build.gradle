@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.15'
+	id 'org.springframework.boot' version '3.5.16'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'jacoco'
 	id 'org.owasp.dependencycheck' version '13.0.0'
@@ -16,8 +16,16 @@ allprojects {
 	version = '0.0.1-SNAPSHOT'
 
 	// Keep the client and core pair aligned; HTTP connectors use a pinned DNS resolver.
-	ext['httpclient5.version'] = '5.6.3'
-	ext['httpcore5.version'] = '5.4.3'
+	ext['httpclient5.version'] = '5.6.5'
+	ext['httpcore5.version'] = '5.4.4'
+	// Security patches newer than Spring Boot 3.5.16 manages (OWASP scan 2026-11-23, docs/status/RELEASE-CHECKLIST.md §4).
+	// Patch releases of the same lines; drop each line when the Boot BOM catches up.
+	ext['tomcat.version'] = '10.1.62'
+	ext['netty.version'] = '4.1.141.Final'
+	ext['postgresql.version'] = '42.7.14'
+	ext['jackson-bom.version'] = '2.21.8'
+	ext['commons-lang3.version'] = '3.22.0'
+	ext['log4j2.version'] = '2.26.1'
 
 	repositories {
 		mavenCentral()
@@ -75,7 +83,7 @@ configure([rootProject] + contextModules) {
 		implementation 'software.amazon.awssdk:url-connection-client'
 
 		// API Documentation
-		implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
+		implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.10.1'
 
 		// JWT
 		implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
@@ -251,6 +259,9 @@ if (testImpactRecord) {
 
 dependencyCheck {
 	formats = ['HTML', 'SARIF', 'JSON']
+	// Where security.yml reads the JSON to list findings by severity and uploads the reports. The plugin's default since
+	// 13.0 is build/reports/dependency-check, which left the summary empty and the artifact missing.
+	outputDirectory = layout.buildDirectory.dir('reports')
 	// Kept under the Gradle user home so CI can cache it between weekly runs (security.yml).
 	data {
 		directory = "${gradle.gradleUserHomeDir}/dependency-check-data"
