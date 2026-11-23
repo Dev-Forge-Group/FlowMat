@@ -251,6 +251,9 @@ if (testImpactRecord) {
 
 dependencyCheck {
 	formats = ['HTML', 'SARIF', 'JSON']
+	// Where security.yml reads the JSON to list findings by severity and uploads the reports. The plugin's default since
+	// 13.0 is build/reports/dependency-check, which left the summary empty and the artifact missing.
+	outputDirectory = layout.buildDirectory.dir('reports')
 	// Kept under the Gradle user home so CI can cache it between weekly runs (security.yml).
 	data {
 		directory = "${gradle.gradleUserHomeDir}/dependency-check-data"
