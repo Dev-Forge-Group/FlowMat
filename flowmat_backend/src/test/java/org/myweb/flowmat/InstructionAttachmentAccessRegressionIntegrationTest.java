@@ -28,8 +28,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.myweb.flowmat.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -38,6 +38,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /** Attachment permissions and integrity are enforced at the HTTP boundary without creating BOMs. */
@@ -193,7 +194,7 @@ class InstructionAttachmentAccessRegressionIntegrationTest extends IntegrationTe
             .with(request -> { request.setMethod("PUT"); return request; }));
     }
 
-    private ResultActions call(String actor, MockHttpServletRequestBuilder request) throws Exception {
+    private ResultActions call(String actor, AbstractMockHttpServletRequestBuilder<?> request) throws Exception {
         return mvc.perform(request.header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt.generateAccessToken(actor)));
     }
 

@@ -16,13 +16,15 @@ import org.myweb.flowmat.domain.workflow.api.dto.request.ProcessConnectionCreate
 import org.myweb.flowmat.domain.workflow.application.ProcessConnectionService;
 import org.myweb.flowmat.global.exception.GlobalExceptionHandler;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class GatewayPriorityInputRegressionTest {
     private final ProcessConnectionService service = mock(ProcessConnectionService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new ProcessConnectionController(service))
-        .setControllerAdvice(new GlobalExceptionHandler()).build();
+        .setControllerAdvice(new GlobalExceptionHandler())
+        .setMessageConverters(new MappingJackson2HttpMessageConverter()).build();
 
     @ParameterizedTest
     @ValueSource(strings = {"1.5", "-1.5", "2147483647.5"})

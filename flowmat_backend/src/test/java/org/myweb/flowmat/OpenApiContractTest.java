@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.myweb.flowmat.global.config.OpenApiConfig;
 import org.myweb.flowmat.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -66,6 +66,19 @@ class OpenApiContractTest extends IntegrationTestSupport {
         }
         assertThat(text).as("the API changed; review it, then run the backend tests with -Dopenapi.update=true "
             + "(docs/api/README.md)").isEqualTo(Files.readString(CONTRACT));
+    }
+
+    /**
+     * build.gradle pins the Swagger UI webjar past the one springdoc brings (OWASP, ADR-044), and springdoc builds the page's
+     * path from springdoc.swagger-ui.version: when the two disagree the page is not found.
+     */
+    @Test
+    void swaggerUiServesThePinnedWebjar() throws Exception {
+        var response = mockMvc.perform(get("/swagger-ui/index.html")
+                .header("Authorization", "Bearer " + jwtProvider.generateAccessToken(DEMO_OWNER)))
+            .andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("swagger-ui");
     }
 
     @Test

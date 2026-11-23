@@ -4,9 +4,9 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.actuate.autoconfigure.web.server.ConditionalOnManagementPort;
 import org.springframework.boot.actuate.autoconfigure.web.server.ManagementPortType;
-import org.springframework.boot.actuate.health.HealthComponent;
-import org.springframework.boot.actuate.health.HealthEndpoint;
-import org.springframework.boot.actuate.health.Status;
+import org.springframework.boot.health.actuate.endpoint.HealthDescriptor;
+import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
+import org.springframework.boot.health.contributor.Status;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,7 +37,7 @@ public class PublicHealthProbeController {
     }
 
     private ResponseEntity<Map<String, String>> probe(String group) {
-        HealthComponent health = healthEndpoint.healthForPath(group);
+        HealthDescriptor health = healthEndpoint.healthForPath(group);
         Status status = health == null ? Status.UNKNOWN : health.getStatus();
         HttpStatus code = Status.UP.equals(status) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
         return ResponseEntity.status(code).body(Map.of("status", status.getCode()));
