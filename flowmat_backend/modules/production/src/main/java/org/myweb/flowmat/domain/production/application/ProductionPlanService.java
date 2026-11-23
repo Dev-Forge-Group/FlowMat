@@ -53,6 +53,7 @@ public class ProductionPlanService {
     private final UsableStock usableStock;
     private final ObjectMapper objectMapper;
     private final PlanSchedule schedule;
+    private final org.myweb.flowmat.domain.production.repository.ResourceCapacityRepository capacities;
 
     public PlanPreviewResponse preview(String workflowId, PlanPreviewRequest request) {
         WorkflowAccessView workflow = workflowAccess.requireRead(workflowId);
@@ -86,6 +87,8 @@ public class ProductionPlanService {
             .forEach(row -> limits.add(new PlanPreviewResponse.Limit("stock", row.at(), row.processId(),
                 row.itemName() + " is short by " + plain(row.shortage()) + " " + row.unit() + ".")));
         longestEquipmentStep(result, nodes).ifPresent(limits::add);
+        List<PlanPreviewResponse.Assumption> capacityNotes = new ArrayList<>();
+        limits.addAll(capacityLimits(workflow.projectId(), resources(requirements), nodes, capacityNotes));
         result.limits().forEach(limit -> limits.add(new PlanPreviewResponse.Limit(limit.kind(), limit.at(), owner.get(limit.at()),
             limit.message())));
 
@@ -96,7 +99,9 @@ public class ProductionPlanService {
             buildable(result, requirements, items, targetItem(graph, target)), requirements, nodes,
             result.surplus().stream().map(s -> new PlanPreviewResponse.Surplus(s.at(), s.kind(), s.quantity(), s.unit())).toList(),
             List.copyOf(limits),
-            result.assumptions().stream().map(a -> new PlanPreviewResponse.Assumption(a.kind(), a.at(), a.value())).toList(),
+            java.util.stream.Stream.concat(
+                result.assumptions().stream().map(a -> new PlanPreviewResponse.Assumption(a.kind(), a.at(), a.value())),
+                capacityNotes.stream()).toList(),
             new PlanPreviewResponse.Basis(revision.workflowRevisionId(), basis),
             nodes.stream().anyMatch(node -> node.minutes() != null && node.endAt() == null) ? null
                 : nodes.stream().map(PlanPreviewResponse.Node::endAt).filter(Objects::nonNull).max(java.util.Comparator.naturalOrder())
@@ -104,6 +109,53 @@ public class ProductionPlanService {
             resources(requirements), costs(requirements),
             costs(requirements).stream().map(PlanPreviewResponse.Cost::cost).reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(SCALE, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * The project's resource limits against the plan's average draw (ADR-046 decision 5): over the plan's time from its first
+     * step's start to its finish, per hour, or per day for a plan of a day or more. A limit in another unit is not compared;
+     * a plan without time is not checked and says so.
+     */
+    private List<PlanPreviewResponse.Limit> capacityLimits(String projectId, List<PlanPreviewResponse.Resource> resources,
+        List<PlanPreviewResponse.Node> nodes, List<PlanPreviewResponse.Assumption> notes) {
+        if (resources.isEmpty()) return List.of();
+        List<org.myweb.flowmat.domain.production.domain.entity.ResourceCapacity> limits =
+            capacities.findAllByProjectIdOrderByResourceTypeAscUnitAsc(projectId);
+        if (limits.isEmpty()) return List.of();
+        java.time.OffsetDateTime start = nodes.stream().map(PlanPreviewResponse.Node::startAt).filter(Objects::nonNull)
+            .min(Comparator.naturalOrder()).orElse(null);
+        java.time.OffsetDateTime end = nodes.stream().anyMatch(node -> node.minutes() != null && node.endAt() == null) ? null
+            : nodes.stream().map(PlanPreviewResponse.Node::endAt).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null);
+        BigDecimal hours = start == null || end == null ? null
+            : BigDecimal.valueOf(java.time.Duration.between(start, end).toMillis()).divide(BigDecimal.valueOf(3_600_000), MC);
+        List<PlanPreviewResponse.Limit> found = new ArrayList<>();
+        for (PlanPreviewResponse.Resource resource : resources) {
+            for (org.myweb.flowmat.domain.production.domain.entity.ResourceCapacity limit : limits) {
+                if (!limit.getResourceType().equals(resource.resourceType()) || resource.unit() == null
+                    || !limit.getUnit().equalsIgnoreCase(resource.unit())) {
+                    continue;
+                }
+                if (hours == null || hours.signum() <= 0) {
+                    notes.add(new PlanPreviewResponse.Assumption("resource-capacity", resource.resourceType(),
+                        "not checked: the plan has no time to spread " + plain(resource.needed()) + " " + resource.unit() + " over"));
+                    continue;
+                }
+                boolean daily = "day".equals(limit.getPer());
+                BigDecimal periods = daily ? hours.divide(BigDecimal.valueOf(24), MC).max(BigDecimal.ONE) : hours;
+                BigDecimal rate = resource.needed().divide(periods, MC);
+                if (rate.compareTo(limit.getAmount()) > 0) {
+                    String name = resource.resourceType().substring(0, 1).toUpperCase(Locale.ROOT) + resource.resourceType().substring(1);
+                    found.add(new PlanPreviewResponse.Limit("resource-capacity", resource.resourceType(), null, name + " averages "
+                        + plain(half(rate)) + " " + resource.unit() + " per " + limit.getPer() + " over the plan, above the factory's "
+                        + plain(limit.getAmount()) + " " + limit.getUnit() + " per " + limit.getPer() + "."));
+                }
+            }
+        }
+        return found;
+    }
+
+    private static BigDecimal half(BigDecimal value) {
+        return value.setScale(SCALE, RoundingMode.HALF_UP);
     }
 
     /** Energy and water are drawn as used, not kept in stock (ADR-046 decision 2). */

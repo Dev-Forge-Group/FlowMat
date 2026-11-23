@@ -13,7 +13,8 @@ import java.util.Map;
  * @param buildable what usable stock could make of the target now, in the target's unit: whole units for a counted item;
  *     null when no start has an item
  * @param requirements what the starts need, by item in the item's unit; starts without an item come one by one
- * @param limits stock shortages first, then the longest equipment step, then what the graph itself limits
+ * @param limits stock shortages first, then the longest equipment step, then resource limits the plan's average draw is
+ *     above (ADR-046 decision 5), then what the graph itself limits
  * @param basis what the plan read, which a confirmation checks again
  * @param resources what the energy and water rows add up to by kind and unit (ADR-046 decision 4)
  * @param costs the known cost of the rows by kind, with how many rows have no unit cost (ADR-046 decision 4)
@@ -89,7 +90,10 @@ public record PlanPreviewResponse(
     public record Surplus(String at, String kind, BigDecimal quantity, String unit) {
     }
 
-    /** {@code kind}: {@code stock}, {@code equipment-time}, or one of the graph's (split-fixed, exclusive, capacity, ...). */
+    /**
+     * {@code kind}: {@code stock}, {@code equipment-time}, {@code resource-capacity} ({@code at} is the resource type), or one
+     * of the graph's (split-fixed, exclusive, capacity, ...).
+     */
     public record Limit(String kind, String at, String processId, String message) {
     }
 
