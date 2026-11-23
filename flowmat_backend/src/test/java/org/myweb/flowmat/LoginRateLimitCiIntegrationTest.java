@@ -26,7 +26,9 @@ class LoginRateLimitCiIntegrationTest extends IntegrationTestSupport {
     @Test
     void theCiAccountLimitAllowsOneHundredAttemptsAndStillBlocksTheNext() throws Exception {
         String account = "rate-ci-" + UUID.randomUUID();
-        for (int attempt = 0; attempt < 100; attempt++) login(account, "192.0.2.103", 401);
+        // No account has this name, yet it locks as an account would: wrong four times, then locked from the fifth
+        // (docs/operations/login-security.md §2). The rate limit still counts every attempt.
+        for (int attempt = 0; attempt < 100; attempt++) login(account, "192.0.2.103", attempt < 4 ? 401 : 403);
         login(account, "192.0.2.103", 429);
         String key = "auth:ratelimit:login-account:" + account;
         assertThat(redis.opsForValue().get(key)).isEqualTo("101");
