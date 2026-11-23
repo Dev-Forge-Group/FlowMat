@@ -4,7 +4,7 @@ import { answerAuth, mockedLogin, ok } from './support/mockApi'
 /**
  * The editor's Plan panel (docs/status/ROADMAP-2026-11-23.md §8 week 3, ADR-043) against a mocked API: the product's
  * output is the default target, the plan's materials against stock, what can be made now, the bottleneck, and a
- * material's path lit on the canvas.
+ * material's path lit on the canvas; then the confirmed plan against its finished runs.
  */
 test('the Plan panel plans from a target and lights a material’s path', async ({ page }) => {
   const workflow = { workflowId: 'wf-plan', projectId: 'prj-e2e', workflowName: 'Melon milk', workflowDesc: null,
@@ -59,6 +59,20 @@ test('the Plan panel plans from a target and lights a material’s path', async 
       return ok(route, { schemaVersion: 1, camera: { x: 0, y: 0, z: 1 }, nextElementSeq: 1, version: 0, versionNonce: 0, elements: [] })
     }
     if (pathname === '/api/workflows') return ok(route, [workflow])
+    if (pathname === '/api/workflows/wf-plan/plan-confirmations') {
+      return ok(route, confirmed.length === 0 ? [] : [{ requestId: confirmed[0].requestId, revisionId: 'rev-1', targetPortId: 'pack-out',
+        targetConnectionId: null, targetQuantity: 1000, workOrderId: 'wo-1', purchaseOrderIds: ['po-1'], confirmedAt: '2030-01-07T09:00:00Z' }])
+    }
+    if (pathname === '/api/work-orders/wo-1/plan-actuals') {
+      return ok(route, { workOrderId: 'wo-1', workOrderStatus: 'in_progress', workflowId: 'wf-plan', revisionId: 'rev-1',
+        confirmedAt: '2030-01-07T09:00:00Z', target: 1000, targetUnit: 'ea', output: 500, finishedRuns: 1, openRuns: 0,
+        materialTolerancePercent: 5, timeTolerancePercent: 15,
+        materials: [{ itemId: 'milk', itemName: 'Raw milk', unit: 'kg', plannedForTarget: 184.0564, planned: 92.0282, used: 97.6,
+          variancePercent: 6.1, within: false }],
+        steps: [{ processId: 'mix', processName: 'Mix', plannedForTarget: 55.2169, planned: 27.6085, actual: 30, measured: 1,
+          variancePercent: 8.7, within: true }],
+        complete: true, notes: [] })
+    }
     return ok(route, [])
   })
 
@@ -94,4 +108,14 @@ test('the Plan panel plans from a target and lights a material’s path', async 
   expect(confirmed[0]).toMatchObject({ target: { processIoId: 'pack-out', quantity: 1000, unit: 'ea' },
     basis: { revisionId: 'rev-1', available: { milk: 150 } }, supplierName: 'Dairy Co' })
   expect(confirmed[0].requestId).toMatch(/^plan-/)
+
+  // The confirmed plan, against what its finished runs did (docs/domain/plan-vs-actual.md).
+  const plans = panel.getByRole('group', { name: 'Confirmed plans' })
+  await plans.getByRole('button', { name: 'Plan vs actual' }).click()
+  const comparison = panel.getByRole('group', { name: 'Plan vs actual' })
+  await expect(comparison).toContainText('Made 500 of 1000 ea in 1 finished run(s).')
+  await expect(comparison.getByRole('row', { name: 'Raw milk' })).toContainText('92.0282 kg')
+  await expect(comparison.getByRole('row', { name: 'Raw milk' })).toContainText('+6.1% off')
+  await expect(comparison.getByRole('row', { name: 'Mix' })).toContainText('+8.7%')
+  await expect(comparison.getByRole('row', { name: 'Mix' })).not.toContainText('off')
 })

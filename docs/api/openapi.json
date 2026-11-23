@@ -1766,6 +1766,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListPlanConfirmationSummaryResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PlanConfirmationSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListPlanPricingResponse" : {
         "properties" : {
           "data" : {
@@ -2616,6 +2633,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/PickListResponse"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePlanActualResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PlanActualResponse"
           },
           "message" : {
             "type" : "string"
@@ -9560,6 +9591,71 @@
         },
         "type" : "object"
       },
+      "PlanActualResponse" : {
+        "properties" : {
+          "complete" : {
+            "type" : "boolean"
+          },
+          "confirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "finishedRuns" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "materialTolerancePercent" : {
+            "type" : "number"
+          },
+          "materials" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Material"
+            },
+            "type" : "array"
+          },
+          "notes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "openRuns" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "output" : {
+            "type" : "number"
+          },
+          "revisionId" : {
+            "type" : "string"
+          },
+          "steps" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Step"
+            },
+            "type" : "array"
+          },
+          "target" : {
+            "type" : "number"
+          },
+          "targetUnit" : {
+            "type" : "string"
+          },
+          "timeTolerancePercent" : {
+            "type" : "number"
+          },
+          "workOrderId" : {
+            "type" : "string"
+          },
+          "workOrderStatus" : {
+            "type" : "string"
+          },
+          "workflowId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PlanConfirmRequest" : {
         "properties" : {
           "basis" : {
@@ -9598,6 +9694,39 @@
           },
           "revisionId" : {
             "type" : "string"
+          },
+          "workOrderId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PlanConfirmationSummaryResponse" : {
+        "properties" : {
+          "confirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "purchaseOrderIds" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "revisionId" : {
+            "type" : "string"
+          },
+          "targetConnectionId" : {
+            "type" : "string"
+          },
+          "targetPortId" : {
+            "type" : "string"
+          },
+          "targetQuantity" : {
+            "type" : "number"
           },
           "workOrderId" : {
             "type" : "string"
@@ -28655,6 +28784,31 @@
         "tags" : [ "run-labor-controller" ]
       }
     },
+    "/work-orders/{workOrderId}/plan-actuals" : {
+      "get" : {
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "workOrderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePlanActualResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "production-plan-controller" ]
+      }
+    },
     "/work-orders/{workOrderId}/plan-suggestion" : {
       "get" : {
         "parameters" : [ {
@@ -29729,6 +29883,29 @@
       }
     },
     "/workflows/{workflowId}/plan-confirmations" : {
+      "get" : {
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "workflowId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListPlanConfirmationSummaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "production-plan-controller" ]
+      },
       "post" : {
         "parameters" : [ {
           "in" : "path",
