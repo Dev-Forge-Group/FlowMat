@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -13,7 +15,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntFunction;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.myweb.flowmat.domain.user.api.dto.request.RefreshTokenRequest;
 import org.myweb.flowmat.domain.user.api.dto.request.UserLoginRequest;
+import org.myweb.flowmat.global.exception.BusinessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.myweb.flowmat.global.security.JwtProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MvcResult;
@@ -43,6 +48,7 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
     @Autowired UserRepository users;
     @Autowired PasswordEncoder encoder;
     @Autowired JwtProvider jwt;
+    @Autowired StringRedisTemplate redis;
 
     @Test
     void fiveWrongCodesDeleteTheCodeSoTheRightOneFailsToo() throws Exception {
@@ -108,6 +114,53 @@ class AuthAbuseProtectionIntegrationTest extends IntegrationTestSupport {
         assertThat(store.getRefreshToken("jti-a-" + userId)).isNull();
         assertThat(store.getRefreshToken("jti-b-" + userId)).isNull();
         assertThat(store.getPasswordResetUserId(token)).isNull();
+    }
+
+    @Test
+    void aNameNoAccountHasLocksLikeAnAccountDoes() {
+        String userId = "lockcmp_" + unique().substring(0, 12);
+        saveUser(userId);
+        String absent = "nobody_" + unique().substring(0, 12);
+        List<String> real = new ArrayList<>();
+        List<String> none = new ArrayList<>();
+        for (int attempt = 1; attempt <= 6; attempt++) {
+            real.add(refusal(() -> auth.login(new UserLoginRequest(userId, "wrong-password", "d"), "JUnit", "127.0.0.1")));
+            none.add(refusal(() -> auth.login(new UserLoginRequest(absent, "wrong-password", "d"), "JUnit", "127.0.0.1")));
+        }
+        // The same answers in the same order: wrong four times, locked on the fifth, still locked (login-security.md §2).
+        assertThat(none).isEqualTo(real);
+        assertThat(real.get(4)).contains("Too many failed login attempts");
+        assertThat(real.get(5)).contains("temporarily locked");
+    }
+
+    @Test
+    void aRefreshTokenThatComesBackLaterEndsEverySession() throws Exception {
+        String userId = "reuse_" + unique().substring(0, 12);
+        saveUser(userId);
+        User user = users.findByUserId(userId).orElseThrow();
+        user.setUserPwd(encoder.encode("Right-password-2026!"));
+        users.saveAndFlush(user);
+        String first = auth.login(new UserLoginRequest(userId, "Right-password-2026!", "d"), "JUnit", "127.0.0.1").refreshToken();
+        String second = auth.refresh(new RefreshTokenRequest(first, "d"), null, "JUnit", "127.0.0.1").refreshToken();
+
+        // Sent again at once, as two tabs do: refused, but the new token still works.
+        assertThatThrownBy(() -> auth.refresh(new RefreshTokenRequest(first, "d"), null, "JUnit", "127.0.0.1"));
+        assertThat(store.getRefreshToken(jwt.resolveJti(second))).isNotNull();
+
+        // Back after the grace: someone else has a copy, so every session ends.
+        redis.opsForValue().set("auth:rt:used:" + jwt.resolveJti(first),
+            userId + "|" + (System.currentTimeMillis() - 60_000), Duration.ofMinutes(5));
+        assertThatThrownBy(() -> auth.refresh(new RefreshTokenRequest(first, "d"), null, "JUnit", "127.0.0.1"));
+        assertThat(store.getRefreshToken(jwt.resolveJti(second))).isNull();
+    }
+
+    private static String refusal(Runnable login) {
+        try {
+            login.run();
+            return "allowed";
+        } catch (BusinessException refused) {
+            return refused.getErrorCode() + " " + refused.getMessage();
+        }
     }
 
     @Test
