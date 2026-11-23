@@ -8,7 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -19,7 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
  * switch (ADR-030).
  */
 @ActiveProfiles("test")
-@AutoConfigureObservability(tracing = false)
+@AutoConfigureMetrics
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.jpa.hibernate.ddl-auto=validate",
     "jwt.secret=smoke-test-secret-key-that-is-at-least-32-bytes",

@@ -36,7 +36,7 @@ import org.myweb.flowmat.domain.inventory.application.StockReturnService;
 import org.myweb.flowmat.domain.inventory.application.publicapi.StockReturnCommand.StockReturn;
 import org.myweb.flowmat.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;

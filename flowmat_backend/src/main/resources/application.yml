@@ -1,4 +1,9 @@
 spring:
+  # Boot 4 ships Jackson 3, but the code and the JSON contract are on Jackson 2 (spring-boot-jackson2, ADR-044):
+  # HTTP messages use the same Jackson 2 ObjectMapper the code injects.
+  http:
+    converters:
+      preferred-json-mapper: jackson2
   application:
     name: flowmat
   servlet:
