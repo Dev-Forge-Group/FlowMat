@@ -47,6 +47,7 @@
 | [ADR-043](ADR-043-plan-backwards-from-a-target.md) | 계획: 목표에서 거꾸로 | **Accepted** 2026-11-22(1년 계획 §8 1주차) | 공통 흐름 계산(`flowrun`의 `FlowDemand`: 거꾸로 전파·앞으로 확인·계산 근거, 제조 낱말 없음)과 제조 계획(`production`의 `ProductionPlan`: 재고·부족·시간·병목·확정)을 나눈다. 실행 요건 모델(ADR-003이 미룬 것)의 최소판을 정한다. 계획 조회는 읽기 전용, 확정은 판·자료 지문을 다시 보고 멱등으로 작업지시와 초안 발주를 만든다
 | [ADR-044](ADR-044-spring-boot-4.md) | Spring Boot 4로 올린다 | **Accepted** 2026-11-23(사용자 결정) | OWASP의 Spring 6.2/6.5 높음·치명을 없애려 Boot 4.1.3(Framework 7·Security 7)으로 올린다. JSON은 Jackson 2에 둔다(`spring-boot-jackson2`). 나뉜 starter, 옮겨진 패키지만 바꾼다. Swagger UI webjar 고정, 출하하지 않는 devtools는 검사에서 뺀다 |
 | [ADR-045](ADR-045-closed-loops.md) | 닫힌 고리: 재작업·재활용 흐름 실행 | **Accepted** 2026-11-23(로드맵 §5의 5번) | 고리 위의 Exclusive·Split 게이트웨이가 고리 밖으로 가는 연결을 갖고 Join이 없으면 실행한다. 한 바퀴는 새 단계이고, 고리 위 공정은 한 실행에 10단계까지(`loop_limit`). 생산 실행의 같은 공정 두 번째 단계는 새 기록만 가져간다. 검사의 `CYCLE`은 실행할 수 없는 고리에만. 계획은 아직 고리를 거절한다 |
+| [ADR-046](ADR-046-resources-first-class.md) | 자원을 1급으로 | **Accepted** 2026-11-23, 1단계(로드맵 §5의 6번) | 계획의 줄이 포트의 자원 종류를 갖고, 에너지·물은 재고로 보지 않는다(부족·초안 발주 없음). 품목 단가로 줄 비용, 자원별 합계, 계획 비용을 낸다. 용량 한도는 새 표가 필요해 2단계 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

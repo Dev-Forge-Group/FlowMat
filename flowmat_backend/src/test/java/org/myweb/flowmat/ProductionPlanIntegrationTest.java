@@ -320,6 +320,71 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
         call(get("/work-orders/" + byHand + "/plan-actuals")).andExpect(status().isNotFound());
     }
 
+    /**
+     * Resources first class (docs/architecture/adr/ADR-046-resources-first-class.md): 10 loaves need 10 kg of dough at 2.5,
+     * 30 kWh of electricity at 0.2 and 20 l of water without a price. Electricity and water are not stocked: no shortage, no
+     * stock limit, no draft purchase; the plan costs 25 + 6 = 31 with one row unknown.
+     */
+    @Test
+    void energyAndWaterAreDrawnNotStockedAndThePlanCostsWhatItKnows() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String project = id(call(post("/projects"), json(Map.of("projectName", "Plan resources " + tag, "ownerId", DEMO_OWNER))), "projectId");
+        String kwh = "kwh" + tag.toLowerCase();
+        String kwhId = id(call(post("/units"), json(Map.of("unitCode", kwh, "unitName", "kilowatt hour " + tag, "unitType", "energy"))),
+            "unitId");
+        String dough = id(call(post("/items"), json(Map.of("projectId", project, "itemCode", "PR-DOUGH-" + tag, "itemName", "dough",
+            "unitId", "unit_kg", "unitCost", 2.5))), "itemId");
+        String power = id(call(post("/items"), json(Map.of("projectId", project, "itemCode", "PR-KWH-" + tag, "itemName", "electricity",
+            "unitId", kwhId, "unitCost", 0.2))), "itemId");
+        String water = item(project, "PR-WATER-" + tag, "unit_l");
+        String bread = item(project, "PR-BREAD-" + tag, "unit_ea");
+        stock(project, dough, 5, tag);
+        stock(project, power, 1000, tag + "P");
+        call(post("/suppliers"), json(Map.of("projectId", project, "supplierName", "Mill " + tag))).andExpect(status().isOk());
+        Graph graph = new Graph(project, "Bread " + tag);
+        String bake = graph.node("Bake");
+        graph.port(bake, "input", dough, 1, "kg");
+        String energyPort = id(call(post("/process-ios"), json(Map.of("processId", bake, "direction", "input", "itemId", power,
+            "quantity", 3, "unit", kwh, "resourceType", "energy", "requiredYn", "N"))), "processIoId");
+        call(post("/process-ios"), json(Map.of("processId", bake, "direction", "input", "itemId", water, "quantity", 2, "unit", "l",
+            "resourceType", "water", "requiredYn", "N"))).andExpect(status().isOk());
+        String loaves = graph.port(bake, "output", bread, 1, "ea");
+        graph.publish();
+
+        Map<String, Object> target = Map.of("processIoId", loaves, "quantity", 10, "unit", "ea");
+        String row = "$.data.requirements[?(@.itemId == '%s')]";
+        var plan = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of("target", target)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath(row.formatted(dough) + ".resourceType").value(hasItem("material")))
+            .andExpect(jsonPath(row.formatted(dough) + ".shortage").value(hasItem(5.0)))
+            .andExpect(jsonPath(row.formatted(dough) + ".cost").value(hasItem(25.0)))
+            .andExpect(jsonPath(row.formatted(power) + ".resourceType").value(hasItem("energy")))
+            .andExpect(jsonPath(row.formatted(power) + ".at").value(hasItem(energyPort)))
+            .andExpect(jsonPath(row.formatted(power) + ".needed").value(hasItem(30.0)))
+            .andExpect(jsonPath(row.formatted(power) + ".available").value(hasItem(org.hamcrest.Matchers.nullValue())))
+            .andExpect(jsonPath(row.formatted(power) + ".shortage").value(hasItem(org.hamcrest.Matchers.nullValue())))
+            .andExpect(jsonPath(row.formatted(power) + ".cost").value(hasItem(6.0)))
+            .andExpect(jsonPath(row.formatted(water) + ".resourceType").value(hasItem("water")))
+            .andExpect(jsonPath(row.formatted(water) + ".cost").value(hasItem(org.hamcrest.Matchers.nullValue())))
+            .andExpect(jsonPath("$.data.limits[?(@.kind == 'stock')]").value(org.hamcrest.Matchers.hasSize(1)))
+            .andExpect(jsonPath("$.data.buildable").value(5))
+            .andExpect(jsonPath("$.data.resources[?(@.resourceType == 'energy')].needed").value(hasItem(30.0)))
+            .andExpect(jsonPath("$.data.resources[?(@.resourceType == 'energy')].cost").value(hasItem(6.0)))
+            .andExpect(jsonPath("$.data.resources[?(@.resourceType == 'water')].needed").value(hasItem(20.0)))
+            .andExpect(jsonPath("$.data.costs[?(@.resourceType == 'water')].unknown").value(hasItem(1)))
+            .andExpect(jsonPath("$.data.totalCost").value(31.0))
+            .andExpect(jsonPath("$.data.basis.available['" + power + "']").doesNotExist())
+            .andReturn().getResponse().getContentAsString()).path("data");
+
+        // Confirming orders the dough that is short, not the electricity.
+        var made = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-confirmations"), json(Map.of("target", target,
+            "basis", objectMapper.convertValue(plan.path("basis"), Map.class), "requestId", "pr-" + tag, "supplierName", "Mill " + tag)))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        call(get("/purchase-orders/" + made.path("purchaseOrderIds").path(0).asText())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.lines.length()").value(1))
+            .andExpect(jsonPath("$.data.lines[0].itemId").value(dough));
+    }
+
     private final class Graph {
         private final String workflow;
 

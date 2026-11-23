@@ -15,6 +15,9 @@ import java.util.Map;
  * @param requirements what the starts need, by item in the item's unit; starts without an item come one by one
  * @param limits stock shortages first, then the longest equipment step, then what the graph itself limits
  * @param basis what the plan read, which a confirmation checks again
+ * @param resources what the energy and water rows add up to by kind and unit (ADR-046 decision 4)
+ * @param costs the known cost of the rows by kind, with how many rows have no unit cost (ADR-046 decision 4)
+ * @param totalCost what {@code costs} add up to: the plan's resource cost, not equipment or labor
  */
 public record PlanPreviewResponse(
     String revisionId,
@@ -29,16 +32,32 @@ public record PlanPreviewResponse(
     List<Assumption> assumptions,
     Basis basis,
     /** When the last step ends; null when a step's equipment has too little working time in a year. */
-    java.time.OffsetDateTime finishAt
+    java.time.OffsetDateTime finishAt,
+    List<Resource> resources,
+    List<Cost> costs,
+    BigDecimal totalCost
 ) {
 
     /**
      * @param at the port (or node) where the item comes in; the first one when several ports take the same item
-     * @param shortage what the needed amount is above usable stock, 0 when there is enough; null without an item
+     * @param shortage what the needed amount is above usable stock, 0 when there is enough; null without an item, and for
+     *     energy and water, which are not stocked (ADR-046 decision 2)
      * @param trace how the target became this amount, step by step ({@code factor} multiplies the target into it)
+     * @param resourceType the start port's resource type, lower case; {@code material} when it has none (ADR-046 decision 1)
+     * @param unitCost the item's cost of one of its units; null without an item or a known cost (ADR-046 decision 3)
+     * @param cost {@code needed × unitCost}, 4 decimals HALF_UP; null when either is unknown
      */
     public record Requirement(String at, String processId, String itemId, String itemName, BigDecimal needed,
-        BigDecimal available, BigDecimal shortage, String unit, List<TraceStep> trace) {
+        BigDecimal available, BigDecimal shortage, String unit, List<TraceStep> trace, String resourceType,
+        BigDecimal unitCost, BigDecimal cost) {
+    }
+
+    /** The energy or water rows of one kind and unit added up; {@code cost} counts the rows whose cost is known. */
+    public record Resource(String resourceType, String unit, BigDecimal needed, BigDecimal cost) {
+    }
+
+    /** The known cost of a kind's rows; {@code unknown} rows have no unit cost and are left out. */
+    public record Cost(String resourceType, BigDecimal cost, int unknown) {
     }
 
     /** {@code at} is a port, node or connection; {@code processId} the node it belongs to (a connection's source). */

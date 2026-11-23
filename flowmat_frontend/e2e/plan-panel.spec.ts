@@ -35,7 +35,14 @@ test('the Plan panel plans from a target and lights a material’s path', async 
       return ok(route, {
         revisionId: 'rev-1', target: 1000, targetUnit: 'ea', feasible: true, buildable: 814,
         requirements: [{ at: 'mix-milk', processId: 'mix', itemId: 'milk', itemName: 'Raw milk', needed: 184.0564, available: 150,
-          shortage: 34.0564, unit: 'kg', trace: [trace('pack', 'pack-out'), trace('mix', 'mix-milk')] }],
+          shortage: 34.0564, unit: 'kg', trace: [trace('pack', 'pack-out'), trace('mix', 'mix-milk')], resourceType: 'material',
+          unitCost: 1.2, cost: 220.8677 },
+        // Energy is drawn, not stocked (ADR-046): no stock, no shortage, its own cost.
+        { at: 'mix-power', processId: 'mix', itemId: 'power', itemName: 'Electricity', needed: 27.6, available: null,
+          shortage: null, unit: 'kWh', trace: [], resourceType: 'energy', unitCost: 0.2, cost: 5.52 }],
+        resources: [{ resourceType: 'energy', unit: 'kWh', needed: 27.6, cost: 5.52 }],
+        costs: [{ resourceType: 'material', cost: 220.8677, unknown: 0 }, { resourceType: 'energy', cost: 5.52, unknown: 0 }],
+        totalCost: 226.3877,
         nodes: [{ processId: 'mix', batches: 1.8406, through: null, unit: null, minutes: 55.2169 },
           { processId: 'pack', batches: 1010.1011, through: null, unit: null, minutes: 50.5051 }],
         limits: [{ kind: 'stock', at: 'mix-milk', processId: 'mix', message: 'Raw milk is short by 34.0564 kg.' },
@@ -90,6 +97,9 @@ test('the Plan panel plans from a target and lights a material’s path', async 
   await panel.getByRole('button', { name: 'Plan', exact: true }).click()
   await expect(panel.getByRole('row', { name: /Raw milk/ })).toContainText('184.0564 kg')
   await expect(panel.getByRole('row', { name: /Raw milk/ })).toContainText('34.0564 kg short')
+  await expect(panel.getByRole('row', { name: /Raw milk/ })).toContainText('220.8677')
+  await expect(panel.getByRole('row', { name: /Electricity/ })).toContainText('not stocked')
+  await expect(panel.getByLabel('Resources and cost')).toHaveText('Energy 27.6 kWh · Cost 226.3877')
   await expect(panel.getByText('Can make 814 now')).toBeVisible()
   await expect(panel.getByText('Bottleneck: Mix')).toBeVisible()
   await expect(panel.getByRole('list', { name: 'Steps' })).toContainText('Mix: 1.8406 batches, 55.2169 min')

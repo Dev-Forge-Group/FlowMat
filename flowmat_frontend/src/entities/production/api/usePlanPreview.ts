@@ -24,6 +24,25 @@ export interface PlanRequirement {
   shortage: number | null
   unit: string | null
   trace: PlanTraceStep[]
+  /** The start port's resource type; energy and water are not stocked, so they have no available or shortage (ADR-046). */
+  resourceType?: string
+  unitCost?: number | null
+  cost?: number | null
+}
+
+/** Energy or water rows added up by kind and unit (ADR-046 decision 4). */
+export interface PlanResource {
+  resourceType: string
+  unit: string | null
+  needed: number
+  cost: number
+}
+
+/** The known cost of a kind's rows; unknown rows have no unit cost. */
+export interface PlanCost {
+  resourceType: string
+  cost: number
+  unknown: number
 }
 
 export interface PlanNode {
@@ -57,6 +76,10 @@ export interface PlanPreview {
   basis: { revisionId: string; available: Record<string, number> }
   /** When the last step ends; null when some equipment has too little working time in a year. */
   finishAt?: string | null
+  resources?: PlanResource[]
+  costs?: PlanCost[]
+  /** The plan's resource cost: materials, energy and water whose unit cost is known; not equipment or labor. */
+  totalCost?: number
 }
 
 export interface PlanTarget {

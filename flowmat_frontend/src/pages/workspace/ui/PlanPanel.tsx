@@ -11,6 +11,10 @@ interface Props {
 }
 
 const amount = (value: number | null | undefined) => value == null ? '' : String(Number(value.toFixed(4)))
+/** Energy and water are drawn as used, not kept in stock (ADR-046). */
+const notStocked = (row: PlanRequirement) => row.resourceType === 'energy' || row.resourceType === 'water'
+const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+const unknownCosts = (plan: { costs?: { unknown: number }[] }) => (plan.costs ?? []).reduce((sum, cost) => sum + cost.unknown, 0)
 const at = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 /**
@@ -97,7 +101,7 @@ export function PlanPanel({ canvas, nameOf }: Props) {
           {plan.finishAt && <p style={{ margin: '4px 0' }}>Finishes {at(plan.finishAt)} if started now</p>}
           {!plan.feasible && <p role="alert">This graph cannot bring the target as planned.</p>}
           <table style={{ borderCollapse: 'collapse', marginTop: '6px' }}>
-            <thead><tr><th align="left">Material</th><th align="right">Needed</th><th align="right">In stock</th><th align="right">Short</th></tr></thead>
+            <thead><tr><th align="left">Material</th><th align="right">Needed</th><th align="right">In stock</th><th align="right">Short</th><th align="right">Cost</th></tr></thead>
             <tbody>
               {plan.requirements.map((row) => (
                 <tr key={row.at} aria-label={row.itemName ?? nameOf(row.processId)} onClick={() => choose(row)}
@@ -105,11 +109,19 @@ export function PlanPanel({ canvas, nameOf }: Props) {
                   <td>{row.itemName ?? nameOf(row.processId)}</td>
                   <td align="right">{amount(row.needed)} {row.unit}</td>
                   <td align="right">{row.available == null ? '—' : `${amount(row.available)} ${row.unit ?? ''}`}</td>
-                  <td align="right">{row.shortage ? `${amount(row.shortage)} ${row.unit ?? ''} short` : 'enough'}</td>
+                  <td align="right">{notStocked(row) ? 'not stocked' : row.shortage ? `${amount(row.shortage)} ${row.unit ?? ''} short` : 'enough'}</td>
+                  <td align="right">{row.cost == null ? '—' : amount(row.cost)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {(plan.resources?.length || plan.totalCost != null) && (
+            <p aria-label="Resources and cost" style={{ margin: '6px 0 0' }}>
+              {(plan.resources ?? []).map((resource) => `${titleCase(resource.resourceType)} ${amount(resource.needed)} ${resource.unit ?? ''}`).join(' · ')}
+              {plan.resources?.length ? ' · ' : ''}Cost {amount(plan.totalCost ?? 0)}
+              {unknownCosts(plan) > 0 ? ` (${unknownCosts(plan)} without a unit cost)` : ''}
+            </p>
+          )}
           <ul aria-label="Steps" style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
             {plan.nodes.filter((node) => node.batches != null || node.minutes != null).map((node) => (
               <li key={node.processId}>

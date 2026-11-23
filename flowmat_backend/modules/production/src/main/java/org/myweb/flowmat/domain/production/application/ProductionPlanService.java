@@ -74,8 +74,9 @@ public class ProductionPlanService {
         }
 
         Map<String, String> owner = owners(graph);
+        Map<String, String> resourceTypes = resourceTypes(snapshot);
         Map<String, BigDecimal> usable = itemIds.isEmpty() ? Map.of() : usableStock.byItem(workflow.projectId(), itemIds);
-        List<PlanPreviewResponse.Requirement> requirements = requirements(result, items, usable, owner, table);
+        List<PlanPreviewResponse.Requirement> requirements = requirements(result, items, usable, owner, table, resourceTypes);
         List<PlanPreviewResponse.Node> nodes = placed(workflow.projectId(), graph, snapshot,
             result.nodes().stream().map(ProductionPlanService::node).toList(), request.startAt());
         List<PlanPreviewResponse.Limit> limits = new ArrayList<>();
@@ -89,7 +90,8 @@ public class ProductionPlanService {
             limit.message())));
 
         Map<String, BigDecimal> basis = new TreeMap<>();
-        requirements.stream().filter(row -> row.itemId() != null).forEach(row -> basis.put(row.itemId(), row.available()));
+        requirements.stream().filter(row -> row.itemId() != null && row.available() != null)
+            .forEach(row -> basis.put(row.itemId(), row.available()));
         return new PlanPreviewResponse(revision.workflowRevisionId(), result.target(), result.unit(), result.feasible(),
             buildable(result, requirements, items, targetItem(graph, target)), requirements, nodes,
             result.surplus().stream().map(s -> new PlanPreviewResponse.Surplus(s.at(), s.kind(), s.quantity(), s.unit())).toList(),
@@ -98,7 +100,50 @@ public class ProductionPlanService {
             new PlanPreviewResponse.Basis(revision.workflowRevisionId(), basis),
             nodes.stream().anyMatch(node -> node.minutes() != null && node.endAt() == null) ? null
                 : nodes.stream().map(PlanPreviewResponse.Node::endAt).filter(Objects::nonNull).max(java.util.Comparator.naturalOrder())
-                    .orElse(null));
+                    .orElse(null),
+            resources(requirements), costs(requirements),
+            costs(requirements).stream().map(PlanPreviewResponse.Cost::cost).reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(SCALE, RoundingMode.HALF_UP));
+    }
+
+    /** Energy and water are drawn as used, not kept in stock (ADR-046 decision 2). */
+    private static final Set<String> NOT_STOCKED = Set.of("energy", "water");
+
+    /** Each port's resource type from the revision, lower case; ports without one are left out (material). */
+    private static Map<String, String> resourceTypes(JsonNode snapshot) {
+        Map<String, String> types = new HashMap<>();
+        snapshot.path("processIos").forEach(port -> {
+            String type = port.path("resourceType").asText("").trim().toLowerCase(Locale.ROOT);
+            if (!type.isEmpty() && port.hasNonNull("processIoId")) types.put(port.path("processIoId").asText(), type);
+        });
+        return types;
+    }
+
+    /** The energy and water rows by kind and unit, in the order they come (ADR-046 decision 4). */
+    private static List<PlanPreviewResponse.Resource> resources(List<PlanPreviewResponse.Requirement> requirements) {
+        Map<String, PlanPreviewResponse.Resource> byKind = new LinkedHashMap<>();
+        for (PlanPreviewResponse.Requirement row : requirements) {
+            if (!NOT_STOCKED.contains(row.resourceType())) continue;
+            String key = row.resourceType() + "\u0000" + row.unit();
+            PlanPreviewResponse.Resource earlier = byKind.get(key);
+            BigDecimal cost = row.cost() == null ? BigDecimal.ZERO : row.cost();
+            byKind.put(key, new PlanPreviewResponse.Resource(row.resourceType(), row.unit(),
+                earlier == null ? row.needed() : earlier.needed().add(row.needed()),
+                earlier == null ? cost.setScale(SCALE, RoundingMode.HALF_UP) : earlier.cost().add(cost)));
+        }
+        return List.copyOf(byKind.values());
+    }
+
+    /** The known cost of the rows by kind, with how many have none (ADR-046 decision 4). */
+    private static List<PlanPreviewResponse.Cost> costs(List<PlanPreviewResponse.Requirement> requirements) {
+        Map<String, BigDecimal> known = new LinkedHashMap<>();
+        Map<String, Integer> unknown = new HashMap<>();
+        for (PlanPreviewResponse.Requirement row : requirements) {
+            known.merge(row.resourceType(), row.cost() == null ? BigDecimal.ZERO : row.cost(), BigDecimal::add);
+            if (row.cost() == null) unknown.merge(row.resourceType(), 1, Integer::sum);
+        }
+        return known.entrySet().stream().map(entry -> new PlanPreviewResponse.Cost(entry.getKey(),
+            entry.getValue().setScale(SCALE, RoundingMode.HALF_UP), unknown.getOrDefault(entry.getKey(), 0))).toList();
     }
 
     /** The item at a target of a revision the caller has already planned. */
@@ -172,16 +217,17 @@ public class ProductionPlanService {
 
     /** The starts' needs by item in the item's unit, rounded up, against usable stock; starts without an item one by one. */
     private List<PlanPreviewResponse.Requirement> requirements(FlowDemand.Result result, Map<String, CatalogItemView> items,
-        Map<String, BigDecimal> usable, Map<String, String> owner, UnitConversion.Table table) {
+        Map<String, BigDecimal> usable, Map<String, String> owner, UnitConversion.Table table, Map<String, String> resourceTypes) {
         Map<String, PlanPreviewResponse.Requirement> byItem = new LinkedHashMap<>();
         List<PlanPreviewResponse.Requirement> rows = new ArrayList<>();
         for (FlowDemand.Requirement start : result.requirements()) {
             List<PlanPreviewResponse.TraceStep> trace = start.trace().stream().map(step -> new PlanPreviewResponse.TraceStep(
                 step.at(), owner.get(step.at()), step.rule(), step.from(), step.to(), step.factor())).toList();
             CatalogItemView item = start.ref() == null ? null : items.get(start.ref());
+            String resourceType = resourceTypes.getOrDefault(start.at(), "material");
             if (item == null) {
                 rows.add(new PlanPreviewResponse.Requirement(start.at(), start.nodeId(), start.ref(), null, start.quantity(), null,
-                    null, start.unit(), trace));
+                    null, start.unit(), trace, resourceType, null, null));
                 continue;
             }
             BigDecimal needed = start.unit() == null ? start.quantity()
@@ -192,11 +238,18 @@ public class ProductionPlanService {
                 needed = needed.add(earlier.needed());
                 trace = earlier.trace();
             }
-            BigDecimal available = usable.getOrDefault(item.itemId(), BigDecimal.ZERO).setScale(SCALE, RoundingMode.HALF_UP);
-            BigDecimal shortage = needed.subtract(available).max(BigDecimal.ZERO).setScale(SCALE, RoundingMode.HALF_UP);
+            // The first port's kind decides for an item that comes in at several (ADR-046 decision 1).
+            String kind = earlier == null ? resourceType : earlier.resourceType();
+            boolean stocked = !NOT_STOCKED.contains(kind);
+            BigDecimal available = stocked
+                ? usable.getOrDefault(item.itemId(), BigDecimal.ZERO).setScale(SCALE, RoundingMode.HALF_UP) : null;
+            BigDecimal shortage = stocked
+                ? needed.subtract(available).max(BigDecimal.ZERO).setScale(SCALE, RoundingMode.HALF_UP) : null;
+            BigDecimal unitCost = item.unitCost() == null || item.unitCost().signum() <= 0 ? null : item.unitCost();
+            BigDecimal cost = unitCost == null ? null : needed.multiply(unitCost).setScale(SCALE, RoundingMode.HALF_UP);
             byItem.put(item.itemId(), new PlanPreviewResponse.Requirement(earlier == null ? start.at() : earlier.at(),
                 earlier == null ? start.nodeId() : earlier.processId(), item.itemId(), item.itemName(), needed, available, shortage,
-                item.unitCode(), trace));
+                item.unitCode(), trace, kind, unitCost, cost));
         }
         List<PlanPreviewResponse.Requirement> all = new ArrayList<>(byItem.values());
         all.addAll(rows);
@@ -211,7 +264,7 @@ public class ProductionPlanService {
         Map<String, CatalogItemView> items, String targetItem) {
         BigDecimal least = null;
         for (PlanPreviewResponse.Requirement row : requirements) {
-            if (row.itemId() == null || row.needed().signum() == 0) continue;
+            if (row.itemId() == null || row.available() == null || row.needed().signum() == 0) continue;
             BigDecimal allows = row.available().multiply(result.target(), MC).divide(row.needed(), MC);
             least = least == null ? allows : least.min(allows);
         }

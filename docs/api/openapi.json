@@ -4983,6 +4983,21 @@
         "required" : [ "actionType", "description" ],
         "type" : "object"
       },
+      "Cost" : {
+        "properties" : {
+          "cost" : {
+            "type" : "number"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "unknown" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "CreditChange" : {
         "properties" : {
           "amount" : {
@@ -9793,6 +9808,12 @@
           "buildable" : {
             "type" : "number"
           },
+          "costs" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Cost"
+            },
+            "type" : "array"
+          },
           "feasible" : {
             "type" : "boolean"
           },
@@ -9818,6 +9839,12 @@
             },
             "type" : "array"
           },
+          "resources" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Resource"
+            },
+            "type" : "array"
+          },
           "revisionId" : {
             "type" : "string"
           },
@@ -9832,6 +9859,9 @@
           },
           "targetUnit" : {
             "type" : "string"
+          },
+          "totalCost" : {
+            "type" : "number"
           }
         },
         "type" : "object"
@@ -11903,6 +11933,23 @@
           }
         },
         "required" : [ "amount", "kind" ],
+        "type" : "object"
+      },
+      "Resource" : {
+        "properties" : {
+          "cost" : {
+            "type" : "number"
+          },
+          "needed" : {
+            "type" : "number"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "unit" : {
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "Return" : {
