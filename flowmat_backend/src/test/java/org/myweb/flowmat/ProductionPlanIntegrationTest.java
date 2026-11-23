@@ -252,6 +252,74 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data[?(@.supplierName == 'Mill " + tag + "')]").value(org.hamcrest.Matchers.hasSize(1)));
     }
 
+    /**
+     * Plan against actual (docs/domain/plan-vs-actual.md): 10 loaves need 20 kg of flour and 30 minutes of baking; a run makes
+     * 5 of them with 10.6 kg in 16 minutes, so the plan for 5 is 10 kg (+6.0%, outside 5%) and 15 minutes (+6.7%, inside 15%).
+     */
+    @Test
+    void aConfirmedPlanIsComparedWithItsFinishedRuns() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String project = id(call(post("/projects"), json(Map.of("projectName", "Plan actual " + tag, "ownerId", DEMO_OWNER))), "projectId");
+        String flour = item(project, "PA-FLOUR-" + tag, "unit_kg");
+        String bread = item(project, "PA-BREAD-" + tag, "unit_ea");
+        String flourStock = id(call(post("/inventories"), json(Map.of("projectId", project, "itemId", flour, "quantity", 30,
+            "location", "PA-" + tag))), "inventoryId");
+        Graph graph = new Graph(project, "Bread " + tag);
+        String bake = graph.node("Bake");
+        graph.port(bake, "input", flour, 2, "kg");
+        String loaves = graph.port(bake, "output", bread, 1, "ea");
+        requirements(bake, Map.of("kind", "time", "amount", 3, "unit", "min", "per", "output_unit"));
+        graph.publish();
+        Map<String, Object> target = Map.of("processIoId", loaves, "quantity", 10, "unit", "ea");
+        var plan = objectMapper.readTree(call(post("/workflows/" + graph.workflow + "/plan-previews"), json(Map.of("target", target)))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        String workOrder = id(call(post("/workflows/" + graph.workflow + "/plan-confirmations"), json(Map.of("target", target,
+            "basis", objectMapper.convertValue(plan.path("basis"), Map.class), "requestId", "pa-" + tag))), "workOrderId");
+        String actuals = "/work-orders/" + workOrder + "/plan-actuals";
+        call(get(actuals)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.finishedRuns").value(0))
+            .andExpect(jsonPath("$.data.materials[0].plannedForTarget").value(20.0))
+            .andExpect(jsonPath("$.data.materials[0].planned").doesNotExist());
+
+        call(post("/work-orders/" + workOrder + "/approve")).andExpect(status().isOk());
+        String run = id(call(post("/production-runs/start"), json(Map.of("projectId", project, "workflowId", graph.workflow,
+            "plannedOutputQty", 5, "workOrderId", workOrder))), "productionRunId");
+        call(post("/production-runs/" + run + "/items"), json(Map.of("itemId", flour, "inventoryId", flourStock, "processId", bake,
+            "direction", "input", "unit", "kg", "plannedQty", 10, "actualQty", 10.6))).andExpect(status().isOk());
+        // The bake step took 16 minutes; set on the step itself, as the clock of a test cannot wait.
+        jdbc.update("update flow_run_step set status = 'completed', started_at = timestamptz '2030-01-07 09:00:00+00', "
+            + "ended_at = timestamptz '2030-01-07 09:16:00+00' where flow_run_id in "
+            + "(select flow_run_id from flow_run where production_run_id = ?)", run);
+        call(post("/production-runs/" + run + "/finish"), json(Map.of("actualOutputQty", 5))).andExpect(status().isOk());
+
+        String material = "$.data.materials[?(@.itemId == '" + flour + "')]";
+        String step = "$.data.steps[?(@.processId == '" + bake + "')]";
+        call(get(actuals)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.target").value(10.0))
+            .andExpect(jsonPath("$.data.output").value(5.0))
+            .andExpect(jsonPath("$.data.finishedRuns").value(1))
+            .andExpect(jsonPath("$.data.complete").value(true))
+            .andExpect(jsonPath(material + ".planned").value(hasItem(10.0)))
+            .andExpect(jsonPath(material + ".used").value(hasItem(10.6)))
+            .andExpect(jsonPath(material + ".variancePercent").value(hasItem(6.0)))
+            .andExpect(jsonPath(material + ".within").value(hasItem(false)))
+            .andExpect(jsonPath(step + ".plannedForTarget").value(hasItem(30.0)))
+            .andExpect(jsonPath(step + ".planned").value(hasItem(15.0)))
+            .andExpect(jsonPath(step + ".actual").value(hasItem(16.0)))
+            .andExpect(jsonPath(step + ".variancePercent").value(hasItem(6.7)))
+            .andExpect(jsonPath(step + ".within").value(hasItem(true)));
+        call(get("/workflows/" + graph.workflow + "/plan-confirmations")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].workOrderId").value(workOrder))
+            .andExpect(jsonPath("$.data.length()").value(1));
+
+        // Someone outside the project sees neither; a work order made by hand has no plan to compare with.
+        mockMvc.perform(get(actuals).header("Authorization", "Bearer " + jwtProvider.generateAccessToken("plan-outsider")))
+            .andExpect(status().isForbidden());
+        String byHand = id(call(post("/work-orders"), json(Map.of("projectId", project, "workOrderTitle", "by hand " + tag))),
+            "workOrderId");
+        call(get("/work-orders/" + byHand + "/plan-actuals")).andExpect(status().isNotFound());
+    }
+
     private final class Graph {
         private final String workflow;
 

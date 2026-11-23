@@ -1,7 +1,8 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { httpClient } from '../../../shared/api/httpClient'
 import { unwrapApiResponse } from '../../../shared/api/unwrapApiResponse'
 import type { ApiEnvelope } from '../../../shared/types/api'
+import { planConfirmationsKey } from './usePlanActuals'
 
 /** A plan for a target, read only (docs/architecture/adr/ADR-043-plan-backwards-from-a-target.md decisions 5-7). */
 export interface PlanTraceStep {
@@ -73,10 +74,12 @@ export interface PlanConfirmation {
 
 /** Confirms a plan seen before into a draft work order and a draft purchase order for its shortages; safe to send again. */
 export function usePlanConfirmMutation(workflowId: string) {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (input: { target: PlanTarget; basis: PlanPreview['basis']; requestId: string; supplierName?: string | null }) =>
       unwrapApiResponse(await httpClient.post<ApiEnvelope<PlanConfirmation>>(
         `/workflows/${encodeURIComponent(workflowId)}/plan-confirmations`, input)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: planConfirmationsKey(workflowId) }),
   })
 }
 

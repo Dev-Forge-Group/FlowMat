@@ -3,6 +3,7 @@ import { usePlanConfirmMutation, usePlanPreviewMutation, type PlanRequirement, t
 import type { WorkflowCanvasViewModel } from '../../../entities/workflow/model/types'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { usePlanTraceStore } from '../model/planTrace'
+import { PlanActuals } from './PlanActuals'
 
 interface Props {
   canvas: WorkflowCanvasViewModel
@@ -16,6 +17,7 @@ const at = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'sh
  * Planning from a target in the editor (docs/status/ROADMAP-2026-11-23.md §8 week 3, ADR-043): pick an output and a
  * quantity, and see what each start needs against stock, what can be made now, each step's time and what limits the
  * plan. Choosing a material lights its path on the canvas. The plan reads the published revision, not the drawing.
+ * Below, the confirmed plans compare with what their finished runs did (docs/domain/plan-vs-actual.md).
  */
 export function PlanPanel({ canvas, nameOf }: Props) {
   const outputs = useMemo(() => {
@@ -142,6 +144,7 @@ export function PlanPanel({ canvas, nameOf }: Props) {
           )}
         </div>
       )}
+      <PlanActuals workflowId={canvas.workflow.workflowId} nameOf={nameOf} />
     </section>
   )
 }

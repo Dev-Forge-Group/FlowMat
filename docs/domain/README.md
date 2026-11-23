@@ -54,6 +54,7 @@
 | [multi-level-bom.md](multi-level-bom.md) | 다단계 BOM: 반제품, 순환 거절, 전개, 다단계 역전개, 반제품 원가 누적 |
 | [bom-by-products.md](bom-by-products.md) | BOM 부산물·폐기물 줄 |
 | [material-requirements.md](material-requirements.md) | 열린 작업지시의 자재 소요(간이 MRP) |
+| [plan-vs-actual.md](plan-vs-actual.md) | 확정한 계획 대 끝난 실행(재료 ±5%, 시간 ±15%) |
 
 ## 생산 실행
 
