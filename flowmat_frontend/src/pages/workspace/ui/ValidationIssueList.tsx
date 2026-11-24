@@ -5,12 +5,15 @@ import { evidenceRows, fixableCount, issueFixes, issueHides, sortedValidationIss
 /**
  * The workflow check's issues, errors first (archify's diagnostic shape). Each issue's button selects what it is about;
  * under it are the edits that clear it, the derived warnings it explains (not listed separately) and, folded, the evidence
- * the rule looked at, with process IDs as names. The button's name stays "severity: CODE — message".
+ * the rule looked at, with process IDs as names. The button's name stays "severity: CODE — message". A required input
+ * with nothing connected can be marked as taken from stock in one click, where the editor can change it.
  */
-export function ValidationIssueList({ issues, nameOf, onSelect }: {
+export function ValidationIssueList({ issues, nameOf, onSelect, onTakeFromStock }: {
   issues: WorkflowValidationIssue[]
   nameOf: (id: string) => string
   onSelect: (issue: WorkflowValidationIssue) => void
+  /** Makes the input not required: its material comes from stock, not from a connection. */
+  onTakeFromStock?: (ioId: string) => void
 }) {
   const fixable = fixableCount(issues)
   return (
@@ -26,6 +29,11 @@ export function ValidationIssueList({ issues, nameOf, onSelect }: {
               <button type="button" onClick={() => onSelect(issue)}>
                 {issue.severity}: {issue.code} — {issue.message}
               </button>
+              {onTakeFromStock && issue.code === 'REQUIRED_INPUT_UNCONNECTED' && issue.ioId && (
+                <button type="button" onClick={() => onTakeFromStock(issue.ioId as string)}>
+                  Take it from stock (not required)
+                </button>
+              )}
               {fixes.length > 0 && (
                 <ul className="validation-issues__fixes" aria-label="Suggested fixes">
                   {fixes.map((fix) => <li key={fix}>Fix: {fix}</li>)}

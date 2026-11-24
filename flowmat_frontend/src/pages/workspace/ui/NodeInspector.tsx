@@ -400,8 +400,8 @@ export function NodeInspector({
               <label style={{ display: 'grid', gap: '4px' }}>
                 <span>Required</span>
                 <select value={portForm.requiredYn} onChange={(event) => setPortForm((current) => ({ ...current, requiredYn: event.target.value as 'Y' | 'N' }))}>
-                  <option value="Y">Y</option>
-                  <option value="N">N</option>
+                  <option value="Y">Y — must be connected</option>
+                  <option value="N">N — from stock, or not needed</option>
                 </select>
               </label>
 
