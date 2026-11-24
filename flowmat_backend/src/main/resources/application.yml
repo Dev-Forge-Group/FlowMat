@@ -85,6 +85,12 @@ app:
     s3-region: ${STORAGE_S3_REGION:us-east-1}
     s3-endpoint: ${STORAGE_S3_ENDPOINT:}
     s3-path-style: ${STORAGE_S3_PATH_STYLE:false}
+  # How long personal data is kept (docs/operations/personal-data.md P1, P2): a withdrawn user's name and contact, and
+  # login history. A sweep runs once a day (UTC).
+  privacy:
+    withdrawn-retention: ${APP_PRIVACY_WITHDRAWN_RETENTION:P30D}
+    login-history-retention: ${APP_PRIVACY_LOGIN_HISTORY_RETENTION:P365D}
+    sweep-cron: ${APP_PRIVACY_SWEEP_CRON:0 40 3 * * *}
   auth:
     login-rate-limit:
       account-limit: ${AUTH_LOGIN_ACCOUNT_LIMIT:8}

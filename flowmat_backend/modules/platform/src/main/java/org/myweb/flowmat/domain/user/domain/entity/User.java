@@ -71,6 +71,10 @@ public class User extends BaseTimeEntity {
     @Column(name = "withdrawn_at")
     private OffsetDateTime withdrawnAt;
 
+    /** When the retention period after withdrawal passed and the name, contact and birth date were erased (V142). */
+    @Column(name = "personal_data_erased_at")
+    private OffsetDateTime personalDataErasedAt;
+
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "email_verified_yn")
     private String emailVerifiedYn;
