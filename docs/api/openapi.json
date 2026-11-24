@@ -2730,6 +2730,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseProcessDraftResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProcessDraftResponse"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProcessExecutionBindingResponse" : {
         "properties" : {
           "data" : {
@@ -10307,6 +10321,43 @@
           }
         },
         "required" : [ "processName", "workflowId" ],
+        "type" : "object"
+      },
+      "ProcessDraftRequest" : {
+        "properties" : {
+          "description" : {
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "description" ],
+        "type" : "object"
+      },
+      "ProcessDraftResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Item"
+            },
+            "type" : "array"
+          },
+          "steps" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Step"
+            },
+            "type" : "array"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "target" : {
+            "$ref" : "#/components/schemas/Target"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "ProcessExecutionBindingResponse" : {
@@ -22458,6 +22509,33 @@
           }
         },
         "tags" : [ "process-connection-controller" ]
+      }
+    },
+    "/process-drafts" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ProcessDraftRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProcessDraftResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "process-draft-controller" ]
       }
     },
     "/process-ios" : {
