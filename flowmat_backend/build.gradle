@@ -69,7 +69,7 @@ configure([rootProject] + contextModules) {
 		implementation 'org.springframework.boot:spring-boot-starter-websocket'
 		implementation 'io.micrometer:micrometer-registry-prometheus'
 
-		implementation platform('software.amazon.awssdk:bom:2.59.0')
+		implementation platform('software.amazon.awssdk:bom:2.59.5')
 		implementation('software.amazon.awssdk:s3') {
 			exclude group: 'software.amazon.awssdk', module: 'apache5-client'
 			exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
