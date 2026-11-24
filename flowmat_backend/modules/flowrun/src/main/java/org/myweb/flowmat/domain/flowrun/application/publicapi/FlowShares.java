@@ -15,6 +15,12 @@ public final class FlowShares {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
+    /**
+     * How many steps a process on a loop may have in one run (docs/architecture/adr/ADR-045-closed-loops.md decision 3), and so
+     * how many rounds a plan counts (ADR-048).
+     */
+    public static final int LOOP_PASSES = 10;
+
     private FlowShares() {
     }
 

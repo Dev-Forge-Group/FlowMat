@@ -47,7 +47,9 @@ test('the Plan panel plans from a target and lights a material’s path', async 
           { processId: 'pack', batches: 1010.1011, through: null, unit: null, minutes: 50.5051 }],
         limits: [{ kind: 'stock', at: 'mix-milk', processId: 'mix', message: 'Raw milk is short by 34.0564 kg.' },
           { kind: 'equipment-time', at: 'mix', processId: 'mix', message: 'The longest equipment step takes 55.2169 minutes.' }],
-        assumptions: [], basis: { revisionId: 'rev-1', available: { milk: 150 } },
+        // A loop the plan goes round (ADR-048): what comes back to Mix each round is credited.
+        assumptions: [{ kind: 'loop', at: 'mix', value: '18% of what passes comes back by c-back, for up to 10 rounds' }],
+        basis: { revisionId: 'rev-1', available: { milk: 150 } },
       })
     }
     if (request.method() === 'POST' && pathname === '/api/workflows/wf-plan/plan-confirmations') {
@@ -103,6 +105,7 @@ test('the Plan panel plans from a target and lights a material’s path', async 
   await expect(panel.getByText('Can make 814 now')).toBeVisible()
   await expect(panel.getByText('Bottleneck: Mix')).toBeVisible()
   await expect(panel.getByRole('list', { name: 'Steps' })).toContainText('Mix: 1.8406 batches, 55.2169 min')
+  await expect(panel.getByRole('list', { name: 'Loops' })).toHaveText('Mix: 18% of what passes comes back by c-back, for up to 10 rounds')
   expect(sent[0]).toEqual({ target: { processIoId: 'pack-out', quantity: 1000, unit: 'ea' } })
 
   await panel.getByRole('row', { name: /Raw milk/ }).click()

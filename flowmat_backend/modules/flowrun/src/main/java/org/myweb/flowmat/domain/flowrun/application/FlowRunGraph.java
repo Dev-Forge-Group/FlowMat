@@ -86,7 +86,7 @@ final class FlowRunGraph {
     private final Set<String> loopNodes;
 
     /** How many steps a process on a loop may have in one run (docs/architecture/adr/ADR-045-closed-loops.md decision 3). */
-    static final int MAX_PASSES = 10;
+    static final int MAX_PASSES = FlowShares.LOOP_PASSES;
 
     FlowRunGraph(List<String> roots, Map<String, List<Edge>> outgoing, Map<String, Edge> byId,
         Map<String, ConditionExpression> portRules, Map<String, PortSchema> portSchemas, Map<String, NodePolicy> policies,

@@ -31,7 +31,8 @@ import java.util.Optional;
  * apart are refused, since nothing says how much each brings.</li>
  * </ul>
  * Amounts are exact while computing ({@link java.math.MathContext#DECIMAL128}); results have 4 decimals: what is needed is
- * rounded up, what is left over HALF_UP. Cycles, formula ports and several targets are refused ({@link Refusal}).
+ * rounded up, what is left over HALF_UP. A loop a run can go round is planned through (ADR-048); other cycles, formula ports and
+ * several targets are refused ({@link Refusal}).
  */
 public final class FlowDemand {
 

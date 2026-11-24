@@ -136,6 +136,13 @@ export function PlanPanel({ canvas, nameOf }: Props) {
               {plan.limits.map((limit, index) => <li key={index}>{limit.message}</li>)}
             </ul>
           )}
+          {plan.assumptions.some((assumption) => assumption.kind === 'loop') && (
+            <ul aria-label="Loops" style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
+              {plan.assumptions.filter((assumption) => assumption.kind === 'loop').map((assumption) => (
+                <li key={assumption.at}>{nameOf(assumption.at)}: {assumption.value}</li>
+              ))}
+            </ul>
+          )}
           {plan.feasible && !confirm.data && (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end', marginTop: '8px' }}>
               {short && (
