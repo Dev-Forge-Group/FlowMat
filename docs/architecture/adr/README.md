@@ -48,6 +48,7 @@
 | [ADR-044](ADR-044-spring-boot-4.md) | Spring Boot 4로 올린다 | **Accepted** 2026-11-23(사용자 결정) | OWASP의 Spring 6.2/6.5 높음·치명을 없애려 Boot 4.1.3(Framework 7·Security 7)으로 올린다. JSON은 Jackson 2에 둔다(`spring-boot-jackson2`). 나뉜 starter, 옮겨진 패키지만 바꾼다. Swagger UI webjar 고정, 출하하지 않는 devtools는 검사에서 뺀다 |
 | [ADR-045](ADR-045-closed-loops.md) | 닫힌 고리: 재작업·재활용 흐름 실행 | **Accepted** 2026-11-23(로드맵 §5의 5번) | 고리 위의 Exclusive·Split 게이트웨이가 고리 밖으로 가는 연결을 갖고 Join이 없으면 실행한다. 한 바퀴는 새 단계이고, 고리 위 공정은 한 실행에 10단계까지(`loop_limit`). 생산 실행의 같은 공정 두 번째 단계는 새 기록만 가져간다. 검사의 `CYCLE`은 실행할 수 없는 고리에만. 계획은 아직 고리를 거절한다 |
 | [ADR-046](ADR-046-resources-first-class.md) | 자원을 1급으로 | **Accepted** 2026-11-23(로드맵 §5의 6번) | 계획의 줄이 포트의 자원 종류를 갖고, 에너지·물은 재고로 보지 않는다(부족·초안 발주 없음). 품목 단가로 줄 비용, 자원별 합계, 계획 비용을 낸다. 프로젝트의 에너지·물 한도(V141)를 계획의 평균 사용량과 비교한다 |
+| [ADR-047](ADR-047-process-draft-from-a-description.md) | 제품 설명으로 공정 초안 | **Accepted** 2026-11-24(로드맵 §5의 7번 ①) | 홈의 "설명으로 시작"이 설명을 Claude(Java SDK, 구조화 출력)에 보내 공정·재료 초안을 받고, 서버가 검사한 뒤 보여 주며, 사람이 고르면 견본 빌더로 만든다. 기본은 꺼짐(키가 있어야 켬), 로그인·시간당 10번 |
 | [editor ADR-0001](../../editor/adr-0001-flowmat-editor-core-boundary.md) | 에디터 Core 경계 | Accepted 2026-08-12 | 순수 TypeScript editor core를 React Flow와 분리한다 |
 
 ## 규칙

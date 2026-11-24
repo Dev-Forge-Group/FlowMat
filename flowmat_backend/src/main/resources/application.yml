@@ -85,6 +85,14 @@ app:
     s3-region: ${STORAGE_S3_REGION:us-east-1}
     s3-endpoint: ${STORAGE_S3_ENDPOINT:}
     s3-path-style: ${STORAGE_S3_PATH_STYLE:false}
+  # A first process drafted from a description (docs/architecture/adr/ADR-047-process-draft-from-a-description.md).
+  # Off unless turned on and given a key; the description is sent to Anthropic's API when it is on.
+  ai:
+    process-draft:
+      enabled: ${APP_AI_PROCESS_DRAFT_ENABLED:false}
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${APP_AI_PROCESS_DRAFT_MODEL:claude-opus-5-5}
+      hourly-limit: ${APP_AI_PROCESS_DRAFT_HOURLY_LIMIT:10}
   # How long personal data is kept (docs/operations/personal-data.md P1, P2): a withdrawn user's name and contact, and
   # login history. A sweep runs once a day (UTC).
   privacy:

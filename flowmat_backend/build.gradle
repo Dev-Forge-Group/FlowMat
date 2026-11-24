@@ -107,6 +107,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-micrometer-metrics-test'
 	testImplementation 'org.springframework.security:spring-security-test'
+	// The process draft's request is built in a test without the network (ADR-047); same version as modules/workflow.
+	testImplementation 'com.anthropic:anthropic-java:3.13.0'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'

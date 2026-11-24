@@ -11,6 +11,8 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Authentication service is temporarily unavailable."),
+    /** An outside service FlowMat called failed or answered something unusable (ADR-047). */
+    BAD_GATEWAY(HttpStatus.BAD_GATEWAY, "An outside service did not answer as expected."),
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
     CONFLICT(HttpStatus.CONFLICT, "This record was changed by someone else. Reload and try again."),
 

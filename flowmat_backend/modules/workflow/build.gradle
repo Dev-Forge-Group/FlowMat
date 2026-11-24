@@ -4,4 +4,6 @@ dependencies {
 	implementation project(':modules:project')
 	implementation project(':modules:catalog')
 	implementation project(':modules:connector')
+	// A first process draft from a product description (docs/architecture/adr/ADR-047-process-draft-from-a-description.md).
+	implementation 'com.anthropic:anthropic-java:3.13.0'
 }

@@ -27,6 +27,7 @@ import {
 } from '../../../app/router/routePreload'
 import { preloadWorkspaceExperience } from '../../workspace/ui/workspacePreload'
 import { StartFromSample } from '../../../features/sample-start/ui/StartFromSample'
+import { StartFromDescription } from '../../../features/sample-start/ui/StartFromDescription'
 
 type DashboardProps = {
   onLogout: () => void
@@ -335,6 +336,7 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
           </form>
 
           <StartFromSample ownerId={currentUser?.userId} />
+          <StartFromDescription ownerId={currentUser?.userId} />
         </div>
 
         <div className="mb-3.5 flex items-center justify-between">
