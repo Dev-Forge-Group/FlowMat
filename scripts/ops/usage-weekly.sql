@@ -52,3 +52,19 @@ SELECT project_id, count(DISTINCT week) AS weeks_used
  GROUP BY 1
 HAVING count(DISTINCT week) = 4
  ORDER BY 1;
+
+\echo 'First run: minutes from making the project to its first item, published flow and confirmed plan (novice trial)'
+-- How long a new project took to get going (docs/operations/novice-trial.md). Projects made in the window only; no user
+-- or name. A sample (홈의 "견본으로 시작") publishes within seconds, so near-zero rows are samples. A plan that is only
+-- viewed is not stored, so the trial's "plan shown" is timed by the observer; a confirmed plan is the stored end.
+SELECT p.project_id,
+       to_char(p.created_at, 'YYYY-MM-DD HH24:MI') AS created_utc,
+       round(extract(epoch FROM (SELECT min(i.created_at) FROM item i WHERE i.project_id = p.project_id) - p.created_at) / 60, 1)
+         AS minutes_to_first_item,
+       round(extract(epoch FROM (SELECT min(r.published_at) FROM workflow_revision r JOIN workflow w USING (workflow_id)
+                                  WHERE w.project_id = p.project_id) - p.created_at) / 60, 1) AS minutes_to_first_publish,
+       round(extract(epoch FROM (SELECT min(c.created_at) FROM plan_confirmation c WHERE c.project_id = p.project_id)
+                                - p.created_at) / 60, 1) AS minutes_to_first_confirmed_plan
+  FROM project p
+ WHERE p.created_at >= date_trunc('week', now()) - make_interval(weeks => :weeks - 1)
+ ORDER BY p.created_at DESC;
