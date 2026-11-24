@@ -1,0 +1,18 @@
+{
+  "note": "Synthetic descriptions for evaluating the process draft (docs/domain/process-draft-evaluation.md). No customer data. Each case lists structural expectations a grader checks without a person; plausibility is graded by a person.",
+  "version": 1,
+  "cases": [
+    {"id": "milk-bottle", "description": "원유에 메론 시럽과 설탕을 섞어 200ml 병에 담고 24병씩 상자에 포장합니다.", "steps": [2, 5], "minMaterials": 3, "targetUnits": ["ea"], "semi": true},
+    {"id": "bread-loaf", "description": "밀가루, 물, 효모, 소금으로 반죽을 만들고 발효한 뒤 500g 식빵으로 구워 봉지에 담습니다.", "steps": [3, 6], "minMaterials": 4, "targetUnits": ["ea"], "semi": true},
+    {"id": "chair", "description": "나무 다리 4개, 좌판, 등판을 나사로 조립하고 도장해서 의자를 만듭니다.", "steps": [2, 5], "minMaterials": 3, "targetUnits": ["ea"], "semi": false},
+    {"id": "tshirt", "description": "면 원단을 재단하고 봉제한 뒤 라벨을 달아 티셔츠를 만들고 개별 포장합니다.", "steps": [3, 6], "minMaterials": 2, "targetUnits": ["ea"], "semi": true},
+    {"id": "cream-jar", "description": "정제수, 오일, 유화제를 가열 혼합해 크림을 만들고 50ml 용기에 충전해 뚜껑을 닫습니다.", "steps": [2, 5], "minMaterials": 3, "targetUnits": ["ea"], "semi": true},
+    {"id": "bracket", "description": "철판을 절단하고 구부려 브래킷을 만든 뒤 분체 도장하고 검사합니다.", "steps": [3, 6], "minMaterials": 2, "targetUnits": ["ea"], "semi": true},
+    {"id": "paint-can", "description": "안료, 수지, 용제를 배합하고 분산한 뒤 4L 캔에 담습니다.", "steps": [2, 4], "minMaterials": 3, "targetUnits": ["ea"], "semi": true},
+    {"id": "coffee", "description": "생두를 로스팅하고 식힌 뒤 분쇄해서 200g 봉투에 질소 충전 포장합니다.", "steps": [3, 5], "minMaterials": 2, "targetUnits": ["ea"], "semi": true},
+    {"id": "pcb", "description": "PCB에 솔더 페이스트를 인쇄하고 부품을 실장한 뒤 리플로우하고 기능 검사합니다.", "steps": [3, 6], "minMaterials": 3, "targetUnits": ["ea"], "semi": true},
+    {"id": "cap-molding", "description": "PP 수지와 색소를 섞어 사출 성형으로 병뚜껑을 만들고 1000개씩 박스에 담습니다.", "steps": [2, 4], "minMaterials": 2, "targetUnits": ["ea"], "semi": true},
+    {"id": "kimchi", "description": "배추를 절이고 씻은 뒤 양념(고춧가루, 마늘, 젓갈)을 버무려 1kg 용기에 담습니다.", "steps": [3, 6], "minMaterials": 4, "targetUnits": ["ea", "kg"], "semi": true},
+    {"id": "box", "description": "골판지 원지를 재단하고 인쇄한 뒤 접착해서 택배 상자를 만들고 50개씩 묶습니다.", "steps": [3, 5], "minMaterials": 2, "targetUnits": ["ea"], "semi": true}
+  ]
+}

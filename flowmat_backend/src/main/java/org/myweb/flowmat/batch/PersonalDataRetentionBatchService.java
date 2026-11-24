@@ -12,7 +12,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Once a day, erases what is past its retention (docs/operations/personal-data.md P1, P2): withdrawn users' personal data
- * after {@code app.privacy.withdrawn-retention} and login history after {@code app.privacy.login-history-retention}.
+ * after {@code app.privacy.withdrawn-retention} and login history after {@code app.privacy.login-history-retention}. Off
+ * unless {@code app.privacy.sweep-cron} is set: the periods wait for legal review (§5), and an erase cannot be undone.
  */
 @Slf4j
 @Service
@@ -27,7 +28,7 @@ public class PersonalDataRetentionBatchService {
     @Value("${app.privacy.login-history-retention:P365D}")
     private Duration loginHistoryRetention;
 
-    @Scheduled(cron = "${app.privacy.sweep-cron:0 40 3 * * *}", zone = "UTC")
+    @Scheduled(cron = "${app.privacy.sweep-cron:-}", zone = "UTC")
     public void sweep() {
         PersonalDataRetentionService.Swept swept = retention.sweep(OffsetDateTime.now(ZoneOffset.UTC), withdrawnRetention,
             loginHistoryRetention);
