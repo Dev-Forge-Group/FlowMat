@@ -106,7 +106,7 @@ public class AuthServiceImpl implements AuthService {
         String email = normalizeEmail(request.userEmail());
         String tel = normalizeRequired(request.userTel(), "Phone number is required.");
         String password = normalizeRequired(request.password(), "Password is required.");
-        if (request.userBirth() == null || email == null) {
+        if (email == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         password = PasswordPolicy.require(password, userId, email);
@@ -477,9 +477,6 @@ public class AuthServiceImpl implements AuthService {
         String nickname = normalizeRequired(request.userNickname(), "Nickname is required.");
         String tel = normalizeRequired(request.userTel(), "Phone number is required.");
         String password = normalizeRequired(request.password(), "Password is required.");
-        if (request.userBirth() == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Birth date is required.");
-        }
         ensureUnique(userId, null, tel, nickname);
 
         String email = resolveSocialEmail(provider, providerId, providerEmail);
@@ -578,8 +575,7 @@ public class AuthServiceImpl implements AuthService {
     private boolean isAdditionalInfoRequired(User user) {
         return user == null
             || !hasText(user.getUserNickname())
-            || !hasText(user.getUserTel())
-            || user.getUserBirth() == null;
+            || !hasText(user.getUserTel());
     }
 
     private String resolveSocialEmail(String provider, String providerId, String providerEmail) {

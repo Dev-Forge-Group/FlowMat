@@ -177,8 +177,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     private boolean isAdditionalInfoRequired(User user) {
         return user == null
             || user.getUserNickname() == null || user.getUserNickname().isBlank()
-            || user.getUserTel() == null || user.getUserTel().isBlank()
-            || user.getUserBirth() == null;
+            || user.getUserTel() == null || user.getUserTel().isBlank();
     }
 
     private LinkState parseLinkState(String state) {

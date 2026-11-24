@@ -15,7 +15,8 @@ export interface SignupRequest {
   userNickname: string
   userEmail: string
   userTel: string
-  userBirth: string
+  /** Optional (docs/operations/personal-data.md P5). */
+  userBirth: string | null
   password: string
 }
 

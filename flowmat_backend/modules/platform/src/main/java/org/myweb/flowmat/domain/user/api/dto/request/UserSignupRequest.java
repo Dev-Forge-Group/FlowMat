@@ -2,7 +2,6 @@ package org.myweb.flowmat.domain.user.api.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 public record UserSignupRequest(
@@ -11,7 +10,8 @@ public record UserSignupRequest(
     @NotBlank String userNickname,
     @NotBlank @Email String userEmail,
     @NotBlank String userTel,
-    @NotNull LocalDate userBirth,
+    /** Optional: not needed to use FlowMat (docs/operations/personal-data.md P5). */
+    LocalDate userBirth,
     @NotBlank String password
 ) {
 
