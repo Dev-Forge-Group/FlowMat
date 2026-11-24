@@ -20,6 +20,7 @@
    - 서버 쪽 자동 대체(`fallbacks`)는 넣지 않았다. Java SDK의 설정 방법이 문서에 없다. 초안은 실패해도 견본으로 시작할 수 있다.
    - **켜는 조건:** `APP_AI_PROCESS_DRAFT_ENABLED=true`이고 `ANTHROPIC_API_KEY`가 있어야 한다(`ProcessDraftConfigured`). 아니면 모델 빈이 없고 API는 503이다.
    - 키는 비밀값이라 저장소에 넣지 않고 로그에 남기지 않는다.
+   - SDK는 Kotlin으로 돈다. Spring Boot 4.1.3이 관리하는 Kotlin 2.3.21은 OWASP 검사에서 치명(CVE-2026-53914)이 나와서, `build.gradle`에서 2.4.21로 고정했다(2026-11-24).
 3. **검사(`ProcessDraftCheck`).** 모델의 답은 사람에게 보이기 전에 검사한다. 하나라도 어기면 502다.
    - 크기: 품목 2–30개, 단계 1–12개
    - 이름: 길이 제한
