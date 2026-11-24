@@ -11,9 +11,6 @@ GitHub contributors에 AI 도구 계정이 올라가지 않도록 커밋 메타�
 - 커밋의 author와 committer는 작업을 맡긴 사람의 Git 계정으로 한다. 실행 환경의 Git 사용자가 AI 도구 계정(예: `Claude <noreply@anthropic.com>`)이면 커밋 전에 저장소 설정(`git config user.name`, `git config user.email`)으로 바꾼다.
 - Claude Code는 `.claude/settings.json`의 `attribution` 설정으로 공동 작성자 표기와 세션 링크를 끈다.
 - `.github/workflows/commit-attribution.yml`이 PR과 기본 브랜치 push에서 이를 검사한다. 걸리면 해당 커밋의 트레일러나 작성자를 고친 뒤 다시 push한다.
-- 브랜치 이름에 AI 도구 이름을 넣지 않는다(`claude/…`, `codex/…` 등). 하는 일로 짓는다: `feat/…`, `fix/…`, `docs/…`, `chore/…`, `release/…`.
-- PR은 squash로 merge한다. 제목은 `<PR 제목> (#번호)`다. 그러면 기본 merge 커밋의 "Merge pull request … from <브랜치>" 줄이 이력에 남지 않고, GitHub가 서명한 커밋 하나가 된다.
-- 커밋 메시지, PR 제목·본문, 문서의 기록에 도구 이름(Claude, Codex)과 "에이전트·세션" 같은 작업 방식을 쓰지 않는다. 무엇을 왜 바꿨는지만 쓴다. 제품 기능으로서의 AI(예: AI 초안, AI 서비스)는 그대로 쓴다.
 
 ## 정본과 고치지 않는 곳
 
@@ -63,18 +60,6 @@ cd flowmat_backend && ./gradlew test jacocoTestCoverageVerification && ./gradlew
 - 커밋·push·PR·merge는 사람이 그 범위를 맡겼을 때만 한다(세션에서 "PR·push·merge를 맡긴다"고 한 것도 맡긴 것이다). force push, 다른 사람 브랜치의 이력 변경, 브랜치 삭제는 따로 승인받는다.
 - 운영 설정과 배포, 운영 DB의 마이그레이션은 정확한 대상에 대한 별도 승인 없이 하지 않는다.
 - 한 에이전트는 한 브랜치(필요하면 한 worktree)에서 한 가지를 한다. 다른 에이전트가 고치던 파일은 건드리지 않는다. 같은 원장 파일을 ERP와 MES 작업이 동시에 고치지 않는다. 여럿이 돌 때는 DB·Redis·포트·`docker compose -p` 이름을 나눈다.
-
-## 클라우드 우선
-
-사용자는 PC에서 할 일을 줄이고 클라우드 세션에서 처리하기를 바란다(2026-11-24).
-
-- 빌드, 테스트, E2E, 업그레이드·복원 리허설, PR, CI, merge는 클라우드 세션에서 한다. DB와 Redis는 세션 안의 버리는 컨테이너(Docker, Testcontainers)를 쓴다.
-- 사람의 PC에는 그 PC에만 있는 일만 남긴다. 예: PC의 개발 DB(5434)에 마이그레이션을 적용하는 일.
-- 그런 일은 PC의 Claude Code 세션에 붙여 넣을 지시 하나로 준다. 지시에는 절차와 통과 기준, 그리고 돌려받을 보고를 적는다. 사람이 명령을 하나씩 치게 하지 않는다.
-- 사람에게 묻는 것은 결정과 사람만 할 수 있는 일뿐이다.
-  - 결정: 키와 비용, 법률 검토, 배포 장소
-  - 사람만 할 수 있는 일: 파일럿 공장, 비전문가 시험
-  - 웹(GitHub·Claude 설정)에서 끝나는 일은 그 화면의 경로를 알려 준다.
 
 ## 끝난 기준
 
