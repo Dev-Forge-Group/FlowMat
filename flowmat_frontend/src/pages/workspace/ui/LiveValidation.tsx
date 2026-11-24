@@ -21,17 +21,18 @@ export function LiveValidationButton({ report, open, onToggle }: {
 }
 
 /** The issues of the check as drawn, below the check row while open. */
-export function LiveValidation({ report, nameOf, onSelect }: {
+export function LiveValidation({ report, nameOf, onSelect, onTakeFromStock }: {
   report: KernelValidation | null
   nameOf: (id: string) => string
   onSelect: (issue: WorkflowValidationIssue) => void
+  onTakeFromStock?: (ioId: string) => void
 }) {
   if (!report) return null
   return (
     <section aria-label="Check as drawn" style={{ margin: '8px 16px 0' }}>
       {report.issues.length === 0
         ? <p>Nothing to fix as drawn.</p>
-        : <ValidationIssueList issues={report.issues} nameOf={nameOf} onSelect={onSelect} />}
+        : <ValidationIssueList issues={report.issues} nameOf={nameOf} onSelect={onSelect} onTakeFromStock={onTakeFromStock} />}
     </section>
   )
 }

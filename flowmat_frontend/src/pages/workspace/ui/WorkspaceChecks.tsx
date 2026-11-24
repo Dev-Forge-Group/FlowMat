@@ -7,6 +7,7 @@ import {
   type WorkflowValidationIssue,
 } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import { useLiveValidation } from '../../../entities/workflow/api/useLiveValidation'
+import { useUpdateProcessIoMutation } from '../../../entities/workflow/api/useUpdateProcessIoMutation'
 import { issueMarks, NO_MARKS, useIssueMarksStore } from '../model/issueMarks'
 import { layoutWarnings, type LayoutSnapshot, type LayoutWarning } from '../model/layoutChecks'
 import { validationSelection } from '../model/validationPanelModel'
@@ -42,6 +43,9 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
   const [liveOpen, setLiveOpen] = useState(false)
   const [tryOpen, setTryOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
+  // A required input with nothing connected, marked as taken from stock; the canvas change then re-runs both checks.
+  const updatePort = useUpdateProcessIoMutation(workflowId)
+  const takeFromStock = editable ? (ioId: string) => updatePort.mutate({ processIoId: ioId, requiredYn: 'N' }) : undefined
 
   // A change to the graph makes the server's last answer stale.
   const queryClient = useQueryClient()
@@ -83,11 +87,13 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
           <div role="status" style={{ marginTop: 8 }}>
             {validationQuery.isPending && <p>Checking workflow...</p>}
             {validationQuery.isError && <p role="alert">{validationQuery.error.message}</p>}
+            {updatePort.isError && <p role="alert">{updatePort.error.message}</p>}
             {validationQuery.data && (
               <>
                 <p>{validationQuery.data.errors} errors, {validationQuery.data.warnings} warnings</p>
                 {validationQuery.data.issues.length === 0 && <p>No issues found.</p>}
-                <ValidationIssueList issues={validationQuery.data.issues} nameOf={nameOf} onSelect={selectIssue} />
+                <ValidationIssueList issues={validationQuery.data.issues} nameOf={nameOf} onSelect={selectIssue}
+                  onTakeFromStock={takeFromStock} />
               </>
             )}
             <LayoutWarningList warnings={layoutFound} nameOf={nameOf} onSelect={(warning) => {
@@ -103,7 +109,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
         )}
       </section>
 
-      {liveOpen && <LiveValidation report={liveValidation} nameOf={nameOf} onSelect={selectIssue} />}
+      {liveOpen && <LiveValidation report={liveValidation} nameOf={nameOf} onSelect={selectIssue} onTakeFromStock={takeFromStock} />}
       {tryOpen && <TryFlowPanel canvas={canvas} nameOf={nameOf} onSelectProcess={selectNode} />}
       {planOpen && <PlanPanel canvas={canvas} nameOf={nameOf} />}
     </>
