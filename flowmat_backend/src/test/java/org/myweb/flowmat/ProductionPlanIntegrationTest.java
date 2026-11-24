@@ -406,6 +406,50 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data.lines[0].itemId").value(dough));
     }
 
+    /**
+     * A recycling loop planned through (docs/architecture/adr/ADR-048-plan-through-loops.md): Cut passes what arrives, a Split
+     * sends 20% of it to Regrind (0.9 kg out of 1 kg) and back to Cut, the rest to Pack. 18% comes back each round, so 1,000
+     * parts need 1,250 kg through Cut but only 1,025 kg of raw material over ten rounds.
+     */
+    @Test
+    void aRecyclingLoopIsPlannedWithWhatComesBack() throws Exception {
+        String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String raw = item("PL-RAW-" + tag, "unit_kg");
+        String part = item("PL-PART-" + tag, "unit_ea");
+        stock(raw, 2000, tag);
+        Graph graph = new Graph("Recycle " + tag);
+        String receive = graph.node("Receive");
+        String cut = graph.node("Cut");
+        String offcuts = graph.gateway("Offcuts back", "split");
+        String regrind = graph.node("Regrind");
+        String pack = graph.node("Pack");
+        String receiveIn = graph.port(receive, "input", raw, 1, "kg");
+        String receiveOut = graph.port(receive, "output", raw, 1, "kg");
+        String regrindIn = graph.port(regrind, "input", raw, 1, "kg");
+        String regrindOut = graph.port(regrind, "output", raw, 0.9, "kg");
+        String packIn = graph.port(pack, "input", raw, 1, "kg");
+        String packOut = graph.port(pack, "output", part, 1, "ea");
+        graph.link(receive, receiveOut, cut, null, null, null);
+        graph.link(cut, null, offcuts, null, null, null);
+        graph.link(offcuts, null, regrind, regrindIn, "share", 20);
+        String back = graph.link(regrind, regrindOut, cut, null, null, null);
+        graph.link(offcuts, null, pack, packIn, "rest", null);
+        graph.publish();
+
+        String row = "$.data.requirements[?(@.itemId == '%s')]";
+        call(post("/workflows/" + graph.workflow + "/plan-previews"),
+            json(Map.of("target", Map.of("processIoId", packOut, "quantity", 1000, "unit", "ea"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.feasible").value(true))
+            .andExpect(jsonPath("$.data.requirements.length()").value(1))
+            .andExpect(jsonPath(row.formatted(raw) + ".at").value(hasItem(receiveIn)))
+            .andExpect(jsonPath(row.formatted(raw) + ".needed").value(hasItem(1025.0001)))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + cut + "')].through").value(hasItem(1250.0)))
+            .andExpect(jsonPath("$.data.nodes[?(@.processId == '" + regrind + "')].batches").value(hasItem(250.0)))
+            .andExpect(jsonPath("$.data.assumptions[?(@.kind == 'loop')].value")
+                .value(hasItem("18% of what passes comes back by " + back + ", for up to 10 rounds")));
+    }
+
     private final class Graph {
         private final String workflow;
 
@@ -433,6 +477,21 @@ class ProductionPlanIntegrationTest extends IntegrationTestSupport {
                 "fromIoId", fromIo, "toIoId", toIo));
             if (lossRate != null) body.put("lossRate", lossRate);
             call(post("/process-connections"), json(body)).andExpect(status().isOk());
+        }
+
+        String gateway(String name, String type) throws Exception {
+            return id(call(post("/processes"), json(Map.of("workflowId", workflow, "processName", name, "nodeType", type))),
+                "processId");
+        }
+
+        /** A connection that may leave or reach a node without a port, or carry a Split's share. */
+        String link(String from, String fromIo, String to, String toIo, String splitKind, Integer splitValue) throws Exception {
+            Map<String, Object> body = new HashMap<>(Map.of("workflowId", workflow, "fromProcessId", from, "toProcessId", to));
+            if (fromIo != null) body.put("fromIoId", fromIo);
+            if (toIo != null) body.put("toIoId", toIo);
+            if (splitKind != null) body.put("splitKind", splitKind);
+            if (splitValue != null) body.put("splitValue", splitValue);
+            return id(call(post("/process-connections"), json(body)), "connectionId");
         }
 
         String publish() throws Exception {

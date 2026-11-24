@@ -124,6 +124,113 @@ class FlowDemandTest {
             .satisfies(refusal -> assertThat(((FlowDemand.Refusal) refusal).at()).isEqualTo("tf"));
     }
 
+    /**
+     * A rework loop (docs/architecture/adr/ADR-048-plan-through-loops.md decision 2): the Exclusive takes its way out even where
+     * the way back ranks first, and the plan counts nothing coming back, so it needs what a graph without the loop needs.
+     */
+    @Test
+    void aReworkLoopIsPlannedAlongItsWayOut() {
+        Graph graph = new Graph();
+        graph.node("receive", "process").port("receive.out", "output", "1", "ea");
+        graph.node("inspect", "process");
+        graph.node("gate", "exclusive");
+        graph.node("rework", "process");
+        graph.node("pack", "process").port("pack.in", "input", "1", "ea").port("pack.out", "output", "1", "ea");
+        graph.connect("c1", "receive", "receive.out", "inspect", null);
+        graph.connect("c2", "inspect", null, "gate", null);
+        graph.connect("c3", "gate", null, "rework", null);
+        graph.connect("c4", "gate", null, "pack", "pack.in").priority(1);
+        graph.connect("c5", "rework", null, "inspect", null);
+
+        Result result = graph.plan("pack.out", "100");
+
+        assertThat(result.feasible()).isTrue();
+        assertThat(result.requirements()).singleElement().satisfies(requirement -> {
+            assertThat(requirement.at()).isEqualTo("receive");
+            assertThat(requirement.quantity()).isEqualByComparingTo("100");
+        });
+        assertThat(result.assumptions()).anySatisfy(assumption -> {
+            assertThat(assumption.kind()).isEqualTo("exclusive");
+            assertThat(assumption.value()).startsWith("c4");
+        });
+        assertThat(result.assumptions()).anySatisfy(assumption -> {
+            assertThat(assumption.kind()).isEqualTo("loop");
+            assertThat(assumption.at()).isEqualTo("inspect");
+            assertThat(assumption.value()).contains("nothing comes back by c5");
+        });
+        assertThat(result.nodes()).noneMatch(node -> node.nodeId().equals("rework"));
+    }
+
+    /**
+     * A recycling loop (ADR-048 decision 2): a Split sends 20% of what Cut passes to Regrind (90% comes out) and back, so 18% of
+     * what passes Cut comes back each round. Fresh material is 1250 &times; 0.82 / (1 &minus; 0.18<sup>10</sup>), and the
+     * forward check, round by round as a run goes, brings the 1000.
+     */
+    @Test
+    void aRecyclingLoopNeedsLessFreshMaterialByWhatComesBack() {
+        Graph graph = new Graph();
+        graph.node("receive", "process").port("receive.out", "output", "1", "kg");
+        graph.node("cut", "process");
+        graph.node("offcuts", "split");
+        graph.node("regrind", "process").port("regrind.in", "input", "1", "kg").port("regrind.out", "output", "0.9", "kg");
+        graph.node("pack", "process").port("pack.in", "input", "1", "kg").port("pack.out", "output", "1", "kg");
+        graph.connect("c1", "receive", "receive.out", "cut", null);
+        graph.connect("c2", "cut", null, "offcuts", null);
+        graph.connect("c3", "offcuts", null, "regrind", "regrind.in").share("share", "20");
+        graph.connect("c4", "regrind", "regrind.out", "cut", null);
+        graph.connect("c5", "offcuts", null, "pack", "pack.in").share("rest", null);
+
+        Result result = graph.plan("pack.out", "1000");
+
+        assertThat(result.feasible()).isTrue();
+        BigDecimal fresh = new BigDecimal("1025").divide(BigDecimal.ONE.subtract(new BigDecimal("0.18").pow(10)), MC);
+        assertThat(result.requirements()).singleElement().satisfies(requirement -> {
+            assertThat(requirement.at()).isEqualTo("receive");
+            assertThat(requirement.quantity()).isBetween(fresh, fresh.add(new BigDecimal("0.01")));
+            assertThat(requirement.trace()).extracting(Step::rule).contains("loop");
+        });
+        assertThat(demand(result, "cut").through()).isEqualByComparingTo("1250");
+        assertThat(demand(result, "regrind").batches()).isEqualByComparingTo("250");
+        assertThat(result.assumptions()).anySatisfy(assumption -> {
+            assertThat(assumption.kind()).isEqualTo("loop");
+            assertThat(assumption.at()).isEqualTo("cut");
+            assertThat(assumption.value()).isEqualTo("18% of what passes comes back by c4, for up to 10 rounds");
+        });
+        assertThat(result.surplus()).isEmpty();
+    }
+
+    /** Loops a plan cannot go round (ADR-048 decision 1): the target on the loop, and a loop back into a step in batches. */
+    @Test
+    void refusesLoopsItCannotGoRound() {
+        Graph onLoop = new Graph();
+        onLoop.node("receive", "process").port("receive.out", "output", "1", "kg");
+        onLoop.node("cut", "process");
+        onLoop.node("offcuts", "split");
+        onLoop.node("regrind", "process").port("regrind.in", "input", "1", "kg").port("regrind.out", "output", "1", "kg");
+        onLoop.node("pack", "process").port("pack.in", "input", "1", "kg").port("pack.out", "output", "1", "kg");
+        onLoop.connect("c1", "receive", "receive.out", "cut", null);
+        onLoop.connect("c2", "cut", null, "offcuts", null);
+        onLoop.connect("c3", "offcuts", null, "regrind", "regrind.in").share("share", "20");
+        onLoop.connect("c4", "regrind", "regrind.out", "cut", null);
+        onLoop.connect("c5", "offcuts", null, "pack", "pack.in").share("rest", null);
+        assertThatThrownBy(() -> onLoop.plan("regrind.out", "10")).isInstanceOf(FlowDemand.Refusal.class)
+            .hasMessageContaining("on the cycle through cut");
+
+        Graph batches = new Graph();
+        batches.node("receive", "process").port("receive.out", "output", "1", "kg");
+        batches.node("mix", "process").port("mix.in", "input", "1", "kg").port("mix.back", "input", "1", "kg")
+            .port("mix.out", "output", "2", "kg");
+        batches.node("some", "split");
+        batches.node("pack", "process").port("pack.in", "input", "1", "kg").port("pack.out", "output", "1", "kg");
+        batches.connect("c1", "receive", "receive.out", "mix", "mix.in");
+        batches.connect("c2", "mix", "mix.out", "some", null);
+        batches.connect("c3", "some", null, "mix", "mix.back").share("share", "10");
+        batches.connect("c4", "some", null, "pack", "pack.in").share("rest", null);
+        assertThatThrownBy(() -> batches.plan("pack.out", "10")).isInstanceOf(FlowDemand.Refusal.class)
+            .satisfies(refusal -> assertThat(((FlowDemand.Refusal) refusal).at()).isEqualTo("mix"))
+            .hasMessageContaining("works in batches");
+    }
+
     private static FlowDemand.NodeDemand demand(Result result, String nodeId) {
         return result.nodes().stream().filter(node -> node.nodeId().equals(nodeId)).findFirst().orElseThrow();
     }

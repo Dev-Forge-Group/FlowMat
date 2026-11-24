@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,7 +32,10 @@ import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand.Result;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand.Step;
 import org.myweb.flowmat.domain.flowrun.application.publicapi.FlowDemand.Surplus;
 
-/** {@link FlowDemand}'s calculation: the graph's indexes, then one backward pass per target tried and a forward check. */
+/**
+ * {@link FlowDemand}'s calculation: the graph's indexes, then one backward pass per target tried and a forward check. A loop a
+ * run can go round is planned through (docs/architecture/adr/ADR-048-plan-through-loops.md).
+ */
 final class FlowDemandPlanner {
 
     private static final MathContext MC = MathContext.DECIMAL128;
@@ -61,6 +65,12 @@ final class FlowDemandPlanner {
     private final Map<String, Integer> depth = new HashMap<>();
     private final Map<String, String> choices = new HashMap<>();
     private final Set<String> leadsToTarget = new HashSet<>();
+    /** The loops a run can go round, by the node each is entered at (ADR-048 decision 1). */
+    private final Map<String, Loop> loops = new LinkedHashMap<>();
+    /** The connections back to a loop's entry: left out of the order and of what arrives there, and credited instead. */
+    private final Set<String> back = new HashSet<>();
+    /** The nodes a loop's entry leads to, the entries included: what may run again in a later round of the forward check. */
+    private final Set<String> afterLoops = new HashSet<>();
     private final String targetNode;
     private final String targetAt;
     private final String targetUnit;
@@ -71,6 +81,7 @@ final class FlowDemandPlanner {
             throw new Refusal(null, "A plan needs a graph and a target.");
         }
         index(request.graph());
+        loops();
         sort();
         dominators();
         FlowDemand.Target target = request.target();
@@ -95,6 +106,11 @@ final class FlowDemandPlanner {
         }
         if (target.quantity() == null || target.quantity().signum() <= 0) {
             throw new Refusal(targetAt, "The target quantity must be more than 0.");
+        }
+        for (Loop loop : loops.values()) {
+            boolean on = loop.members().contains(targetNode)
+                && (target.connectionId() == null || loop.members().contains(connections.get(target.connectionId()).to()));
+            if (on) throw new Refusal(targetAt, "The target is on the cycle through " + loop.entry() + "; aim at what leaves it.");
         }
         ancestors(targetNode, leadsToTarget);
         choose();
@@ -192,6 +208,7 @@ final class FlowDemandPlanner {
             position.put(id, order.size());
             order.add(id);
             for (Connection connection : outgoing.getOrDefault(id, List.of())) {
+                if (back.contains(connection.id())) continue;
                 if (remaining.merge(connection.to(), -1, Integer::sum) == 0) ready.add(connection.to());
             }
         }
@@ -293,6 +310,138 @@ final class FlowDemandPlanner {
 
     private static <T> List<T> list(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    // ---------------------------------------------------------------- loops (ADR-048)
+
+    /** A loop: its nodes, the one it is entered at, and the connections that come back to that one. */
+    private record Loop(String entry, Set<String> members, List<String> back) {
+    }
+
+    /**
+     * The cycles a plan goes round (ADR-048 decision 1): each has an Exclusive or Split that leads out of it and no Join, as a run
+     * needs (ADR-045), is entered at one node that passes what arrives, and every way round passes that node. The connections
+     * back to it are left out of the order and of what arrives there; a pass credits what comes back by them instead.
+     */
+    private void loops() {
+        for (Set<String> members : cycles()) {
+            String first = members.iterator().next();
+            for (String id : members) {
+                if (kind(id).equals("join")) {
+                    throw new Refusal(id, "Join " + id + " is on a cycle; a run passes a Join once, so the cycle cannot be planned.");
+                }
+            }
+            boolean wayOut = members.stream().anyMatch(id -> (kind(id).equals("exclusive") || kind(id).equals("split"))
+                && outgoing.getOrDefault(id, List.of()).stream().anyMatch(connection -> !members.contains(connection.to())));
+            if (!wayOut) {
+                throw new Refusal(first, "A cycle with no Exclusive or Split that leads out of it cannot be planned.");
+            }
+            List<String> entries = members.stream().filter(id -> incoming.getOrDefault(id, List.of()).stream()
+                .anyMatch(connection -> !members.contains(connection.from()))).toList();
+            if (entries.size() != 1) {
+                throw new Refusal(first, entries.isEmpty()
+                    ? "Nothing comes into the cycle through " + first + "; a plan needs a start before it."
+                    : "The cycle through " + first + " is entered at " + String.join(", ", entries) + "; a plan needs one way in.");
+            }
+            String entry = entries.get(0);
+            if (ratio(entry)) {
+                throw new Refusal(entry, "The cycle comes back into " + entry + ", which works in batches; bring it back into a step"
+                    + " that passes what arrives.");
+            }
+            if (!inOrder(members, entry)) {
+                throw new Refusal(entry, "The cycle through " + entry + " has another cycle inside it; plan one at a time.");
+            }
+            List<String> backs = incoming.getOrDefault(entry, List.of()).stream()
+                .filter(connection -> members.contains(connection.from())).map(Connection::id).toList();
+            loops.put(entry, new Loop(entry, members, backs));
+            back.addAll(backs);
+        }
+        for (String id : back) {
+            Connection connection = connections.get(id);
+            incoming.get(connection.to()).remove(connection);
+            if (connection.toPort() != null) intoPort.get(connection.toPort()).remove(connection);
+        }
+        ArrayDeque<String> queue = new ArrayDeque<>(loops.keySet());
+        while (!queue.isEmpty()) {
+            String next = queue.removeFirst();
+            if (!afterLoops.add(next)) continue;
+            for (Connection connection : outgoing.getOrDefault(next, List.of())) {
+                if (!back.contains(connection.id())) queue.add(connection.to());
+            }
+        }
+    }
+
+    /** The graph's strongly connected parts with more than one node or a connection to itself, each in node order. */
+    private List<Set<String>> cycles() {
+        List<String> finished = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String start : nodes.keySet()) {
+            if (!seen.add(start)) continue;
+            ArrayDeque<String> path = new ArrayDeque<>(List.of(start));
+            ArrayDeque<Iterator<Connection>> next = new ArrayDeque<>();
+            next.push(outgoing.getOrDefault(start, List.of()).iterator());
+            while (!path.isEmpty()) {
+                Iterator<Connection> out = next.peek();
+                if (out.hasNext()) {
+                    String to = out.next().to();
+                    if (seen.add(to)) {
+                        path.push(to);
+                        next.push(outgoing.getOrDefault(to, List.of()).iterator());
+                    }
+                } else {
+                    next.pop();
+                    finished.add(path.pop());
+                }
+            }
+        }
+        Set<String> placed = new HashSet<>();
+        List<Set<String>> cycles = new ArrayList<>();
+        for (int index = finished.size() - 1; index >= 0; index--) {
+            String root = finished.get(index);
+            if (!placed.add(root)) continue;
+            Set<String> part = new HashSet<>();
+            ArrayDeque<String> queue = new ArrayDeque<>(List.of(root));
+            while (!queue.isEmpty()) {
+                String id = queue.removeFirst();
+                part.add(id);
+                for (Connection connection : incoming.getOrDefault(id, List.of())) {
+                    if (placed.add(connection.from())) queue.add(connection.from());
+                }
+            }
+            boolean cycle = part.size() > 1 || outgoing.getOrDefault(root, List.of()).stream()
+                .anyMatch(connection -> connection.to().equals(root));
+            if (!cycle) continue;
+            Set<String> ordered = new LinkedHashSet<>();
+            for (String id : nodes.keySet()) if (part.contains(id)) ordered.add(id);
+            cycles.add(ordered);
+        }
+        List<String> drawnOrder = new ArrayList<>(nodes.keySet());
+        cycles.sort(Comparator.comparingInt(cycle -> drawnOrder.indexOf(cycle.iterator().next())));
+        return cycles;
+    }
+
+    /** Whether the cycle's nodes but {@code entry} have an order, so that every way round passes {@code entry}. */
+    private boolean inOrder(Set<String> members, String entry) {
+        Map<String, Integer> remaining = new HashMap<>();
+        for (String id : members) if (!id.equals(entry)) remaining.put(id, 0);
+        for (String id : remaining.keySet()) {
+            for (Connection connection : outgoing.getOrDefault(id, List.of())) {
+                if (remaining.containsKey(connection.to())) remaining.merge(connection.to(), 1, Integer::sum);
+            }
+        }
+        ArrayDeque<String> ready = new ArrayDeque<>();
+        remaining.forEach((id, count) -> { if (count == 0) ready.add(id); });
+        int ordered = 0;
+        while (!ready.isEmpty()) {
+            String id = ready.removeFirst();
+            ordered++;
+            for (Connection connection : outgoing.getOrDefault(id, List.of())) {
+                if (remaining.containsKey(connection.to()) && remaining.merge(connection.to(), -1, Integer::sum) == 0) {
+                    ready.add(connection.to());
+                }
+            }
+        }
+        return ordered == remaining.size();
     }
 
     // ---------------------------------------------------------------- amounts
@@ -535,6 +684,7 @@ final class FlowDemandPlanner {
 
         /** What a node that passes what arrives needs from before it. */
         private void passIn(String id, Need x) {
+            x = credited(id, x);
             List<Connection> ins = incoming.getOrDefault(id, List.of());
             if (ins.isEmpty()) {
                 List<Port> outs = outputs.getOrDefault(id, List.of());
@@ -544,6 +694,67 @@ final class FlowDemandPlanner {
             } else {
                 gather(id, x);
             }
+        }
+
+        /**
+         * What must come into a loop's entry from before it for {@code x} to pass it over the rounds a run may go (ADR-048
+         * decision 2): if a share g of what passes comes back after a round, x(1 &minus; g) / (1 &minus; g<sup>n</sup>). What the
+         * way back passes is filled in from x, so its steps and materials are planned too.
+         */
+        private Need credited(String id, Need x) {
+            Loop loop = loops.get(id);
+            if (loop == null || x.value().signum() == 0) return x;
+            Set<String> inside = new LinkedHashSet<>(loop.members());
+            inside.remove(id);
+            Region region = new Region(id, id, inside);
+            Forward forward = new Forward(false, true, Map.of());
+            forward.seed(id, x.value(), x.unit(), region);
+            for (String node : order) if (inside.contains(node)) forward.evaluate(node, region);
+            BigDecimal returned = BigDecimal.ZERO;
+            for (String connection : loop.back()) {
+                Flow flow = forward.arrived.get(connection);
+                if (flow != null) returned = returned.add(convert(flow.value(), flow.unit(), x.unit(), connection));
+            }
+            for (String member : loop.members()) {
+                for (Connection connection : outgoing.getOrDefault(member, List.of())) {
+                    if (!loop.members().contains(connection.to())) continue;
+                    usedConnections.add(connection.id());
+                    if (connection.fromPort() != null) usedPorts.add(connection.fromPort());
+                }
+            }
+            String by = String.join(", ", loop.back());
+            BigDecimal share = returned.divide(x.value(), MC);
+            if (share.signum() == 0) {
+                assumptions.putIfAbsent(id + "/loop", new Assumption(id, "loop", "nothing comes back by " + by
+                    + ": all of it is planned to go on the first time"));
+                return x;
+            }
+            if (share.compareTo(BigDecimal.ONE) >= 0) {
+                throw new Refusal(id, "All that passes " + id + " comes back by " + by + "; a plan needs a way out that takes some.");
+            }
+            for (String node : order) {
+                if (!inside.contains(node) || batches.containsKey(node) || through.containsKey(node)) continue;
+                if (ratio(node)) {
+                    BigDecimal k = forward.batches.get(node);
+                    if (k == null || k.signum() == 0) continue;
+                    Need batch = step(x, node, "loop", k, BATCH);
+                    batches.put(node, batch);
+                    for (Port input : inputs.getOrDefault(node, List.of())) {
+                        if (quantity(input) == null || !intoPort.getOrDefault(input.id(), List.of()).isEmpty()) continue;
+                        starts.add(new Start(input.id(), node, input,
+                            step(batch, input.id(), "ratio", k.multiply(quantity(input), MC), input.unit())));
+                    }
+                } else if (forward.through.containsKey(node)) {
+                    Flow flow = forward.through.get(node);
+                    through.put(node, step(x, node, "loop", flow.value(), flow.unit()));
+                }
+            }
+            int rounds = FlowShares.LOOP_PASSES;
+            assumptions.putIfAbsent(id + "/loop", new Assumption(id, "loop", plain(half(share.multiply(HUNDRED, MC)))
+                + "% of what passes comes back by " + by + ", for up to " + rounds + " rounds"));
+            BigDecimal fresh = x.value().multiply(BigDecimal.ONE.subtract(share), MC)
+                .divide(BigDecimal.ONE.subtract(share.pow(rounds, MC)), MC);
+            return step(x, id, "loop", fresh, x.unit());
         }
 
         /** What must be sent along a connection for {@code arrival} to arrive. */
@@ -748,7 +959,9 @@ final class FlowDemandPlanner {
         while (!queue.isEmpty()) {
             String next = queue.removeFirst();
             if (!after.add(next)) continue;
-            for (Connection connection : outgoing.getOrDefault(next, List.of())) queue.add(connection.to());
+            for (Connection connection : outgoing.getOrDefault(next, List.of())) {
+                if (!back.contains(connection.id())) queue.add(connection.to());
+            }
         }
         Set<String> before = new HashSet<>();
         ancestors(join, before);
@@ -846,10 +1059,26 @@ final class FlowDemandPlanner {
 
     // ---------------------------------------------------------------- forward
 
-    /** What the starts' amounts deliver to the target, routed as a run routes them ({@link FlowShares}). */
+    /**
+     * What the starts' amounts deliver to the target, routed as a run routes them ({@link FlowShares}). With loops, round after
+     * round: what comes back passes the entry again with what waits at input ports, up to {@link FlowShares#LOOP_PASSES} rounds
+     * (ADR-048 decision 3).
+     */
     private BigDecimal deliver(Map<String, Flow> supply) {
         Forward forward = new Forward(true, false, supply);
         for (String id : order) forward.evaluate(id, null);
+        BigDecimal delivered = delivered(forward);
+        for (int round = 2; round <= FlowShares.LOOP_PASSES && !loops.isEmpty(); round++) {
+            Map<String, Flow> returned = forward.returns();
+            if (returned.isEmpty()) break;
+            forward = new Forward(true, false, Map.of(), returned, forward.held());
+            for (String id : order) if (afterLoops.contains(id)) forward.evaluate(id, null);
+            delivered = delivered.add(delivered(forward));
+        }
+        return delivered;
+    }
+
+    private BigDecimal delivered(Forward forward) {
         Flow at;
         FlowDemand.Target target = request.target();
         if (target.portId() != null) {
@@ -870,14 +1099,54 @@ final class FlowDemandPlanner {
         private final boolean rounded;
         private final boolean asNeeded;
         private final Map<String, Flow> supply;
+        /** What came back to each loop's entry in the round before (ADR-048). */
+        private final Map<String, Flow> returned;
+        /** What waits at each input port from the round before: there but not used, in the port's unit. */
+        private final Map<String, BigDecimal> held;
+        private final Map<String, BigDecimal> offered = new HashMap<>();
         private final Map<String, Flow> arrived = new HashMap<>();
         private final Map<String, BigDecimal> batches = new HashMap<>();
         private final Map<String, Flow> through = new HashMap<>();
 
         Forward(boolean rounded, boolean asNeeded, Map<String, Flow> supply) {
+            this(rounded, asNeeded, supply, Map.of(), Map.of());
+        }
+
+        Forward(boolean rounded, boolean asNeeded, Map<String, Flow> supply, Map<String, Flow> returned,
+            Map<String, BigDecimal> held) {
             this.rounded = rounded;
             this.asNeeded = asNeeded;
             this.supply = supply;
+            this.returned = returned;
+            this.held = held;
+        }
+
+        /** What came back to each loop's entry this round. */
+        Map<String, Flow> returns() {
+            Map<String, Flow> back = new HashMap<>();
+            for (Loop loop : loops.values()) {
+                Flow total = null;
+                for (String id : loop.back()) {
+                    Flow flow = arrived.get(id);
+                    if (flow == null || flow.value().signum() <= 0) continue;
+                    total = total == null ? flow
+                        : new Flow(total.value().add(convert(flow.value(), flow.unit(), total.unit(), id)), total.unit());
+                }
+                if (total != null) back.put(loop.entry(), total);
+            }
+            return back;
+        }
+
+        /** What is left at each input port after this round: what was there less what its node's batches used. */
+        Map<String, BigDecimal> held() {
+            Map<String, BigDecimal> left = new HashMap<>();
+            offered.forEach((portId, amount) -> {
+                Port port = ports.get(portId);
+                BigDecimal k = batches.get(port.nodeId());
+                BigDecimal rest = k == null ? amount : amount.subtract(k.multiply(quantity(port), MC));
+                if (rest.signum() > 0) left.put(portId, rest);
+            });
+            return left;
         }
 
         /** {@code from}'s output for {@code amount} (batches, or what arrives), sent only into the region. */
@@ -913,6 +1182,8 @@ final class FlowDemandPlanner {
                             if (flow != null) available = available.add(convert(flow.value(), flow.unit(), input.unit(), connection.id()));
                         }
                     }
+                    available = available.add(held.getOrDefault(input.id(), BigDecimal.ZERO));
+                    offered.put(input.id(), available);
                     BigDecimal ratio = available.divide(q, MC);
                     k = k == null ? ratio : k.min(ratio);
                 }
@@ -934,6 +1205,11 @@ final class FlowDemandPlanner {
                 if (flow == null) continue;
                 total = total == null ? flow
                     : new Flow(total.value().add(convert(flow.value(), flow.unit(), total.unit(), connection.id())), total.unit());
+            }
+            Flow back = returned.get(id);
+            if (back != null) {
+                total = total == null ? back
+                    : new Flow(total.value().add(convert(back.value(), back.unit(), total.unit(), id)), total.unit());
             }
             if (total == null) return;
             through.put(id, total);
