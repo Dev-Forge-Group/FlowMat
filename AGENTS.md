@@ -11,6 +11,9 @@ GitHub contributors에 AI 도구 계정이 올라가지 않도록 커밋 메타�
 - 커밋의 author와 committer는 작업을 맡긴 사람의 Git 계정으로 한다. 실행 환경의 Git 사용자가 AI 도구 계정(예: `Claude <noreply@anthropic.com>`)이면 커밋 전에 저장소 설정(`git config user.name`, `git config user.email`)으로 바꾼다.
 - Claude Code는 `.claude/settings.json`의 `attribution` 설정으로 공동 작성자 표기와 세션 링크를 끈다.
 - `.github/workflows/commit-attribution.yml`이 PR과 기본 브랜치 push에서 이를 검사한다. 걸리면 해당 커밋의 트레일러나 작성자를 고친 뒤 다시 push한다.
+- 브랜치 이름에 AI 도구 이름을 넣지 않는다(`claude/…`, `codex/…` 등). 하는 일로 짓는다: `feat/…`, `fix/…`, `docs/…`, `chore/…`, `release/…`.
+- PR은 squash로 merge한다. 제목은 `<PR 제목> (#번호)`다. 그러면 기본 merge 커밋의 "Merge pull request … from <브랜치>" 줄이 이력에 남지 않고, GitHub가 서명한 커밋 하나가 된다.
+- 커밋 메시지, PR 제목·본문, 문서의 기록에 도구 이름(Claude, Codex)과 "에이전트·세션" 같은 작업 방식을 쓰지 않는다. 무엇을 왜 바꿨는지만 쓴다. 제품 기능으로서의 AI(예: AI 초안, AI 서비스)는 그대로 쓴다.
 
 ## 정본과 고치지 않는 곳
 

@@ -34,6 +34,7 @@
 4. **남용 막기.** API(`POST /process-drafts`)의 조건이다.
    - 로그인해야 한다.
    - 사람마다 시간당 10번까지다(`APP_AI_PROCESS_DRAFT_HOURLY_LIMIT`, Redis). 넘으면 429다.
+   - 서버 전체로 하루(UTC) 30번까지다(`APP_AI_PROCESS_DRAFT_DAILY_LIMIT`, 2026-11-24). 비용 상한이다. 검사에 걸린 답도 센다. 넘으면 429다.
    - 설명은 2,000자까지다.
 5. **개인정보.**
    - 켜면 적은 설명이 Anthropic의 API로 간다(국외 이전·위탁, [개인정보 목록](../../operations/personal-data.md) P7). 화면은 그 사실을 적는다.
@@ -45,7 +46,8 @@
 - `ProcessDraftCheckTest`: 올바른 초안은 통과한다. 단계 순서 어김, 모르는 단위, 제품이 아닌 목표는 걸린다.
 - `ClaudeProcessDraftModelTest`: 요청(모델, 메시지 하나, 구조화 출력)이 네트워크 없이 만들어진다.
 - `ProcessDraftIntegrationTest`: 꺼진 서버다. 로그인 없으면 401, 빈 설명은 400, 나머지는 503이다.
-- `ProcessDraftStubIntegrationTest`: 대신 답하는 모델로 본다. 검사를 통과한 초안은 200, 검사에 걸리는 초안은 502, 한도를 넘으면 429다.
+- `ProcessDraftStubIntegrationTest`: 대신 답하는 모델로 본다. 검사를 통과한 초안은 200, 검사에 걸리는 초안은 502, 한 사람의 시간 한도나 서버의 하루 한도를 넘으면 429다.
+- **켜기 전의 평가:** [평가 설계](../../domain/process-draft-evaluation.md). 운영 기본 켜기는 보류이고, 호출과 과금은 따로 승인받는다(2026-11-24 사용자 결정).
 - 모의 E2E `start-from-description.spec.ts`: 초안이 보이고, 만들기 전에는 쓰는 것이 없다. 만들면 연결과 시간 요건이 생긴다. 꺼진 서버에서는 안내가 뜬다.
 - **실제 모델로 돌려 보는 것은 키가 생긴 뒤에 한다.** 비용이 드는 호출이라 사람이 정한다.
 
