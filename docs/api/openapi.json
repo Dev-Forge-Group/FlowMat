@@ -9272,7 +9272,7 @@
             "type" : "string"
           }
         },
-        "required" : [ "password", "signupToken", "userBirth", "userId", "userName", "userNickname", "userTel" ],
+        "required" : [ "password", "signupToken", "userId", "userName", "userNickname", "userTel" ],
         "type" : "object"
       },
       "Operation" : {
@@ -14072,7 +14072,7 @@
             "type" : "string"
           }
         },
-        "required" : [ "password", "userBirth", "userEmail", "userId", "userName", "userNickname", "userTel" ],
+        "required" : [ "password", "userEmail", "userId", "userName", "userNickname", "userTel" ],
         "type" : "object"
       },
       "UserTokenResponse" : {

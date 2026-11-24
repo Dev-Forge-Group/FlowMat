@@ -9,6 +9,10 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.myweb.flowmat.domain.user.api.dto.request.UserLoginRequest;
+import org.myweb.flowmat.domain.user.api.dto.request.UserSignupRequest;
+import org.myweb.flowmat.domain.user.application.AuthRedisStore;
+import org.myweb.flowmat.domain.user.application.AuthService;
 import org.myweb.flowmat.domain.user.application.PersonalDataRetentionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,11 +21,28 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Personal data kept only as long as needed (docs/operations/personal-data.md P1, P2): a user who withdrew 31 days ago is
  * erased (row and login ID kept, name, contact, birth date, social link, face descriptor and login history gone), one who
  * withdrew 5 days ago is not yet, and login history older than a year goes for everyone. A second sweep changes nothing.
+ * A birth date is optional at signup (P5).
  */
 class PersonalDataRetentionIntegrationTest extends IntegrationTestSupport {
 
     @Autowired private PersonalDataRetentionService retention;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AuthService auth;
+    @Autowired private AuthRedisStore store;
+
+    /** A birth date is not needed to use FlowMat (P5): signing up without one works and asks for nothing more. */
+    @Test
+    void signingUpWithoutABirthDateWorks() {
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        String email = "nobirth-" + tag + "@test.local";
+        store.saveEmailCode(email, "246810", Duration.ofMinutes(5), Duration.ofSeconds(1));
+        assertThat(store.verifyEmailCode(email, "246810", Duration.ofMinutes(5))).isTrue();
+        auth.signup(new UserSignupRequest("nobirth-" + tag, "No Birth", "nb-" + tag, email,
+            "0107" + String.format("%07d", Math.abs(tag.hashCode()) % 10_000_000), null, "Passw0rd!2026"));
+        assertThat(jdbc.queryForObject("select user_birth from users where user_id = ?", java.sql.Date.class, "nobirth-" + tag)).isNull();
+        assertThat(auth.login(new UserLoginRequest("nobirth-" + tag, "Passw0rd!2026", null), "test", "10.0.0.9")
+            .additionalInfoRequired()).isFalse();
+    }
 
     @Test
     void aWithdrawnUserPastRetentionIsErasedAndOldLoginHistoryGoes() {

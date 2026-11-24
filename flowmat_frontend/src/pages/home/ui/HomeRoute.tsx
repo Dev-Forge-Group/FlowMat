@@ -552,7 +552,7 @@ export function HomeRoute() {
           userNickname: authNickname.trim(),
           userEmail: authEmail.trim(),
           userTel: authTel.trim(),
-          userBirth: authBirth,
+          userBirth: authBirth || null,
           password: authPassword,
         })
 
@@ -886,13 +886,12 @@ export function HomeRoute() {
 
                   <div>
                     <label className="mb-1.5 block text-[11px] font-medium text-[#8b899a]">
-                      Birth
+                      Birth (optional)
                     </label>
                     <input
                       type="date"
                       value={authBirth}
                       onChange={(event) => setAuthBirth(event.target.value)}
-                      required
                       className="w-full rounded-[9px] border border-[#2a2b35] bg-white/[0.02] px-3 py-2.5 text-sm text-[#e8e7ee] outline-none transition focus:border-[#a06bff] focus:bg-[#a06bff]/[0.03] focus:shadow-[0_0_0_3px_rgba(160,107,255,0.16)]"
                     />
                   </div>

@@ -253,8 +253,7 @@ public class FaceAuthServiceImpl implements FaceAuthService {
     private boolean isAdditionalInfoRequired(User user) {
         return user == null
             || user.getUserNickname() == null || user.getUserNickname().isBlank()
-            || user.getUserTel() == null || user.getUserTel().isBlank()
-            || user.getUserBirth() == null;
+            || user.getUserTel() == null || user.getUserTel().isBlank();
     }
 
     private String maskEmail(String email) {
