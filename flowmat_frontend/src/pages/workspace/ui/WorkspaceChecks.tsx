@@ -77,7 +77,7 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
 
   return (
     <>
-      <section aria-label="Workflow validation" style={{ margin: '12px 16px 0' }}>
+      <section aria-label="Workflow validation" className="workspace-checks" style={{ margin: '12px 16px 0' }}>
         <button type="button" onClick={check}>Check workflow</button>
         <EditorPublish workflowId={workflowId} projectId={canvas.workflow.projectId} editable={editable} onRefused={check} />
         <LiveValidationButton report={liveValidation} open={liveOpen} onToggle={() => setLiveOpen((open) => !open)} />
