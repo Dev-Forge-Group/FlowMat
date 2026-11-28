@@ -4,6 +4,7 @@ import { RequirementsSection } from './RequirementsSection'
 import { ProcessExecutionBindingSection } from './ProcessExecutionBindingSection'
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import { useItemsQuery } from '../../../entities/catalog/api/useItemsQuery'
+import { useUnitsQuery } from '../../../entities/catalog/api/useUnitsQuery'
 import { getWorkflowNodeDefinition, getWorkflowPaletteDefinitions } from '../../../entities/workflow/model/nodeCatalog'
 import {
   applyItemDefaults,
@@ -70,6 +71,8 @@ export function NodeInspector({
 
   const projectId = node?.projectId ?? ''
   const itemsQuery = useItemsQuery(projectId)
+  // Inactive units too, so an item that still uses one gets its code.
+  const units = useUnitsQuery(true).data ?? []
   const itemOptions = itemsQuery.data ?? []
   const allPorts = useMemo(() => (node ? [...node.inputs, ...node.outputs] : []), [node])
 
@@ -154,7 +157,8 @@ export function NodeInspector({
 
   function handleItemChange(itemId: string) {
     const nextItem = itemOptions.find((item) => item.itemId === itemId)
-    setPortForm((current) => applyItemDefaults({ ...current, itemId }, nextItem))
+    const unitCode = units.find((unit) => unit.unitId === nextItem?.unitId)?.unitCode
+    setPortForm((current) => applyItemDefaults({ ...current, itemId }, nextItem, unitCode))
   }
 
   return (

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDefaultPortFormState, hasValidPortSelection, portNeedsMeasure, toCreateProcessIoInput, toPortFormState, toUpdateProcessIoInput,
+  applyItemDefaults, createDefaultPortFormState, hasValidPortSelection, portNeedsMeasure, toCreateProcessIoInput, toPortFormState,
+  toUpdateProcessIoInput,
 } from './portPolicy'
+import type { ItemDto } from '../../../shared/types/api'
 import { toPortViewModel } from './toWorkflowCanvasViewModel'
 import type { ProcessIoDto } from '../../../shared/types/api'
 
@@ -121,5 +123,15 @@ describe('port contract form', () => {
     })
     expect(toUpdateProcessIoInput({ ...state, schemaJson: '{"type":"object"}' }))
       .toMatchObject({ clearSchema: false, schemaJson: { type: 'object' } })
+  })
+
+  it('takes an item\'s name and unit code, not its unit id, where the port has none yet', () => {
+    const milk = { itemId: 'itm-milk', itemName: 'Raw milk', unitId: 'unit_kg' } as ItemDto
+    const blank = createDefaultPortFormState('input')
+    expect(applyItemDefaults(blank, milk, 'kg')).toMatchObject({ itemId: 'itm-milk', ioName: 'Raw milk', unit: 'kg' })
+    // Without the code (units not loaded yet) the unit stays empty rather than taking the id.
+    expect(applyItemDefaults(blank, milk, undefined).unit).toBe('')
+    // What the user already typed stays.
+    expect(applyItemDefaults({ ...blank, ioName: 'Milk in', unit: 'l' }, milk, 'kg')).toMatchObject({ ioName: 'Milk in', unit: 'l' })
   })
 })
