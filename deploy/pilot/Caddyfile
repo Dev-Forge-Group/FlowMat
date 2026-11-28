@@ -1,0 +1,31 @@
+# One site: the screens (built with Vite) and the API under /api (the application's context path).
+# Caddy gets and renews the certificate for FLOWMAT_DOMAIN by itself; ports 80 and 443 must reach this machine.
+# With FLOWMAT_DOMAIN=localhost it uses its own local certificate instead (the rehearsal in pilot-deployment.md §6).
+{$FLOWMAT_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# REST, OAuth2 and the collaboration websocket all live under /api.
+	handle /api/* {
+		reverse_proxy app:8080
+	}
+
+	# Built files have hashed names and never change; everything else (index.html above all) is read again after a release.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@pages not path /assets/* /api/*
+	header @pages Cache-Control "no-cache"
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

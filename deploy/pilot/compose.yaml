@@ -1,0 +1,96 @@
+# Pilot deployment on one machine (docs/operations/pilot-deployment-options.md, option A; steps in
+# docs/operations/pilot-deployment.md). Caddy is the only service with public ports: it gets the TLS certificate, serves
+# the built screens and passes /api to the application. PostgreSQL, Redis and the application's management port stay on
+# this Compose network.
+#
+# Settings come from .env next to this file (copy env.example, chmod 600). The application reads the same file, so a
+# setting added there reaches it; the lines under app.environment are worked out here and win.
+# release/ holds what package.sh builds: app.jar and web/.
+name: flowmat-pilot
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4
+    restart: unless-stopped
+    # Refresh tokens and login failure counts survive a restart.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: eclipse-temurin:21-jre
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Not root. The uploads folder must belong to this id (pilot-deployment.md §3).
+    user: '1000:1000'
+    env_file: .env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      FRONTEND_URL: https://${FLOWMAT_DOMAIN:?Set FLOWMAT_DOMAIN in .env}
+      APP_OAUTH2_REDIRECT_URI: https://${FLOWMAT_DOMAIN}/oauth2/success
+      APP_CORS_ALLOWED_ORIGINS: https://${FLOWMAT_DOMAIN}
+      STORAGE_TYPE: local
+      STORAGE_UPLOAD_DIR: /var/lib/flowmat/uploads
+    command: ['sh', '-c', 'exec java $${APP_JAVA_OPTS:--Xms256m -Xmx1g} -jar /opt/flowmat/app.jar --spring.profiles.active=prod']
+    volumes:
+      - ./release/app.jar:/opt/flowmat/app.jar:ro
+      - ./uploads:/var/lib/flowmat/uploads
+    healthcheck:
+      # The prod profile serves the actuator only on the management port, which nothing outside this network reaches.
+      # Readiness, not the whole health: that one also counts the mail server, which is down for reasons of its own.
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8081/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 10
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      FLOWMAT_DOMAIN: ${FLOWMAT_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./release/web:/srv:ro
+      - caddydata:/data
+      - caddyconfig:/config
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
