@@ -51,6 +51,11 @@ test('the editor publishes a revision, or shows the check that stopped it', asyn
   await page.goto('/projects/prj-e2e/workflows/wf-pub')
   const check = page.getByRole('region', { name: 'Workflow validation' })
   await expect(check).toContainText('Latest: v1 published by demo-owner', { timeout: 15_000 })
+  // The row's buttons look like buttons, not plain words (the base layer strips button chrome).
+  for (const name of ['Check workflow', 'Publish revision', 'Try it', 'Plan']) {
+    expect(await check.getByRole('button', { name, exact: true }).evaluate((button) => getComputedStyle(button).borderTopWidth))
+      .toBe('1px')
+  }
 
   await check.getByRole('button', { name: 'Publish revision' }).click()
   await expect(check.getByRole('alert')).toHaveText('Workflow has 1 error(s): Mixer has no output.')

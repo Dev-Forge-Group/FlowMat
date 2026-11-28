@@ -1518,6 +1518,44 @@ code {
   display: none;
 }
 
+/* The row of checks above the canvas (WorkspaceChecks.tsx): Check workflow, Publish revision, Try it and Plan look like
+   buttons (the base layer strips button chrome), and an open panel's button shows it is open. */
+.workspace-checks > button:not(.live-check),
+.workspace-checks > span > button {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px 12px;
+  margin: 0 8px 4px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.workspace-checks > button:not(.live-check):hover:not(:disabled),
+.workspace-checks > span > button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.workspace-checks > button[aria-expanded='true']:not(.live-check) {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.workspace-checks > .live-check {
+  margin: 0 8px 4px 0;
+}
+
+.workspace-checks button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+:root[data-theme='dark'] .workspace-checks > button:not(.live-check),
+:root[data-theme='dark'] .workspace-checks > span > button {
+  border-color: #3a3d4a;
+  background: #1f2028;
+}
+
 /* The check as drawn (LiveValidation.tsx): one line that turns red while the drawing has errors. */
 .live-check {
   border: 1px solid #cbd5e1;
