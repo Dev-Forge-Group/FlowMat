@@ -110,6 +110,12 @@ h2 {
   color: var(--text-h);
 }
 
+/* The home page is drawn dark whatever the theme, so its headings keep the page's own color instead of the theme's. */
+.home-page h1,
+.home-page h2 {
+  color: inherit;
+}
+
 h1 {
   font-size: 56px;
   letter-spacing: -1.68px;

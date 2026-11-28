@@ -156,7 +156,7 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
   const initials = (currentUser?.userName ?? '?').trim().slice(0, 2).toUpperCase()
 
   return (
-    <div className="min-h-[100svh] bg-[#12131a] px-4 py-8 pb-40 text-[#f2f1f6] sm:px-8">
+    <div className="home-page min-h-[100svh] bg-[#12131a] px-4 py-8 pb-40 text-[#f2f1f6] sm:px-8">
       <div className="mx-auto max-w-[1080px]">
         <header className="mb-10 flex items-center justify-between">
           <div className="text-[17px] font-extrabold tracking-tight">
