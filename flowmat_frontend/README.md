@@ -17,6 +17,7 @@ npm run dev        # http://localhost:5173, proxies /api to http://localhost:808
 ```
 
 The dev profile seeds a demo account: **demo-owner / demo1234** (project `prj_demo_main`).
+The login screen names it on the dev server only; a build for a demo server whose backend runs the dev profile shows it with `VITE_SHOW_DEMO_LOGIN=true npm run build`. Production builds leave it out, because the prod profile has no such account.
 
 ## Checks (same as CI)
 
