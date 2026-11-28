@@ -73,13 +73,17 @@ export function portNeedsMeasure(state: Pick<PortFormState, 'resourceType' | 'io
   return type === 'material' || type === 'product' || Boolean(state.itemId.trim())
 }
 
-export function applyItemDefaults(state: PortFormState, item: ItemDto | undefined): PortFormState {
+/**
+ * A port bound to an item takes the item's name and unit where they are still empty. The unit is the unit's code
+ * (`kg`), which ports and plans use, not the item's unit id (`unit_kg`); left empty while the code is not known.
+ */
+export function applyItemDefaults(state: PortFormState, item: ItemDto | undefined, unitCode?: string | null): PortFormState {
   if (!item) return state
   return {
     ...state,
     itemId: item.itemId,
     ioName: state.ioName || item.itemName,
-    unit: state.unit || item.unitId || '',
+    unit: state.unit || unitCode || '',
   }
 }
 
