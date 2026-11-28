@@ -65,7 +65,8 @@ services:
       - ./uploads:/var/lib/flowmat/uploads
     healthcheck:
       # The prod profile serves the actuator only on the management port, which nothing outside this network reaches.
-      test: ['CMD', 'curl', '-fsS', 'http://localhost:8081/actuator/health']
+      # Readiness, not the whole health: that one also counts the mail server, which is down for reasons of its own.
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8081/actuator/health/readiness']
       interval: 15s
       timeout: 5s
       start_period: 120s
