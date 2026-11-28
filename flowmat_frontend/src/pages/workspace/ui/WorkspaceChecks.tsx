@@ -18,6 +18,7 @@ import { LiveValidation, LiveValidationButton } from './LiveValidation'
 import { PlanPanel } from './PlanPanel'
 import { TryFlowPanel } from './TryFlowPanel'
 import { ValidationIssueList } from './ValidationIssueList'
+import { t } from '../../../shared/i18n/t'
 
 interface Props {
   canvas: WorkflowCanvasViewModel
@@ -77,21 +78,21 @@ export function WorkspaceChecks({ canvas, editable, measureLayout, nameOf, revea
 
   return (
     <>
-      <section aria-label="Workflow validation" className="workspace-checks" style={{ margin: '12px 16px 0' }}>
-        <button type="button" onClick={check}>Check workflow</button>
+      <section aria-label={t('Workflow validation')} className="workspace-checks" style={{ margin: '12px 16px 0' }}>
+        <button type="button" onClick={check}>{t('Check workflow')}</button>
         <EditorPublish workflowId={workflowId} projectId={canvas.workflow.projectId} editable={editable} onRefused={check} />
         <LiveValidationButton report={liveValidation} open={liveOpen} onToggle={() => setLiveOpen((open) => !open)} />
-        <button type="button" aria-expanded={tryOpen} onClick={() => setTryOpen((open) => !open)}>Try it</button>
-        <button type="button" aria-expanded={planOpen} onClick={() => setPlanOpen((open) => !open)}>Plan</button>
+        <button type="button" aria-expanded={tryOpen} onClick={() => setTryOpen((open) => !open)}>{t('Try it')}</button>
+        <button type="button" aria-expanded={planOpen} onClick={() => setPlanOpen((open) => !open)}>{t('Plan')}</button>
         {showValidation && (
           <div role="status" style={{ marginTop: 8 }}>
-            {validationQuery.isPending && <p>Checking workflow...</p>}
+            {validationQuery.isPending && <p>{t('Checking workflow...')}</p>}
             {validationQuery.isError && <p role="alert">{validationQuery.error.message}</p>}
             {updatePort.isError && <p role="alert">{updatePort.error.message}</p>}
             {validationQuery.data && (
               <>
-                <p>{validationQuery.data.errors} errors, {validationQuery.data.warnings} warnings</p>
-                {validationQuery.data.issues.length === 0 && <p>No issues found.</p>}
+                <p>{t('{errors} errors, {warnings} warnings', { errors: validationQuery.data.errors, warnings: validationQuery.data.warnings })}</p>
+                {validationQuery.data.issues.length === 0 && <p>{t('No issues found.')}</p>}
                 <ValidationIssueList issues={validationQuery.data.issues} nameOf={nameOf} onSelect={selectIssue}
                   onTakeFromStock={takeFromStock} />
               </>

@@ -90,6 +90,18 @@ body {
   color: #fff;
 }
 
+/* Theme and language share the pill; a thin divider sits before the language buttons. */
+.theme-switcher__group {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.theme-switcher__group--language {
+  margin-left: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
 #root {
   width: 100%;
   max-width: 100%;
@@ -1596,6 +1608,24 @@ code {
 .layout-warnings__list {
   max-height: 160px;
   overflow-y: auto;
+}
+
+/* A one-click fix under its issue (the base layer strips button chrome, so it is drawn here). */
+.validation-issues__action {
+  display: block;
+  margin: 4px 0 0;
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.validation-issues__action:hover {
+  background: var(--accent);
+  color: #fff;
 }
 
 .validation-issues__fixes {

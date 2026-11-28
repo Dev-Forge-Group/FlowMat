@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import type { WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import { evidenceRows, fixableCount, issueFixes, issueHides, sortedValidationIssues } from '../model/validationPanelModel'
+import { issueTitle, severityWord, t } from '../../../shared/i18n/t'
 
 /**
  * The workflow check's issues, errors first (archify's diagnostic shape). Each issue's button selects what it is about;
@@ -18,7 +19,7 @@ export function ValidationIssueList({ issues, nameOf, onSelect, onTakeFromStock 
   const fixable = fixableCount(issues)
   return (
     <>
-      {fixable > 0 && <p className="inspector-hint">{fixable} with a suggested fix</p>}
+      {fixable > 0 && <p className="inspector-hint">{t('{count} with a suggested fix', { count: fixable })}</p>}
       <ul className="validation-issues">
         {sortedValidationIssues(issues).map((issue, index) => {
           const fixes = issueFixes(issue)
@@ -26,28 +27,29 @@ export function ValidationIssueList({ issues, nameOf, onSelect, onTakeFromStock 
           const rows = evidenceRows(issue.evidence, nameOf)
           return (
             <li key={`${issue.code}-${issue.connectionId ?? issue.ioId ?? issue.processId ?? ''}-${index}`}>
-              <button type="button" onClick={() => onSelect(issue)}>
-                {issue.severity}: {issue.code} — {issue.message}
+              <button type="button" onClick={() => onSelect(issue)} title={issue.code}>
+                {severityWord(issue.severity)}: {issueTitle(issue.code) ?? issue.code} — {issue.message}
               </button>
               {onTakeFromStock && issue.code === 'REQUIRED_INPUT_UNCONNECTED' && issue.ioId && (
-                <button type="button" onClick={() => onTakeFromStock(issue.ioId as string)}>
-                  Take it from stock (not required)
+                <button type="button" className="validation-issues__action" onClick={() => onTakeFromStock(issue.ioId as string)}>
+                  {t('Take it from stock (not required)')}
                 </button>
               )}
               {fixes.length > 0 && (
-                <ul className="validation-issues__fixes" aria-label="Suggested fixes">
-                  {fixes.map((fix) => <li key={fix}>Fix: {fix}</li>)}
+                <ul className="validation-issues__fixes" aria-label={t('Suggested fixes')}>
+                  {fixes.map((fix) => <li key={fix}>{t('Fix: {fix}', { fix })}</li>)}
                 </ul>
               )}
               {hides.length > 0 && (
                 <p className="validation-issues__hides">
-                  Also explains {hides.length === 1 ? 'a warning' : `${hides.length} warnings`} not listed separately:{' '}
+                  {hides.length === 1 ? t('Also explains a warning not listed separately:')
+                    : t('Also explains {count} warnings not listed separately:', { count: hides.length })}{' '}
                   {hides.join(', ')}
                 </p>
               )}
               {rows.length > 0 && (
                 <details className="validation-issues__evidence">
-                  <summary>Evidence</summary>
+                  <summary>{t('Evidence')}</summary>
                   <dl>
                     {rows.map((row) => (
                       <Fragment key={row.key}>

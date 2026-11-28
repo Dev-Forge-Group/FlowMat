@@ -7,6 +7,7 @@ import {
 import { errorMessage } from '../../../shared/lib/errorMessage'
 import type { WorkflowRevisionDetailDto } from '../../../shared/types/api'
 import { latestPublished, revisionLine } from '../../runs/model/revisionModel'
+import { t } from '../../../shared/i18n/t'
 
 /**
  * Publishes the workflow from the editor (docs/domain/workflow-revision.md V8): what is saved becomes the next revision once
@@ -28,20 +29,20 @@ export function EditorPublish({ workflowId, projectId, editable, onRefused }: {
   return (
     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 8 }}>
       <button type="button" disabled={!editable || publish.isPending}
-        title={editable ? 'Publish what is saved as a new revision; runs start from published revisions' : 'Viewers cannot publish'}
+        title={editable ? t('Publish what is saved as a new revision; runs start from published revisions') : t('Viewers cannot publish')}
         onClick={() => {
           setPublished(null)
           publish.mutate(undefined, { onSuccess: setPublished, onError: onRefused })
         }}>
-        {publish.isPending ? 'Publishing...' : 'Publish revision'}
+        {publish.isPending ? t('Publishing...') : t('Publish revision')}
       </button>
       <span className="inspector-hint" style={{ fontSize: 12 }}>
-        {latest ? `Latest: v${latest.revisionNo} ${revisionLine(latest)}` : 'Not published yet'}
+        {latest ? t('Latest: v{no} {line}', { no: latest.revisionNo, line: revisionLine(latest) }) : t('Not published yet')}
       </span>
       {published && (
         <span role="status" style={{ fontSize: 12, color: '#047857' }}>
-          Published v{published.revisionNo}.{' '}
-          <Link to={`/projects/${encodeURIComponent(projectId)}/runs?workflowId=${encodeURIComponent(workflowId)}`}>Start a run</Link>
+          {t('Published v{no}.', { no: published.revisionNo })}{' '}
+          <Link to={`/projects/${encodeURIComponent(projectId)}/runs?workflowId=${encodeURIComponent(workflowId)}`}>{t('Start a run')}</Link>
         </span>
       )}
       {publish.isError && (
