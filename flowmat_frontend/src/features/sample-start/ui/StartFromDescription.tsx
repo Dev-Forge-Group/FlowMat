@@ -1,19 +1,21 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { errorMessage, errorStatus } from '../../../shared/lib/errorMessage'
-import { draftToSpec, requestDraft, type ProcessDraft } from '../model/draft'
+import { draftToSpec, fetchDraftAvailability, requestDraft, type ProcessDraft } from '../model/draft'
 import { buildSample } from '../model/samples'
 
 /**
  * A first process from what the person makes, in their own words (docs/architecture/adr/ADR-047-process-draft-from-a-description.md,
  * ROADMAP §5 7 ①): the server drafts and checks it, the person reads it, and only then is it built in a new project the
- * same way as a sample. Works only where the server has drafting turned on; the samples stay the way in without it.
+ * same way as a sample. Shown only where the server has drafting turned on; the samples stay the way in without it, so a
+ * first-time user is never offered a button that can only fail.
  */
 export function StartFromDescription({ ownerId }: { ownerId: string | undefined }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [description, setDescription] = useState('')
+  const availability = useQuery({ queryKey: ['process-draft-availability'], queryFn: fetchDraftAvailability, staleTime: 5 * 60 * 1000 })
   const draft = useMutation({ mutationFn: requestDraft })
   const build = useMutation({
     mutationFn: ({ value, owner }: { value: ProcessDraft; owner: string }) => buildSample(draftToSpec(value), owner),
@@ -23,6 +25,8 @@ export function StartFromDescription({ ownerId }: { ownerId: string | undefined 
   const name = (code: string) => draft.data?.items.find((item) => item.code === code)
   const flows = (list: { item: string; quantity: number }[]) =>
     list.map((flow) => `${name(flow.item)?.name ?? flow.item} ${flow.quantity} ${name(flow.item)?.unit ?? ''}`.trim()).join(' + ')
+
+  if (availability.data !== true) return null
 
   return (
     <section aria-label="설명으로 시작" className="flex h-full min-w-0 flex-col rounded-2xl bg-[#1a1b24] p-5 sm:col-span-2">

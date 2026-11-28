@@ -33,6 +33,11 @@ public class ProcessDraftService {
     @Value("${app.ai.process-draft.daily-limit:30}")
     private int dailyLimit;
 
+    /** Whether drafting is set up here, so the screen offers it only where it works (ADR-047 decision 6). */
+    public boolean available() {
+        return model.getIfAvailable() != null;
+    }
+
     public ProcessDraftResponse draft(String description) {
         String userId = projectAccess.requireCurrentUserId();
         ProcessDraftModel drafter = model.getIfAvailable();

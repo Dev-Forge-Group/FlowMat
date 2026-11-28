@@ -2730,6 +2730,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseProcessDraftAvailability" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProcessDraftAvailability"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProcessDraftResponse" : {
         "properties" : {
           "data" : {
@@ -10321,6 +10335,14 @@
           }
         },
         "required" : [ "processName", "workflowId" ],
+        "type" : "object"
+      },
+      "ProcessDraftAvailability" : {
+        "properties" : {
+          "available" : {
+            "type" : "boolean"
+          }
+        },
         "type" : "object"
       },
       "ProcessDraftRequest" : {
@@ -22529,6 +22551,23 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseProcessDraftResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "process-draft-controller" ]
+      }
+    },
+    "/process-drafts/availability" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProcessDraftAvailability"
                 }
               }
             },

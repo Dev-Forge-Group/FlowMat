@@ -4,7 +4,7 @@ import { answerAuth, mockedLogin, ok } from './support/mockApi'
 /**
  * Start from a description (docs/architecture/adr/ADR-047-process-draft-from-a-description.md) against a mocked API: the
  * draft is shown before anything is made, then built in a new project like a sample, with a connection wherever a step
- * takes what an earlier step made. A server without drafting says so and points at the samples.
+ * takes what an earlier step made. A server without drafting shows no card at all, only the samples.
  */
 const DRAFT = {
   title: 'Melon milk', summary: 'Mix milk and syrup, then fill bottles.',
@@ -22,6 +22,7 @@ test('a description becomes a draft, then a process in a new project', async ({ 
     const request = route.request()
     const { pathname } = new URL(request.url())
     if (await answerAuth(route, pathname)) return
+    if (pathname === '/api/process-drafts/availability') return ok(route, { available: true })
     if (request.method() === 'GET') return ok(route, [])
     const body = (request.postDataJSON() ?? {}) as Record<string, unknown>
     if (pathname === '/api/process-drafts') return ok(route, DRAFT)
@@ -51,19 +52,17 @@ test('a description becomes a draft, then a process in a new project', async ({ 
     .toEqual({ requirements: [{ kind: 'time', amount: 30, unit: 'min' }] })
 })
 
-test('a server without drafting points at the samples', async ({ page }) => {
+test('a server without drafting shows only the samples', async ({ page }) => {
+  const drafts: string[] = []
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const { pathname } = new URL(route.request().url())
     if (await answerAuth(route, pathname)) return
-    if (pathname === '/api/process-drafts') {
-      return route.fulfill({ status: 503, contentType: 'application/json',
-        body: JSON.stringify({ success: false, data: null, message: 'Drafting from a description is not set up on this server.' }) })
-    }
+    if (pathname === '/api/process-drafts/availability') return ok(route, { available: false })
+    if (pathname === '/api/process-drafts') drafts.push(pathname)
     return ok(route, [])
   })
   await mockedLogin(page)
-  const card = page.getByRole('region', { name: '설명으로 시작' })
-  await card.getByLabel('만드는 것').fill('Melon milk')
-  await card.getByRole('button', { name: '초안 만들기' }).click()
-  await expect(card.getByRole('alert')).toHaveText('이 서버에는 설명으로 시작이 켜져 있지 않습니다. 견본으로 시작해 보세요.')
+  await expect(page.getByRole('region', { name: '견본으로 시작' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('region', { name: '설명으로 시작' })).toHaveCount(0)
+  expect(drafts).toHaveLength(0)
 })

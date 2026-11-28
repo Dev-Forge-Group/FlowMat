@@ -1,5 +1,6 @@
 package org.myweb.flowmat;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +52,8 @@ class ProcessDraftStubIntegrationTest extends IntegrationTestSupport {
     void aCheckedDraftComesBackAndABadOneOrTooManyDoNot() throws Exception {
         redis.delete("ai:process-draft:day:" + LocalDate.now(ZoneOffset.UTC));
         String user = "draft-" + UUID.randomUUID().toString().substring(0, 8);
+        mockMvc.perform(get("/process-drafts/availability").header("Authorization", "Bearer " + jwtProvider.generateAccessToken(user)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.available").value(true));
         call(user, "We bottle melon milk.").andExpect(status().isOk())
             .andExpect(jsonPath("$.data.steps[0].name").value("Mix"))
             .andExpect(jsonPath("$.data.target.item").value("MELON-MILK"));
