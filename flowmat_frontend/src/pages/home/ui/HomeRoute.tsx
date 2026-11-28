@@ -28,6 +28,7 @@ import {
 import { preloadWorkspaceExperience } from '../../workspace/ui/workspacePreload'
 import { StartFromSample } from '../../../features/sample-start/ui/StartFromSample'
 import { StartFromDescription } from '../../../features/sample-start/ui/StartFromDescription'
+import { showsDemoLogin } from '../model/demoLogin'
 
 type DashboardProps = {
   onLogout: () => void
@@ -1001,9 +1002,11 @@ export function HomeRoute() {
             </div>
           </form>
 
-          <p className="mt-3.5 text-center font-mono text-[11px] text-[#5a5866]">
-            demo-owner / demo1234
-          </p>
+          {showsDemoLogin(import.meta.env) && (
+            <p className="mt-3.5 text-center font-mono text-[11px] text-[#5a5866]">
+              demo-owner / demo1234
+            </p>
+          )}
         </div>
       </div>
     )
