@@ -117,6 +117,12 @@ async function mockAuthApi(page: Page) {
 }
 
 async function mockWorkspaceApi(page: Page) {
+  // The home screen asks whether this server drafts from a description (off here; ADR-047).
+  await page.route('**/api/process-drafts/availability', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: { available: false }, message: null }) })
+  })
+
   await page.route('**/api/processes/process-e2e/execution-policy', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ success: true, data: {

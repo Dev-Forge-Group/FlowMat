@@ -25,6 +25,12 @@ const UNIT_IDS: Record<string, string> = {
   kg: 'unit_kg', g: 'unit_g', t: 'unit_t', l: 'unit_l', ml: 'unit_ml', ea: 'unit_ea', m: 'unit_m', cm: 'unit_cm', mm: 'unit_mm',
 }
 
+/** Whether this server drafts at all (ADR-047); the home screen shows the card only where it works. */
+export async function fetchDraftAvailability(): Promise<boolean> {
+  const answer = unwrapApiResponse(await httpClient.get<ApiEnvelope<{ available: boolean }>>('/process-drafts/availability'))
+  return answer?.available === true
+}
+
 export async function requestDraft(description: string): Promise<ProcessDraft> {
   return unwrapApiResponse(await httpClient.post<ApiEnvelope<ProcessDraft>>('/process-drafts', { description }))
 }
