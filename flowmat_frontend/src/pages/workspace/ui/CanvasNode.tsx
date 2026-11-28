@@ -16,6 +16,7 @@ import {
 import { useWorkspaceStore } from '../model/workspaceStore'
 import { useCanvasInteractionStore } from '../model/canvasInteractionStore'
 import { issueMarkLabel, useIssueMarksStore } from '../model/issueMarks'
+import { portStackHeight } from '../model/nodeHeight'
 
 const COLOR_MAP: Record<string, string> = {
   sky: '#0ea5e9',
@@ -281,7 +282,7 @@ export function CanvasNode({ data: node, selected }: CanvasNodeComponentProps) {
       <NodeResizer
         isVisible={selected}
         minWidth={120}
-        minHeight={60}
+        minHeight={Math.max(60, portStackHeight(node.inputs.length, node.outputs.length))}
         lineStyle={{ borderColor: 'var(--accent)', borderWidth: 1 }}
         handleStyle={{
           width: 8,

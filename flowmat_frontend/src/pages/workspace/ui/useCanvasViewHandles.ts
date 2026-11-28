@@ -42,7 +42,7 @@ export function useCanvasViewHandles(instance: ReactFlowInstance | null,
         void instance.zoomTo(nextZoomStep(instance.getZoom(), direction), { duration: motionStill() ? 0 : 200 })
       },
       reset() {
-        void instance.fitView({ padding: 0.15, duration: motionStill() ? 0 : 300 })
+        void instance.fitView({ padding: 0.15, maxZoom: 1, duration: motionStill() ? 0 : 300 })
       },
     })
   }, [onCameraReady, instance])

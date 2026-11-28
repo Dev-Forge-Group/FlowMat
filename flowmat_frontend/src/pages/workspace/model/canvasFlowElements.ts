@@ -1,4 +1,5 @@
 import type { CanvasEdgeViewModel, CanvasNodeViewModel, ConnectCompletePayload } from '../../../entities/workflow/model/types'
+import { nodeDisplayHeight } from './nodeHeight'
 
 /** The canvas's processes and connections as React Flow holds them; the view model rides along as data. */
 
@@ -31,7 +32,7 @@ export function toRfProcessNodes(nodes: CanvasNodeViewModel[], selectedId: strin
     type: 'flowmatNode' as const,
     position: n.position,
     width: n.size.width,
-    height: n.size.height,
+    height: nodeDisplayHeight(n),
     selected: n.id === selectedId,
     data: n,
   }))
