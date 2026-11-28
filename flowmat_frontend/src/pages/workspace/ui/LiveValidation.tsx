@@ -1,6 +1,7 @@
 import type { KernelValidation } from '../../../shared/lib/flowKernel'
 import type { WorkflowValidationIssue } from '../../../entities/workflow/api/useWorkflowValidationQuery'
 import { ValidationIssueList } from './ValidationIssueList'
+import { t } from '../../../shared/i18n/t'
 
 /**
  * The workflow check as drawn (ADR-040 decision 7): the same rules and messages as "Check workflow", worked out in the
@@ -15,7 +16,7 @@ export function LiveValidationButton({ report, open, onToggle }: {
   return (
     <button type="button" aria-expanded={open} onClick={onToggle}
       className={report.errors > 0 ? 'live-check live-check--errors' : 'live-check'}>
-      {`As drawn: ${report.errors} errors, ${report.warnings} warnings`}
+      {t('As drawn: {errors} errors, {warnings} warnings', { errors: report.errors, warnings: report.warnings })}
     </button>
   )
 }
@@ -29,9 +30,9 @@ export function LiveValidation({ report, nameOf, onSelect, onTakeFromStock }: {
 }) {
   if (!report) return null
   return (
-    <section aria-label="Check as drawn" style={{ margin: '8px 16px 0' }}>
+    <section aria-label={t('Check as drawn')} style={{ margin: '8px 16px 0' }}>
       {report.issues.length === 0
-        ? <p>Nothing to fix as drawn.</p>
+        ? <p>{t('Nothing to fix as drawn.')}</p>
         : <ValidationIssueList issues={report.issues} nameOf={nameOf} onSelect={onSelect} onTakeFromStock={onTakeFromStock} />}
     </section>
   )

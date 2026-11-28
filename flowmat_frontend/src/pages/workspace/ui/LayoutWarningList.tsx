@@ -1,4 +1,5 @@
 import { layoutWarningText, type LayoutWarning } from '../model/layoutChecks'
+import { severityWord, t } from '../../../shared/i18n/t'
 
 /**
  * The layout warnings from the last workflow check (layoutChecks.ts): lines over a process they do not join and lines that
@@ -12,11 +13,12 @@ export function LayoutWarningList({ warnings, nameOf, onSelect }: {
 }) {
   if (!warnings) return null
   return (
-    <section aria-label="Layout" className="layout-warnings">
+    <section aria-label={t('Layout')} className="layout-warnings">
       <p>
         {warnings.length === 0
-          ? 'Layout: no line passes over a process or crosses another.'
-          : `Layout: ${warnings.length} ${warnings.length === 1 ? 'warning' : 'warnings'}, measured from the canvas as drawn.`}
+          ? t('Layout: no line passes over a process or crosses another.')
+          : warnings.length === 1 ? t('Layout: 1 warning, measured from the canvas as drawn.')
+            : t('Layout: {count} warnings, measured from the canvas as drawn.', { count: warnings.length })}
       </p>
       {warnings.length > 0 && (
         <ul className="layout-warnings__list">
@@ -26,7 +28,7 @@ export function LayoutWarningList({ warnings, nameOf, onSelect }: {
             return (
               <li key={`${warning.code}-${key}-${index}`}>
                 <button type="button" onClick={() => onSelect(warning)}>
-                  warning: {warning.code} — {layoutWarningText(warning, nameOf)}
+                  {severityWord('warning')}: {warning.code} — {layoutWarningText(warning, nameOf)}
                 </button>
               </li>
             )
