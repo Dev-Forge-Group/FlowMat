@@ -145,6 +145,7 @@ export const ko: Record<string, string> = {
   'Y — must be connected': 'Y — 반드시 연결',
   'N — from stock, or not needed': 'N — 재고에서 가져오거나 필요 없음',
   'Allow Shortage': '부족 허용',
+  'More settings': '더 보기',
 
   // Inventory: header and tabs
   'Back to the flow': '공정도로 돌아가기',

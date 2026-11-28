@@ -1610,6 +1610,40 @@ code {
   overflow-y: auto;
 }
 
+/* Inspector buttons (node, port, connection, requirements). The base layer strips button chrome, so Create Port and
+   Add Input read as plain text without this. Port rows keep their own look; inline colors (Delete) still win. */
+.inspector button:not(.inspector__port-row) {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.inspector button:not(.inspector__port-row):hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.inspector button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+:root[data-theme='dark'] .inspector button:not(.inspector__port-row) {
+  border-color: #3a3d4a;
+  background: #1f2028;
+}
+
+/* The port form's less common fields (NodeInspector): folded for a plain material port with an item. */
+.inspector__more > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* A one-click fix under its issue (the base layer strips button chrome, so it is drawn here). */
 .validation-issues__action {
   display: block;
