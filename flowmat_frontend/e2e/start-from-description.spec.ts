@@ -21,8 +21,9 @@ test('a description becomes a draft, then a process in a new project', async ({ 
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request()
     const { pathname } = new URL(request.url())
-    if (await answerAuth(route, pathname)) return
+    // Before answerAuth, which answers this server as one without drafting.
     if (pathname === '/api/process-drafts/availability') return ok(route, { available: true })
+    if (await answerAuth(route, pathname)) return
     if (request.method() === 'GET') return ok(route, [])
     const body = (request.postDataJSON() ?? {}) as Record<string, unknown>
     if (pathname === '/api/process-drafts') return ok(route, DRAFT)
@@ -56,8 +57,8 @@ test('a server without drafting shows only the samples', async ({ page }) => {
   const drafts: string[] = []
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const { pathname } = new URL(route.request().url())
-    if (await answerAuth(route, pathname)) return
     if (pathname === '/api/process-drafts/availability') return ok(route, { available: false })
+    if (await answerAuth(route, pathname)) return
     if (pathname === '/api/process-drafts') drafts.push(pathname)
     return ok(route, [])
   })

@@ -10,7 +10,10 @@ export async function ok(route: Route, data: unknown) {
   await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data, message: null }) })
 }
 
-/** Answers the sign-in calls (CSRF, login, refresh, current user) as the backend does; true when it did. */
+/**
+ * Answers the sign-in calls (CSRF, login, refresh, current user) as the backend does, and the home screen's question
+ * whether this server drafts from a description (off, as on every test server; ADR-047); true when it did.
+ */
 export async function answerAuth(route: Route, pathname: string): Promise<boolean> {
   if (pathname === '/api/auth/csrf') {
     await route.fulfill({
@@ -38,6 +41,10 @@ export async function answerAuth(route: Route, pathname: string): Promise<boolea
   }
   if (pathname === '/api/users/me/permissions') {
     await ok(route, { canManageUsers: false })
+    return true
+  }
+  if (pathname === '/api/process-drafts/availability') {
+    await ok(route, { available: false })
     return true
   }
   return false
