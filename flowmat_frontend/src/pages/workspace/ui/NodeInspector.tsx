@@ -12,6 +12,7 @@ import {
   hasValidPortSelection,
   portNeedsMeasure,
   isValidSchemaJson,
+  needsMorePortFields,
   toCreateProcessIoInput,
   toPortFormState,
   toUpdateProcessIoInput,
@@ -63,6 +64,7 @@ export function NodeInspector({
   const [colorScheme, setColorScheme] = useState('slate')
   const [processDesc, setProcessDesc] = useState('')
   const [portForm, setPortForm] = useState<PortFormState>(createDefaultPortFormState())
+  const [morePortFields, setMorePortFields] = useState(false)
   const [editingPortId, setEditingPortId] = useState<string | null>(null)
   const [portError, setPortError] = useState<string | null>(null)
   // The port's own draft schema names the attrs its rule may read; while the schema is not valid there is nothing to check.
@@ -322,32 +324,6 @@ export function NodeInspector({
               <input maxLength={100} value={portForm.ioName} onChange={(event) => setPortForm((current) => ({ ...current, ioName: event.target.value }))} />
             </label>
 
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span>{t('I/O Type')}</span>
-              <select value={portForm.ioType} onChange={(event) => setPortForm((current) => ({
-                ...current,
-                ioType: event.target.value,
-                resourceType: current.resourceType === current.ioType ? event.target.value : current.resourceType,
-              }))}>
-                {IO_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span>{t('Role')}</span>
-                <input maxLength={50} value={portForm.role} onChange={(event) => setPortForm((current) => ({ ...current, role: event.target.value }))} placeholder={t('feed, product...')} />
-              </label>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span>{t('Resource Type')}</span>
-                <input maxLength={50} value={portForm.resourceType} onChange={(event) => setPortForm((current) => ({ ...current, resourceType: event.target.value }))} />
-              </label>
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'grid', gap: '4px' }}>
                 <span>{t('Quantity')}</span>
@@ -366,6 +342,7 @@ export function NodeInspector({
                 <input maxLength={20} required={portNeedsMeasure(portForm)} value={portForm.unit} onChange={(event) => setPortForm((current) => ({ ...current, unit: event.target.value }))} />
               </label>
             </div>
+
             <small className="inspector-hint">
               {portNeedsMeasure(portForm)
                 ? t('Material, product and item ports need a quantity and unit.')
@@ -373,51 +350,82 @@ export function NodeInspector({
             </small>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>{t('Formula')}</span>
-              <input value={portForm.formula} onChange={(event) => setPortForm((current) => ({ ...current, formula: event.target.value }))} />
-            </label>
-
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span>{t('Data schema (JSON object contract)')}</span>
-              <textarea value={portForm.schemaJson} onChange={(event) => setPortForm((current) => ({ ...current, schemaJson: event.target.value }))} rows={4} aria-invalid={!isValidSchemaJson(portForm.schemaJson)} />
-              {!isValidSchemaJson(portForm.schemaJson) && <small role="alert">{t('Enter an object schema with valid properties and required names.')}</small>}
-            </label>
-
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span>{t('Validation rule')}</span>
-              <input maxLength={2000} value={portForm.validationRule} onChange={(event) => setPortForm((current) => ({ ...current, validationRule: event.target.value }))}
-                aria-invalid={conditionProblem(ruleReport) ? true : undefined} aria-describedby="port-rule-check" />
-              <ConditionCheckNote id="port-rule-check" report={ruleReport} />
-            </label>
-
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span>{t('Color')}</span>
-              <select value={portForm.colorScheme} onChange={(event) => setPortForm((current) => ({ ...current, colorScheme: event.target.value }))}>
-                {COLOR_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+              <span>{t('Required')}</span>
+              <select value={portForm.requiredYn} onChange={(event) => setPortForm((current) => ({ ...current, requiredYn: event.target.value as 'Y' | 'N' }))}>
+                <option value="Y">{t('Y — must be connected')}</option>
+                <option value="N">{t('N — from stock, or not needed')}</option>
               </select>
             </label>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span>{t('Required')}</span>
-                <select value={portForm.requiredYn} onChange={(event) => setPortForm((current) => ({ ...current, requiredYn: event.target.value as 'Y' | 'N' }))}>
-                  <option value="Y">{t('Y — must be connected')}</option>
-                  <option value="N">{t('N — from stock, or not needed')}</option>
-                </select>
-              </label>
+            {/* A plain material port with an item needs only the fields above; the rest open when the port uses them. */}
+            <details className="inspector__more" open={morePortFields || needsMorePortFields(portForm)}
+              onToggle={(event) => setMorePortFields(event.currentTarget.open)}>
+              <summary>{t('More settings')}</summary>
+              <div style={{ display: 'grid', gap: '10px', marginTop: '10px' }}>
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('I/O Type')}</span>
+                  <select value={portForm.ioType} onChange={(event) => setPortForm((current) => ({
+                    ...current,
+                    ioType: event.target.value,
+                    resourceType: current.resourceType === current.ioType ? event.target.value : current.resourceType,
+                  }))}>
+                    {IO_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span>{t('Allow Shortage')}</span>
-                <select value={portForm.allowShortageYn} onChange={(event) => setPortForm((current) => ({ ...current, allowShortageYn: event.target.value as 'Y' | 'N' }))}>
-                  <option value="N">N</option>
-                  <option value="Y">Y</option>
-                </select>
-              </label>
-            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <label style={{ display: 'grid', gap: '4px' }}>
+                    <span>{t('Role')}</span>
+                    <input maxLength={50} value={portForm.role} onChange={(event) => setPortForm((current) => ({ ...current, role: event.target.value }))} placeholder={t('feed, product...')} />
+                  </label>
+                  <label style={{ display: 'grid', gap: '4px' }}>
+                    <span>{t('Resource Type')}</span>
+                    <input maxLength={50} value={portForm.resourceType} onChange={(event) => setPortForm((current) => ({ ...current, resourceType: event.target.value }))} />
+                  </label>
+                </div>
+
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('Formula')}</span>
+                  <input value={portForm.formula} onChange={(event) => setPortForm((current) => ({ ...current, formula: event.target.value }))} />
+                </label>
+
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('Data schema (JSON object contract)')}</span>
+                  <textarea value={portForm.schemaJson} onChange={(event) => setPortForm((current) => ({ ...current, schemaJson: event.target.value }))} rows={4} aria-invalid={!isValidSchemaJson(portForm.schemaJson)} />
+                  {!isValidSchemaJson(portForm.schemaJson) && <small role="alert">{t('Enter an object schema with valid properties and required names.')}</small>}
+                </label>
+
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('Validation rule')}</span>
+                  <input maxLength={2000} value={portForm.validationRule} onChange={(event) => setPortForm((current) => ({ ...current, validationRule: event.target.value }))}
+                    aria-invalid={conditionProblem(ruleReport) ? true : undefined} aria-describedby="port-rule-check" />
+                  <ConditionCheckNote id="port-rule-check" report={ruleReport} />
+                </label>
+
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('Color')}</span>
+                  <select value={portForm.colorScheme} onChange={(event) => setPortForm((current) => ({ ...current, colorScheme: event.target.value }))}>
+                    {COLOR_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: 'grid', gap: '4px' }}>
+                  <span>{t('Allow Shortage')}</span>
+                  <select value={portForm.allowShortageYn} onChange={(event) => setPortForm((current) => ({ ...current, allowShortageYn: event.target.value as 'Y' | 'N' }))}>
+                    <option value="N">N</option>
+                    <option value="Y">Y</option>
+                  </select>
+                </label>
+              </div>
+            </details>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {portError && <p role="alert" style={{ color: '#991b1b' }}>{portError}</p>}

@@ -46,6 +46,23 @@ export function createDefaultPortFormState(direction: PortFormState['direction']
   }
 }
 
+/**
+ * Whether the port needs the form's less common fields shown: it has no item (data, files and APIs are described by
+ * resource type and schema), or one of those fields already differs from what a new port starts with. A material port
+ * with an item needs only direction, item, name, quantity, unit and whether it must be connected.
+ */
+export function needsMorePortFields(state: PortFormState): boolean {
+  if (!state.itemId) return true
+  return state.ioType !== DEFAULT_IO_TYPE
+    || state.resourceType !== state.ioType
+    || state.role.trim() !== ''
+    || state.formula.trim() !== ''
+    || state.schemaJson.trim() !== ''
+    || state.validationRule.trim() !== ''
+    || state.allowShortageYn === 'Y'
+    || state.colorScheme !== DEFAULT_COLOR_BY_DIRECTION[state.direction]
+}
+
 export function toPortFormState(port: CanvasPortViewModel): PortFormState {
   const ioType = port.ioType ?? DEFAULT_IO_TYPE
   return {

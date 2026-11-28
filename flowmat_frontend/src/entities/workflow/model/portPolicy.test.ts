@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyItemDefaults, createDefaultPortFormState, hasValidPortSelection, portNeedsMeasure, toCreateProcessIoInput, toPortFormState,
-  toUpdateProcessIoInput,
+  toUpdateProcessIoInput, needsMorePortFields,
 } from './portPolicy'
 import type { ItemDto } from '../../../shared/types/api'
 import { toPortViewModel } from './toWorkflowCanvasViewModel'
@@ -133,5 +133,14 @@ describe('port contract form', () => {
     expect(applyItemDefaults(blank, milk, undefined).unit).toBe('')
     // What the user already typed stays.
     expect(applyItemDefaults({ ...blank, ioName: 'Milk in', unit: 'l' }, milk, 'kg')).toMatchObject({ ioName: 'Milk in', unit: 'l' })
+  })
+
+  it('folds the less common fields away for a plain material port with an item, and keeps them out otherwise', () => {
+    const plain = { ...createDefaultPortFormState('input'), itemId: 'milk', ioName: 'Raw milk', quantity: '100', unit: 'kg' }
+    expect(needsMorePortFields(plain)).toBe(false)
+    expect(needsMorePortFields({ ...plain, itemId: '' })).toBe(true)
+    expect(needsMorePortFields({ ...plain, validationRule: 'attrs.rows > 0' })).toBe(true)
+    expect(needsMorePortFields({ ...plain, allowShortageYn: 'Y' })).toBe(true)
+    expect(needsMorePortFields({ ...plain, colorScheme: 'rose' })).toBe(true)
   })
 })
