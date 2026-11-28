@@ -72,10 +72,15 @@ test('real organization UI validates membership and chooses personal or team pro
       await form.getByLabel('조직').selectOption(organizationId)
       await form.getByPlaceholder('프로젝트 이름', { exact: true }).fill(projectName)
       const created = response(page, 'POST', '/projects')
+      const firstWorkflow = response(page, 'POST', '/workflows')
       await form.getByRole('button', { name: '만들기', exact: true }).click()
       const reply = await created
       const data = await payload(reply)
       projects.push(data.projectId)
+      // A new project opens in the editor with its first workflow; come back to make the next one.
+      const workflow = await payload(await firstWorkflow)
+      await expect(page).toHaveURL(new RegExp(`/projects/${data.projectId}/workflows/${workflow.workflowId}$`))
+      await page.goBack()
       const body = reply.request().postDataJSON() as Record<string, unknown>
       if (organizationId) {
         expect(body.organizationId).toBe(id)

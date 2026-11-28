@@ -117,8 +117,11 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
       return
     }
 
+    const preload = preloadWorkspaceExperience()
+    const name = projectName
+
     const created = await createProjectMutation.mutateAsync({
-      projectName,
+      projectName: name,
       ownerId: currentUser.userId,
       projectDesc,
       visibility: 'private',
@@ -128,6 +131,17 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
     setProjectName('')
     setProjectDesc('')
     setSelectedProjectId(created.projectId)
+
+    // A new project opens straight in the editor with its first workflow, so a first-time user does not have to find
+    // the second form. If that step fails the project stays selected and the workflow form shows the error.
+    const workflow = await createWorkflowMutation.mutateAsync({
+      projectId: created.projectId,
+      workflowName: name,
+      workflowType: 'main',
+    })
+
+    await preload
+    navigate(`/projects/${workflow.projectId}/workflows/${workflow.workflowId}`)
   }
 
   async function handleCreateWorkflow(event: FormEvent<HTMLFormElement>) {
@@ -233,9 +247,12 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
             onSubmit={(event) => void handleCreateProject(event)}
             className="flex h-full min-w-0 flex-col rounded-2xl bg-[#1a1b24] p-5 ring-1 ring-transparent transition focus-within:bg-[#202130] focus-within:ring-[#7c5cff]"
           >
-            <label className="mb-3.5 block text-[13px] font-semibold">
+            <label className="mb-1 block text-[13px] font-semibold">
               새 프로젝트
             </label>
+            <p className="mb-3 text-xs text-[#9694a3]">
+              첫 공정도도 함께 만들고 편집기를 엽니다.
+            </p>
 
             <input
               value={projectName}
@@ -271,7 +288,7 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
 
             <button
               type="submit"
-              disabled={createProjectMutation.isPending || !currentUser?.userId}
+              disabled={createProjectMutation.isPending || createWorkflowMutation.isPending || !currentUser?.userId}
               className="mt-auto flex h-11 w-full items-center justify-center rounded-[11px] bg-[#7c5cff] text-sm font-bold text-white transition hover:bg-[#6a49f0] active:scale-[0.98] disabled:opacity-60"
             >
               {createProjectMutation.isPending ? '만드는 중...' : '만들기'}
