@@ -26,3 +26,19 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await context.close()
   })
 }
+
+/** A project card shows its name and status, not the internal id a first-time user has no use for (it stays in the tooltip). */
+test('home project cards do not show the internal id', async ({ page }) => {
+  const projects = [{ projectId: 'c12340d9-030c-4a7b-972f-432bb1829155', projectName: '우유 시험', projectStatus: 'active' }]
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (await answerAuth(route, pathname)) return
+    if (pathname === '/api/projects') return ok(route, projects)
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  const card = page.getByRole('button').filter({ hasText: '우유 시험' })
+  await expect(card).toContainText('active', { timeout: 15_000 })
+  await expect(card).not.toContainText('c12340d9')
+  await expect(card).toHaveAttribute('title', 'c12340d9-030c-4a7b-972f-432bb1829155')
+})

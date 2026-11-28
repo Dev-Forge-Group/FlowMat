@@ -369,6 +369,7 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
               <button
                 key={project.projectId}
                 type="button"
+                title={project.projectId}
                 onClick={() => setSelectedProjectId(project.projectId)}
                 className={`flex-shrink-0 basis-[220px] rounded-2xl p-5 text-left transition hover:-translate-y-0.5 ${
                   isSelected
@@ -380,12 +381,8 @@ function Dashboard({ onLogout, onRequestDormant, isLoggingOut }: DashboardProps)
                   {project.projectName}
                 </div>
 
-                <div
-                  className="mb-3.5 truncate text-xs text-[#5f5d6b]"
-                  title={project.projectId}
-                >
-                  {project.projectId}
-                </div>
+                {/* No internal id on the card: a first-time user has no use for a UUID (it stays in the card's tooltip). */}
+                <div className="mb-3.5" />
 
                 <div className="flex items-center gap-1.5">
                   <span
