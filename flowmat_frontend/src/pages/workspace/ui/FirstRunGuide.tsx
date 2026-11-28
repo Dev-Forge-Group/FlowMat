@@ -15,6 +15,8 @@ interface Props {
  */
 export function FirstRunGuide({ canvas }: Props) {
   const projectId = canvas.workflow.projectId
+  // The inventory screen offers a way back to this flow (InventoryRoute reads from=).
+  const from = `from=${encodeURIComponent(canvas.workflow.workflowId)}`
   const items = useItemsQuery(projectId)
   const stock = useInventoriesQuery(projectId)
   const revisions = useWorkflowRevisionsQuery(canvas.workflow.workflowId)
@@ -24,10 +26,10 @@ export function FirstRunGuide({ canvas }: Props) {
   const published = (revisions.data ?? []).some((revision: { status?: string }) => revision.status === 'published')
   const steps = [
     { done: (items.data ?? []).length > 0, label: 'Add the items you buy and make',
-      link: <><Link to={`/projects/${projectId}/inventory`}>Items</Link> (a spreadsheet: Import CSV there)</> },
+      link: <><Link to={`/projects/${projectId}/inventory?${from}`}>Items</Link> (a spreadsheet: Import CSV there)</> },
     { done: measured, label: 'Draw the steps and give their ports an item and a quantity per batch', link: null },
     { done: (stock.data ?? []).length > 0, label: 'Enter the stock you have',
-      link: <><Link to={`/projects/${projectId}/inventory?tab=stock`}>Stock</Link> (or import a stock CSV there)</> },
+      link: <><Link to={`/projects/${projectId}/inventory?tab=stock&${from}`}>Stock</Link> (or import a stock CSV there)</> },
     { done: published, label: 'Publish the flow: plans read the published revision', link: null },
   ]
   const done = steps.filter((step) => step.done).length

@@ -40,8 +40,28 @@ test('the Start here guide counts what is done and leads to the rest', async ({ 
   // Items and a measured port are there; stock and a published revision are not.
   await expect(guide.locator('summary')).toHaveText('Start here · 2 of 5 done', { timeout: 15_000 })
   await guide.locator('summary').click()
-  await expect(guide.getByRole('link', { name: 'Stock' })).toHaveAttribute('href', '/projects/prj-e2e/inventory?tab=stock')
+  await expect(guide.getByRole('link', { name: 'Stock' })).toHaveAttribute('href', '/projects/prj-e2e/inventory?tab=stock&from=wf-start')
   // It lives in the inspector while nothing is selected; selecting a process replaces it.
   await page.locator('.react-flow__node').filter({ hasText: 'Mix' }).click()
   await expect(guide).toHaveCount(0)
+})
+
+/** From the guide's Items link, the inventory screen leads back to the flow, also after changing tabs. */
+test('the inventory screen opened from the guide leads back to the flow', async ({ page }) => {
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (await answerAuth(route, pathname)) return
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  await page.goto('/projects/prj-e2e/inventory?from=wf-start')
+  const back = page.getByRole('link', { name: 'Back to the flow' })
+  await expect(back).toHaveAttribute('href', '/projects/prj-e2e/workflows/wf-start', { timeout: 15_000 })
+  await page.getByRole('tab', { name: 'Stock' }).click()
+  await expect(page).toHaveURL(/tab=stock/)
+  await expect(back).toHaveAttribute('href', '/projects/prj-e2e/workflows/wf-start')
+  // Opened any other way, there is only the way home.
+  await page.goto('/projects/prj-e2e/inventory')
+  await expect(page.getByRole('link', { name: 'Back to home' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Back to the flow' })).toHaveCount(0)
 })

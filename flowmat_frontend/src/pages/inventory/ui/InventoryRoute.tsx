@@ -65,6 +65,8 @@ export function InventoryRoute() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [itemFilter, setItemFilter] = useState<ItemFilter>(EMPTY_ITEM_FILTER)
   const requestedTab = searchParams.get('tab')
+  // Came from a flow's Start here guide: offer the way back, and keep it while the tabs change.
+  const fromWorkflow = searchParams.get('from')
   const tab: Tab = (TABS as readonly string[]).includes(requestedTab ?? '') ? (requestedTab as Tab) : 'items'
   const itemsQuery = useItemsQuery(projectId)
   const items = itemsQuery.data ?? []
@@ -203,6 +205,13 @@ export function InventoryRoute() {
 
   return (
     <div className="inventory-route" style={{ padding: 'clamp(12px, 4vw, 32px)', maxWidth: 1120, margin: '0 auto' }}>
+      {fromWorkflow && (
+        <>
+          <Link to={`/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(fromWorkflow)}`}
+            style={{ fontSize: 13, color: 'var(--accent)' }}>Back to the flow</Link>
+          <span style={{ fontSize: 13, margin: '0 8px', color: 'var(--text)' }}>·</span>
+        </>
+      )}
       <Link to="/" style={{ fontSize: 13, color: 'var(--accent)' }}>Back to home</Link>
       <h1>Inventory</h1>
 
@@ -214,7 +223,8 @@ export function InventoryRoute() {
             type="button"
             role="tab"
             aria-selected={tab === name}
-            onClick={() => setSearchParams(name === 'items' ? {} : { tab: name }, { replace: true })}
+            onClick={() => setSearchParams({ ...(name === 'items' ? {} : { tab: name }), ...(fromWorkflow ? { from: fromWorkflow } : {}) },
+              { replace: true })}
             style={{
               background: 'transparent',
               border: 'none',
