@@ -105,8 +105,9 @@ test('an owner creates a team, adds a member, hands over ownership and leaves', 
   expect(writes).toEqual(['create', 'add ghost member', 'add kim admin', 'role m-2 owner', 'leave m-1'])
 })
 
-test('a new project goes to the chosen team organization, or the personal one by default', async ({ page }) => {
+test('a new project goes to the chosen team organization, or the personal one by default, and opens in the editor', async ({ page }) => {
   const created: Record<string, unknown>[] = []
+  const workflows: Record<string, unknown>[] = []
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request()
     const { pathname } = new URL(request.url())
@@ -116,6 +117,12 @@ test('a new project goes to the chosen team organization, or the personal one by
       created.push(body)
       return ok(route, { projectId: `prj-${created.length}`, projectName: body.projectName, projectDesc: null, projectStatus: 'active',
         visibility: 'private', currentWorkflowId: null, organizationId: body.organizationId ?? 'org-personal' })
+    }
+    if (pathname === '/api/workflows' && request.method() === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown>
+      workflows.push(body)
+      return ok(route, { workflowId: `wf-${workflows.length}`, projectId: body.projectId, workflowName: body.workflowName,
+        workflowDesc: null, workflowType: body.workflowType, workflowStatus: 'draft' })
     }
     if (request.method() !== 'GET') throw new Error(`Unexpected write ${request.method()} ${pathname}`)
     if (pathname === '/api/organizations') {
@@ -133,16 +140,18 @@ test('a new project goes to the chosen team organization, or the personal one by
   await expect(organization).toHaveValue('')
   await form.getByPlaceholder('프로젝트 이름').fill('Mine')
   await form.getByRole('button', { name: '만들기', exact: true }).click()
-  await expect.poll(() => created.length).toBe(1)
-  // The form clears the name once the project is made; typing before that would be cleared with it.
-  await expect(form.getByRole('button', { name: '만들기', exact: true })).toBeEnabled()
+  // The project opens straight in the editor, with a first workflow of the same name: no second form to find.
+  await expect(page).toHaveURL(/\/projects\/prj-1\/workflows\/wf-1$/)
+  expect(workflows).toEqual([{ projectId: 'prj-1', workflowName: 'Mine', workflowType: 'main' }])
+  await page.goBack()
   await expect(form.getByPlaceholder('프로젝트 이름')).toHaveValue('')
   await organization.selectOption('org-team')
   await form.getByPlaceholder('프로젝트 이름').fill('Shared line')
   await form.getByRole('button', { name: '만들기', exact: true }).click()
-  await expect.poll(() => created.length).toBe(2)
+  await expect(page).toHaveURL(/\/projects\/prj-2\/workflows\/wf-2$/)
   expect(created[0].organizationId).toBeUndefined()
   expect(created[1]).toMatchObject({ projectName: 'Shared line', organizationId: 'org-team' })
+  expect(workflows[1]).toMatchObject({ projectId: 'prj-2', workflowName: 'Shared line' })
 })
 
 test('a member sees members without management or the project list', async ({ page }) => {

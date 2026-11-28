@@ -39,8 +39,13 @@ test('Data Flow: UI creates, publishes and completes File → Transform → Data
       const form = page.locator('form').filter({ has: page.getByPlaceholder('프로젝트 이름', { exact: true }) })
       await form.getByPlaceholder('프로젝트 이름', { exact: true }).fill(name)
       const created = posted(page, '/projects')
+      const firstWorkflow = posted(page, '/workflows')
       await form.getByRole('button', { name: '만들기', exact: true }).click()
       projectId = (await data(await created)).projectId
+      // The new project opens in the editor with its first workflow. This test draws in a workflow of its own.
+      const workflow = await data(await firstWorkflow)
+      await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/workflows/${workflow.workflowId}$`))
+      await page.goBack()
       await page.getByRole('button').filter({ has: page.getByText(name, { exact: true }) }).click()
     })
 
