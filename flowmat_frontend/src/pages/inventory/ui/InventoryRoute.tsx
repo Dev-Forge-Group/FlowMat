@@ -33,6 +33,7 @@ import { StockTransfersPanel } from './StockTransfersPanel'
 import { StockValueTrend } from './StockValueTrend'
 import { StockWastePanel } from './StockWastePanel'
 import { WorkInstructionsPanel } from './WorkInstructionsPanel'
+import { t } from '../../../shared/i18n/t'
 
 const TABS = ['items', 'stock', 'tasks', 'purchasing', 'count', 'count-plans', 'movements', 'analysis', 'lots', 'quality', 'boms', 'instructions', 'units', 'equipment',
   'locations'] as const
@@ -208,12 +209,12 @@ export function InventoryRoute() {
       {fromWorkflow && (
         <>
           <Link to={`/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(fromWorkflow)}`}
-            style={{ fontSize: 13, color: 'var(--accent)' }}>Back to the flow</Link>
+            style={{ fontSize: 13, color: 'var(--accent)' }}>{t('Back to the flow')}</Link>
           <span style={{ fontSize: 13, margin: '0 8px', color: 'var(--text)' }}>·</span>
         </>
       )}
-      <Link to="/" style={{ fontSize: 13, color: 'var(--accent)' }}>Back to home</Link>
-      <h1>Inventory</h1>
+      <Link to="/" style={{ fontSize: 13, color: 'var(--accent)' }}>{t('Back to home')}</Link>
+      <h1>{t('Inventory')}</h1>
 
       {/* The tabs wrap rather than widen the page past the screen (a phone, or a narrow window). */}
       <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 4, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
@@ -235,7 +236,7 @@ export function InventoryRoute() {
               opacity: tab === name ? 1 : 0.65,
             }}
           >
-            {name === 'items' ? `Items (${items.length})` : TAB_LABELS[name]}
+            {name === 'items' ? t('Items ({count})', { count: items.length }) : t(TAB_LABELS[name])}
           </button>
         ))}
       </div>
@@ -274,15 +275,15 @@ export function InventoryRoute() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
         <section>
           <ItemCsvPanel projectId={projectId} items={items} units={units} />
-          {itemsQuery.isLoading && <p>Loading items...</p>}
-          {itemsQuery.isError && <p style={{ color: '#dc2626' }}>Failed to load items.</p>}
+          {itemsQuery.isLoading && <p>{t('Loading items...')}</p>}
+          {itemsQuery.isError && <p style={{ color: '#dc2626' }}>{t('Failed to load items.')}</p>}
           {deleteMutation.isError && (
             <p role="alert" style={{ color: '#dc2626', fontSize: 13 }}>
               {errorMessage(deleteMutation.error, 'The item could not be deleted.')}
             </p>
           )}
           {!itemsQuery.isLoading && items.length === 0 && (
-            <p className="inspector-hint">No items found. Add one from the form on the right.</p>
+            <p className="inspector-hint">{t('No items found. Add one from the form on the right.')}</p>
           )}
           {duplicateCodes(items).length > 0 && (
             <p role="note" style={{ color: '#b45309', fontSize: 12, margin: '0 0 8px' }}>
@@ -296,7 +297,7 @@ export function InventoryRoute() {
               <input
                 value={itemFilter.text}
                 onChange={(e) => setItemFilter((f) => ({ ...f, text: e.target.value }))}
-                placeholder="code, name, type, group, barcode or SKU"
+                placeholder={t('code, name, type, group, barcode or SKU')}
                 aria-label="Search items"
               />
               <select value={itemFilter.status} onChange={(e) => setItemFilter((f) => ({ ...f, status: e.target.value }))} aria-label="Item status">
@@ -314,7 +315,7 @@ export function InventoryRoute() {
               {shownItems.length !== items.length && (
                 <span className="inspector-hint">
                   {shownItems.length} of {items.length}{' '}
-                  <button type="button" style={{ fontSize: 11 }} onClick={() => setItemFilter(EMPTY_ITEM_FILTER)}>Clear</button>
+                  <button type="button" style={{ fontSize: 11 }} onClick={() => setItemFilter(EMPTY_ITEM_FILTER)}>{t('Clear')}</button>
                 </span>
               )}
             </div>
@@ -332,12 +333,12 @@ export function InventoryRoute() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '8px 6px' }}>Code</th>
-                <th style={{ padding: '8px 6px' }}>Name</th>
-                <th style={{ padding: '8px 6px' }}>Category</th>
-                <th style={{ padding: '8px 6px' }}>Unit</th>
-                <th style={{ padding: '8px 6px' }}>LOT</th>
-                <th style={{ padding: '8px 6px' }}>Status</th>
+                <th style={{ padding: '8px 6px' }}>{t('Code')}</th>
+                <th style={{ padding: '8px 6px' }}>{t('Name')}</th>
+                <th style={{ padding: '8px 6px' }}>{t('Category')}</th>
+                <th style={{ padding: '8px 6px' }}>{t('Unit')}</th>
+                <th style={{ padding: '8px 6px' }}>{t('LOT')}</th>
+                <th style={{ padding: '8px 6px' }}>{t('Status')}</th>
                 <th style={{ padding: '8px 6px' }}></th>
               </tr>
             </thead>
@@ -359,21 +360,21 @@ export function InventoryRoute() {
                   <td style={{ padding: '8px 6px', opacity: 0.7 }}>
                     {item.unitId ? unitLabel.get(item.unitId) ?? item.unitId : '-'}
                   </td>
-                  <td style={{ padding: '8px 6px', opacity: 0.7 }}>{item.lotManageYn === 'Y' ? 'tracked' : '-'}</td>
+                  <td style={{ padding: '8px 6px', opacity: 0.7 }}>{item.lotManageYn === 'Y' ? t('tracked') : '-'}</td>
                   <td style={{ padding: '8px 6px', opacity: 0.7 }}>{item.itemStatus}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
                     <button type="button" onClick={() => setDetailItemId(item.itemId)} style={{ marginRight: 4, fontSize: 12 }}>
-                      Details
+                      {t('Details')}
                     </button>
                     <button type="button" onClick={() => startEdit(item)} style={{ marginRight: 4, fontSize: 12 }}>
-                      Edit
+                      {t('Edit')}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(item.itemId)}
                       style={{ fontSize: 12, color: '#dc2626', border: '1px solid #fca5a5', background: '#fef2f2' }}
                     >
-                      Delete
+                      {t('Delete')}
                     </button>
                   </td>
                 </tr>
@@ -383,23 +384,23 @@ export function InventoryRoute() {
         </section>
 
         <section style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <h3 style={{ marginTop: 0 }}>{editingItem ? 'Edit Item' : 'Add Item'}</h3>
+          <h3 style={{ marginTop: 0 }}>{editingItem ? t('Edit Item') : t('Add Item')}</h3>
           <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'grid', gap: 10 }}>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Code *</span>
+              <span>{t('Code *')}</span>
               <input
                 value={form.itemCode}
                 onChange={(e) => setForm((f) => ({ ...f, itemCode: e.target.value }))}
-                placeholder="e.g. MAT-001"
+                placeholder={t('e.g. MAT-001')}
                 required
               />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Name *</span>
+              <span>{t('Name *')}</span>
               <input value={form.itemName} onChange={(e) => setForm((f) => ({ ...f, itemName: e.target.value }))} required />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Type</span>
+              <span>{t('Type')}</span>
               <input
                 list="item-type-suggestions"
                 value={form.itemType}
@@ -410,15 +411,15 @@ export function InventoryRoute() {
               </datalist>
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Category</span>
+              <span>{t('Category')}</span>
               <select value={form.resourceCategory} onChange={(e) => setForm((f) => ({ ...f, resourceCategory: e.target.value }))}>
                 {RESOURCE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Unit</span>
+              <span>{t('Unit')}</span>
               <select value={form.unitId} onChange={(e) => setForm((f) => ({ ...f, unitId: e.target.value }))}>
-                <option value="">None</option>
+                <option value="">{t('None')}</option>
                 {units
                   .filter((unit) => unit.activeYn === 'Y' || unit.unitId === form.unitId)
                   .map((unit) => (
@@ -429,7 +430,7 @@ export function InventoryRoute() {
               </select>
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Status</span>
+              <span>{t('Status')}</span>
               <select value={form.itemStatus} onChange={(e) => setForm((f) => ({ ...f, itemStatus: e.target.value }))}>
                 {ITEM_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
@@ -440,7 +441,7 @@ export function InventoryRoute() {
                 checked={form.lotManageYn}
                 onChange={(e) => setForm((f) => ({ ...f, lotManageYn: e.target.checked }))}
               />
-              <span>Track stock per LOT</span>
+              <span>{t('Track stock per LOT')}</span>
             </label>
             {form.lotManageYn && (
               <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -449,23 +450,23 @@ export function InventoryRoute() {
                   checked={form.lotReleaseRequiredYn}
                   onChange={(e) => setForm((f) => ({ ...f, lotReleaseRequiredYn: e.target.checked }))}
                 />
-                <span>Hold new LOTs until their receipt checks pass</span>
+                <span>{t('Hold new LOTs until their receipt checks pass')}</span>
               </label>
             )}
             {/* minWidth 0: side by side, the inputs' own width would otherwise push the whole form past its column. */}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
               <label style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-                <span>Safety stock</span>
+                <span>{t('Safety stock')}</span>
                 <input
                   inputMode="decimal"
                   value={form.safetyStockQty}
-                  placeholder="not watched"
+                  placeholder={t('not watched')}
                   style={{ minWidth: 0 }}
                   onChange={(e) => setForm((f) => ({ ...f, safetyStockQty: e.target.value }))}
                 />
               </label>
               <label style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-                <span>Lead time (days)</span>
+                <span>{t('Lead time (days)')}</span>
                 <input
                   inputMode="numeric"
                   style={{ minWidth: 0 }}
@@ -475,21 +476,21 @@ export function InventoryRoute() {
               </label>
             </div>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Unit cost</span>
+              <span>{t('Unit cost')}</span>
               <input
                 inputMode="decimal"
                 value={form.unitCost}
-                placeholder="per unit of this item"
+                placeholder={t('per unit of this item')}
                 onChange={(e) => setForm((f) => ({ ...f, unitCost: e.target.value }))}
               />
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
               <label style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-                <span>Bought in</span>
+                <span>{t('Bought in')}</span>
                 <input
                   value={form.purchaseUnit}
                   maxLength={20}
-                  placeholder="stock unit"
+                  placeholder={t('stock unit')}
                   style={{ minWidth: 0 }}
                   onChange={(e) => setForm((f) => ({ ...f, purchaseUnit: e.target.value }))}
                 />
@@ -511,11 +512,11 @@ export function InventoryRoute() {
             <ItemInfoFields value={form.details} onChange={(details) => setForm((f) => ({ ...f, details }))} />
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button type="submit" disabled={isPending}>
-                {isPending ? 'Saving...' : editingItem ? 'Save' : 'Add'}
+                {isPending ? t('Saving...') : editingItem ? t('Save') : t('Add')}
               </button>
               {editingItem && (
                 <button type="button" onClick={resetForm} style={{ background: 'transparent' }}>
-                  Cancel
+                  {t('Cancel')}
                 </button>
               )}
             </div>
