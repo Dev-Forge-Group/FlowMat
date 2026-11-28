@@ -51,6 +51,8 @@ test('the inventory screen opened from the guide leads back to the flow', async 
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const { pathname } = new URL(route.request().url())
     if (await answerAuth(route, pathname)) return
+    // The stock tab adds up open work orders; an empty list is not that shape and would break the tab once it arrives.
+    if (pathname === '/api/material-requirements') return ok(route, { orders: 0, problems: [], lines: [] })
     return ok(route, [])
   })
   await mockedLogin(page)

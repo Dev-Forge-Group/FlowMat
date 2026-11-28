@@ -62,10 +62,37 @@ test('a Korean browser checks and fixes the flow in Korean, and can switch to En
   await check.getByRole('button', { name: '재고에서 가져오기 (필수 아님)' }).click()
   await expect(check).toContainText('문제가 없습니다.')
 
+  // The port form of the selected step speaks Korean too.
+  await page.locator('.react-flow__node[data-id="mix"]').click({ position: { x: 24, y: 18 } })
+  await expect(page.getByRole('button', { name: '입력 추가' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '포트 고치기' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: '포트 이름' })).toHaveValue('원유')
+  await expect(page.getByRole('button', { name: '포트 저장' })).toBeVisible()
+
   // The choice is kept: after English is chosen the page reloads in English and stays so.
   await page.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'EN' }).click()
   await expect(page.getByRole('region', { name: 'Workflow validation' }).getByRole('button', { name: 'Check workflow' }))
     .toBeVisible({ timeout: 15_000 })
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await expect(page.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'EN' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('a Korean browser enters items and stock in Korean, with a way back to the flow', async ({ page }) => {
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (await answerAuth(route, pathname)) return
+    if (route.request().method() !== 'GET') throw new Error(`Unexpected write ${pathname}`)
+    if (pathname === '/api/projects/prj-e2e') return ok(route, { projectId: 'prj-e2e', projectName: '우유 시험', ownerId: 'demo-owner' })
+    // The stock tab adds up open work orders; an empty list is not that shape.
+    if (pathname === '/api/material-requirements') return ok(route, { orders: 0, problems: [], lines: [] })
+    return ok(route, [])
+  })
+  await mockedLogin(page)
+  await page.goto('/projects/prj-e2e/inventory?from=wf-ko')
+  await expect(page.getByRole('link', { name: '공정도로 돌아가기' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('tab', { name: '품목 (0)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: '품목 추가' })).toBeVisible()
+  await page.getByRole('tab', { name: '재고', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '재고 추가' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '공정도로 돌아가기' })).toHaveAttribute('href', '/projects/prj-e2e/workflows/wf-ko')
 })

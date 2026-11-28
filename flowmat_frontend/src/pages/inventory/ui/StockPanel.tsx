@@ -23,6 +23,7 @@ import type { InventoryDto, ItemDto } from '../../../shared/types/api'
 import { ItemScanInput } from './ItemScanInput'
 import { pickableItems } from '../model/itemStatusModel'
 import { earlierToIssue } from '../model/fefoModel'
+import { t } from '../../../shared/i18n/t'
 
 // Quarantine is not a free-form status: it goes through a quarantine / release movement (whole LOT when there is one).
 const INVENTORY_STATUSES = ['available', 'hold']
@@ -182,12 +183,12 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
         />
         <StockImportPanel projectId={projectId} />
         <FefoIssuePanel projectId={projectId} items={items} />
-        {inventoriesQuery.isLoading && <p>Loading stock...</p>}
+        {inventoriesQuery.isLoading && <p>{t('Loading stock...')}</p>}
         {inventoriesQuery.isError && (
-          <p style={{ color: '#dc2626' }}>{errorMessage(inventoriesQuery.error, 'Failed to load stock.')}</p>
+          <p style={{ color: '#dc2626' }}>{errorMessage(inventoriesQuery.error, t('Failed to load stock.'))}</p>
         )}
         {!inventoriesQuery.isLoading && inventories.length === 0 && (
-          <p className="inspector-hint">No stock records yet. Add one to track quantities and let runs consume it.</p>
+          <p className="inspector-hint">{t('No stock records yet. Add one to track quantities and let runs consume it.')}</p>
         )}
         {inventories.length > 0 && <StockValue value={stockValue(inventories, items)} />}
         {inventories.some((inv) => inv.stockLevel === 'low') && (
@@ -199,13 +200,13 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                <th style={cell}>Item</th>
-                <th style={cell}>LOT</th>
-                <th style={cell}>Location</th>
-                <th style={{ ...num }}>On hand</th>
-                <th style={{ ...num }}>Reserved</th>
-                <th style={{ ...num }}>Available</th>
-                <th style={cell}>Status</th>
+                <th style={cell}>{t('Item')}</th>
+                <th style={cell}>{t('LOT')}</th>
+                <th style={cell}>{t('Location')}</th>
+                <th style={{ ...num }}>{t('On hand')}</th>
+                <th style={{ ...num }}>{t('Reserved')}</th>
+                <th style={{ ...num }}>{t('Available')}</th>
+                <th style={cell}>{t('Status')}</th>
                 <th style={cell}></th>
               </tr>
             </thead>
@@ -256,14 +257,14 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                   </td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                     <button type="button" onClick={() => startEdit(inv)} style={{ marginRight: 4, fontSize: 12 }}>
-                      Adjust
+                      {t('Adjust')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setHistoryFor(historyFor === inv.inventoryId ? null : inv.inventoryId)}
                       style={{ marginRight: 4, fontSize: 12 }}
                     >
-                      History
+                      {t('History')}
                     </button>
                     <button
                       type="button"
@@ -285,7 +286,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                       disabled={deleteMutation.isPending}
                       style={{ fontSize: 12, color: '#dc2626', border: '1px solid #fca5a5', background: '#fef2f2' }}
                     >
-                      Delete
+                      {t('Delete')}
                     </button>
                   </td>
                 </tr>
@@ -326,7 +327,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                 />
               )
             })()}
-            {transactionsQuery.isLoading && <p>Loading history...</p>}
+            {transactionsQuery.isLoading && <p>{t('Loading history...')}</p>}
             {transactionsQuery.isError && (
               <p style={{ color: '#dc2626' }}>{errorMessage(transactionsQuery.error, 'Failed to load history.')}</p>
             )}
@@ -334,18 +335,18 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
               <p style={{ color: '#dc2626', fontSize: 12 }}>{errorMessage(reverseMutation.error, 'The reversal was refused.')}</p>
             )}
             {transactionsQuery.data && transactionsQuery.data.length === 0 && (
-              <p className="inspector-hint">No movements recorded.</p>
+              <p className="inspector-hint">{t('No movements recorded.')}</p>
             )}
             {transactionsQuery.data && transactionsQuery.data.length > 0 && (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                    <th style={cell}>When</th>
-                    <th style={cell}>Type</th>
+                    <th style={cell}>{t('When')}</th>
+                    <th style={cell}>{t('Type')}</th>
                     <th style={num}>Δ On hand</th>
-                    <th style={num}>On hand after</th>
-                    <th style={num}>Available after</th>
-                    <th style={cell}>Note</th>
+                    <th style={num}>{t('On hand after')}</th>
+                    <th style={num}>{t('Available after')}</th>
+                    <th style={cell}>{t('Note')}</th>
                     <th style={cell}></th>
                   </tr>
                 </thead>
@@ -378,7 +379,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                               }}
                               style={{ fontSize: 11 }}
                             >
-                              Reverse
+                              {t('Reverse')}
                             </button>
                           )
                         )}
@@ -393,32 +394,32 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
       </section>
 
       <section style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-        <h3 style={{ marginTop: 0 }}>{editing ? 'Adjust Stock' : 'Add Stock'}</h3>
+        <h3 style={{ marginTop: 0 }}>{editing ? t('Adjust Stock') : t('Add Stock')}</h3>
         <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'grid', gap: 10 }}>
           {!editing && <ItemScanInput items={pickableItems(items)} onPick={(item) => setForm((f) => ({ ...f, itemId: item.itemId, lotId: '' }))} />}
           <label style={{ display: 'grid', gap: 4 }}>
-            <span>Item *</span>
+            <span>{t('Item *')}</span>
             <select
               value={form.itemId}
               onChange={(e) => setForm((f) => ({ ...f, itemId: e.target.value, lotId: '' }))}
               disabled={Boolean(editing)}
               required
             >
-              <option value="" disabled>Select item</option>
+              <option value="" disabled>{t('Select item')}</option>
               {/* Inactive and discontinued items take no new stock; a record being adjusted keeps showing its own. */}
               {(editing ? items : pickableItems(items, form.itemId)).map((item) => (
                 <option key={item.itemId} value={item.itemId}>{item.itemCode} · {item.itemName}</option>
               ))}
             </select>
             {items.length === 0 && (
-              <span style={{ fontSize: 11, opacity: 0.6 }}>Create an item on the Items tab first.</span>
+              <span style={{ fontSize: 11, opacity: 0.6 }}>{t('Create an item on the Items tab first.')}</span>
             )}
           </label>
           {lotTracked && !editing && (
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>LOT *</span>
+              <span>{t('LOT *')}</span>
               <select value={form.lotId} onChange={(e) => setForm((f) => ({ ...f, lotId: e.target.value }))} required>
-                <option value="" disabled>Select LOT</option>
+                <option value="" disabled>{t('Select LOT')}</option>
                 {selectableLots.map((lot) => (
                   <option key={lot.lotId} value={lot.lotId}>
                     {lot.lotNo}
@@ -429,14 +430,14 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
                 ))}
               </select>
               {selectableLots.length === 0 && (
-                <span style={{ fontSize: 11, opacity: 0.6 }}>This item tracks LOTs. Register one on the LOTs tab first.</span>
+                <span style={{ fontSize: 11, opacity: 0.6 }}>{t('This item tracks LOTs. Register one on the LOTs tab first.')}</span>
               )}
             </label>
           )}
           {editing?.lotNo && <span style={{ fontSize: 12, opacity: 0.7 }}>LOT <code>{editing.lotNo}</code></span>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>On hand *</span>
+              <span>{t('On hand *')}</span>
               <input
                 type="number"
                 step="any"
@@ -446,7 +447,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
               />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Reserved</span>
+              <span>{t('Reserved')}</span>
               <input
                 type="number"
                 min="0"
@@ -464,7 +465,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Min (reorder)</span>
+              <span>{t('Min (reorder)')}</span>
               <input
                 type="number"
                 min="0"
@@ -475,31 +476,31 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
               />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span>Max</span>
+              <span>{t('Max')}</span>
               <input
                 type="number"
                 min="0"
                 step="any"
                 value={form.maxThreshold}
-                placeholder="none"
+                placeholder={t('none')}
                 onChange={(e) => setForm((f) => ({ ...f, maxThreshold: e.target.value }))}
               />
             </label>
           </div>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span>Location</span>
+            <span>{t('Location')}</span>
             <input
               value={form.location}
               list={LOCATION_OPTIONS_ID}
               onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-              placeholder="e.g. WH-A / Rack 3"
+              placeholder={t('e.g. WH-A / Rack 3')}
             />
           </label>
           {addConditionNote && (
             <p role="note" aria-label="Storage condition" style={{ margin: 0, fontSize: 12, color: '#b45309' }}>{addConditionNote}</p>
           )}
           <label style={{ display: 'grid', gap: 4 }}>
-            <span>Status</span>
+            <span>{t('Status')}</span>
             <select value={form.inventoryStatus} onChange={(e) => setForm((f) => ({ ...f, inventoryStatus: e.target.value }))}>
               {INVENTORY_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
               {!INVENTORY_STATUSES.includes(form.inventoryStatus) && (
@@ -509,11 +510,11 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
           </label>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="submit" disabled={isPending || items.length === 0}>
-              {isPending ? 'Saving...' : editing ? 'Save adjustment' : 'Add'}
+              {isPending ? t('Saving...') : editing ? t('Save adjustment') : t('Add')}
             </button>
             {editing && (
               <button type="button" onClick={resetForm} style={{ background: 'transparent' }}>
-                Cancel
+                {t('Cancel')}
               </button>
             )}
           </div>
@@ -523,7 +524,7 @@ export function StockPanel({ projectId, items }: { projectId: string; items: Ite
             </span>
           )}
           {saveError && (
-            <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>{errorMessage(saveError, 'Failed to save stock.')}</p>
+            <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>{errorMessage(saveError, t('Failed to save stock.'))}</p>
           )}
           {conflict && latestEditing && (
             <button type="button" onClick={() => { updateMutation.reset(); startEdit(latestEditing) }}>

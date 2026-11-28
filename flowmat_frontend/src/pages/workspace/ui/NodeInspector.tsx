@@ -28,6 +28,7 @@ import type {
 } from '../../../entities/workflow/model/types'
 import { declaredAttributes, useConditionCheck } from '../../../shared/lib/conditionLanguage'
 import { ConditionCheckNote, conditionProblem } from './ConditionCheckNote'
+import { t } from '../../../shared/i18n/t'
 
 interface Props {
   node: CanvasNodeViewModel | null
@@ -132,7 +133,7 @@ export function NodeInspector({
         await onPortCreate(toCreateProcessIoInput(node!.id, portForm))
       }
     } catch (error) {
-      setPortError(errorMessage(error, 'Could not save port.'))
+      setPortError(errorMessage(error, t('Could not save port.')))
     }
   }
 
@@ -165,13 +166,13 @@ export function NodeInspector({
     <div className="inspector">
       <h3 className="inspector__title">{node.name}</h3>
       <dl className="inspector__fields">
-        <dt>Type</dt>
+        <dt>{t('Type')}</dt>
         <dd>{node.nodeType}</dd>
-        <dt>Status</dt>
+        <dt>{t('Status')}</dt>
         <dd>{node.status}</dd>
-        <dt>Color</dt>
+        <dt>{t('Color')}</dt>
         <dd>{node.colorScheme}</dd>
-        <dt>Position</dt>
+        <dt>{t('Position')}</dt>
         <dd>
           x {node.position.x.toFixed(0)} | y {node.position.y.toFixed(0)}
         </dd>
@@ -183,12 +184,12 @@ export function NodeInspector({
         style={{ display: 'grid', gap: '10px', marginTop: '16px', marginBottom: '16px' }}
       >
         <label style={{ display: 'grid', gap: '4px' }}>
-          <span>Name</span>
+          <span>{t('Name')}</span>
           <input value={processName} onChange={(event) => setProcessName(event.target.value)} />
         </label>
 
         <label style={{ display: 'grid', gap: '4px' }}>
-          <span>Node Type</span>
+          <span>{t('Node Type')}</span>
           <select value={nodeType} onChange={(event) => setNodeType(event.target.value)}>
             {paletteDefinitions.map((definition) => (
               <option key={definition.nodeType} value={definition.nodeType}>
@@ -199,7 +200,7 @@ export function NodeInspector({
         </label>
 
         <label style={{ display: 'grid', gap: '4px' }}>
-          <span>Color</span>
+          <span>{t('Color')}</span>
           <select value={colorScheme} onChange={(event) => setColorScheme(event.target.value)}>
             {COLOR_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -210,7 +211,7 @@ export function NodeInspector({
         </label>
 
         <label style={{ display: 'grid', gap: '4px' }}>
-          <span>Description</span>
+          <span>{t('Description')}</span>
           <textarea
             rows={4}
             value={processDesc}
@@ -219,7 +220,7 @@ export function NodeInspector({
         </label>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button type="submit">Save Node</button>
+          <button type="submit">{t('Save Node')}</button>
           <button
             type="button"
             onClick={() => void onNodeDelete(node.id)}
@@ -229,27 +230,27 @@ export function NodeInspector({
               background: '#fef2f2',
             }}
           >
-            Delete Node
+            {t('Delete Node')}
           </button>
         </div>
       </form>
 
       <section className="inspector__section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h4 style={{ margin: 0 }}>Ports</h4>
+          <h4 style={{ margin: 0 }}>{t('Ports')}</h4>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" onClick={() => startNewPort('input')}>
-              Add Input
+              {t('Add Input')}
             </button>
             <button type="button" onClick={() => startNewPort('output')}>
-              Add Output
+              {t('Add Output')}
             </button>
           </div>
         </div>
 
         {allPorts.length === 0 ? (
           <p className="panel-placeholder" style={{ marginTop: '10px' }}>
-            No ports yet. Add one to create explicit connection handles.
+            {t('No ports yet. Add one to create explicit connection handles.')}
           </p>
         ) : (
           <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
@@ -262,9 +263,9 @@ export function NodeInspector({
                 style={{ textAlign: 'left' }}
               >
                 <span className="inspector__port-name">{port.name}</span>
-                <span className="inspector__port-unit">{port.direction}</span>
+                <span className="inspector__port-unit">{t(port.direction)}</span>
                 {port.unit && <span className="inspector__port-unit">{port.unit}</span>}
-                {port.required && <span className="inspector__port-badge">required</span>}
+                {port.required && <span className="inspector__port-badge">{t('required')}</span>}
               </button>
             ))}
           </div>
@@ -272,13 +273,13 @@ export function NodeInspector({
       </section>
 
       <section className="inspector__section" style={{ marginTop: '16px' }}>
-        <h4 style={{ marginTop: 0 }}>{editingPortId ? 'Edit Port' : 'Create Port'}</h4>
+        <h4 style={{ marginTop: 0 }}>{editingPortId ? t('Edit Port') : t('Create Port')}</h4>
         {itemsQuery.isLoading ? (
-          <p className="panel-placeholder">Loading project items...</p>
+          <p className="panel-placeholder">{t('Loading project items...')}</p>
         ) : (
           <form onSubmit={handlePortSubmit} style={{ display: 'grid', gap: '10px' }}>
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Direction</span>
+              <span>{t('Direction')}</span>
               <select
                 value={portForm.direction}
                 onChange={(event) =>
@@ -296,15 +297,15 @@ export function NodeInspector({
                   }))
                 }
               >
-                <option value="input">input</option>
-                <option value="output">output</option>
+                <option value="input">{t('input')}</option>
+                <option value="output">{t('output')}</option>
               </select>
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Item</span>
+              <span>{t('Item')}</span>
               <select value={portForm.itemId} onChange={(event) => handleItemChange(event.target.value)}>
-                <option value="">No item (data, file, API…)</option>
+                <option value="">{t('No item (data, file, API…)')}</option>
                 {itemOptions.map((item) => (
                   <option key={item.itemId} value={item.itemId}>
                     {item.itemName} ({item.itemCode})
@@ -312,17 +313,17 @@ export function NodeInspector({
                 ))}
               </select>
               {itemOptions.length === 0 && (
-                <span className="inspector-hint">This project has no catalog items; the port describes what flows by resource type and schema.</span>
+                <span className="inspector-hint">{t('This project has no catalog items; the port describes what flows by resource type and schema.')}</span>
               )}
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Port Name</span>
+              <span>{t('Port Name')}</span>
               <input maxLength={100} value={portForm.ioName} onChange={(event) => setPortForm((current) => ({ ...current, ioName: event.target.value }))} />
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>I/O Type</span>
+              <span>{t('I/O Type')}</span>
               <select value={portForm.ioType} onChange={(event) => setPortForm((current) => ({
                 ...current,
                 ioType: event.target.value,
@@ -338,18 +339,18 @@ export function NodeInspector({
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Role</span>
-                <input maxLength={50} value={portForm.role} onChange={(event) => setPortForm((current) => ({ ...current, role: event.target.value }))} placeholder="feed, product..." />
+                <span>{t('Role')}</span>
+                <input maxLength={50} value={portForm.role} onChange={(event) => setPortForm((current) => ({ ...current, role: event.target.value }))} placeholder={t('feed, product...')} />
               </label>
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Resource Type</span>
+                <span>{t('Resource Type')}</span>
                 <input maxLength={50} value={portForm.resourceType} onChange={(event) => setPortForm((current) => ({ ...current, resourceType: event.target.value }))} />
               </label>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Quantity</span>
+                <span>{t('Quantity')}</span>
                 <input
                   type="number"
                   min="0"
@@ -361,36 +362,36 @@ export function NodeInspector({
               </label>
 
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Unit</span>
+                <span>{t('Unit')}</span>
                 <input maxLength={20} required={portNeedsMeasure(portForm)} value={portForm.unit} onChange={(event) => setPortForm((current) => ({ ...current, unit: event.target.value }))} />
               </label>
             </div>
             <small className="inspector-hint">
               {portNeedsMeasure(portForm)
-                ? 'Material, product and item ports need a quantity and unit.'
-                : 'Quantity and unit are optional for this resource type; a quantity needs a unit.'}
+                ? t('Material, product and item ports need a quantity and unit.')
+                : t('Quantity and unit are optional for this resource type; a quantity needs a unit.')}
             </small>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Formula</span>
+              <span>{t('Formula')}</span>
               <input value={portForm.formula} onChange={(event) => setPortForm((current) => ({ ...current, formula: event.target.value }))} />
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Data schema (JSON object contract)</span>
+              <span>{t('Data schema (JSON object contract)')}</span>
               <textarea value={portForm.schemaJson} onChange={(event) => setPortForm((current) => ({ ...current, schemaJson: event.target.value }))} rows={4} aria-invalid={!isValidSchemaJson(portForm.schemaJson)} />
-              {!isValidSchemaJson(portForm.schemaJson) && <small role="alert">Enter an object schema with valid properties and required names.</small>}
+              {!isValidSchemaJson(portForm.schemaJson) && <small role="alert">{t('Enter an object schema with valid properties and required names.')}</small>}
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Validation rule</span>
+              <span>{t('Validation rule')}</span>
               <input maxLength={2000} value={portForm.validationRule} onChange={(event) => setPortForm((current) => ({ ...current, validationRule: event.target.value }))}
                 aria-invalid={conditionProblem(ruleReport) ? true : undefined} aria-describedby="port-rule-check" />
               <ConditionCheckNote id="port-rule-check" report={ruleReport} />
             </label>
 
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span>Color</span>
+              <span>{t('Color')}</span>
               <select value={portForm.colorScheme} onChange={(event) => setPortForm((current) => ({ ...current, colorScheme: event.target.value }))}>
                 {COLOR_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -402,15 +403,15 @@ export function NodeInspector({
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Required</span>
+                <span>{t('Required')}</span>
                 <select value={portForm.requiredYn} onChange={(event) => setPortForm((current) => ({ ...current, requiredYn: event.target.value as 'Y' | 'N' }))}>
-                  <option value="Y">Y — must be connected</option>
-                  <option value="N">N — from stock, or not needed</option>
+                  <option value="Y">{t('Y — must be connected')}</option>
+                  <option value="N">{t('N — from stock, or not needed')}</option>
                 </select>
               </label>
 
               <label style={{ display: 'grid', gap: '4px' }}>
-                <span>Allow Shortage</span>
+                <span>{t('Allow Shortage')}</span>
                 <select value={portForm.allowShortageYn} onChange={(event) => setPortForm((current) => ({ ...current, allowShortageYn: event.target.value as 'Y' | 'N' }))}>
                   <option value="N">N</option>
                   <option value="Y">Y</option>
@@ -421,7 +422,7 @@ export function NodeInspector({
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {portError && <p role="alert" style={{ color: '#991b1b' }}>{portError}</p>}
               <button type="submit" disabled={!hasValidPortSelection(portForm)}>
-                {editingPortId ? 'Save Port' : 'Create Port'}
+                {editingPortId ? t('Save Port') : t('Create Port')}
               </button>
               {editingPortId && (
                 <button
@@ -433,7 +434,7 @@ export function NodeInspector({
                     background: '#fef2f2',
                   }}
                 >
-                  Delete Port
+                  {t('Delete Port')}
                 </button>
               )}
             </div>
