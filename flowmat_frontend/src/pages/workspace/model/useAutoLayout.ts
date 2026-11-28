@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import dagre from '@dagrejs/dagre'
 import type { CanvasNodeViewModel, CanvasEdgeViewModel } from '../../../entities/workflow/model/types'
+import { nodeDisplayHeight } from './nodeHeight'
 
 export type LayoutDirection = 'TB' | 'LR'
 
@@ -21,7 +22,7 @@ export function useAutoLayout({ nodes, edges, onBatchUpdate, onFitView }: UseAut
       graph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 80 })
 
       for (const node of nodes) {
-        graph.setNode(node.id, { width: node.size.width, height: node.size.height })
+        graph.setNode(node.id, { width: node.size.width, height: nodeDisplayHeight(node) })
       }
       for (const edge of edges) {
         graph.setEdge(edge.source, edge.target)
@@ -34,7 +35,7 @@ export function useAutoLayout({ nodes, edges, onBatchUpdate, onFitView }: UseAut
         return {
           processId: node.id,
           posX: Math.round(x - node.size.width / 2),
-          posY: Math.round(y - node.size.height / 2),
+          posY: Math.round(y - nodeDisplayHeight(node) / 2),
         }
       })
 

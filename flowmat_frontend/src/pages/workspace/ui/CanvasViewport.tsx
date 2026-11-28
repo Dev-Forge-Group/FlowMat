@@ -67,6 +67,7 @@ import {
   type WorkspaceEditorCommandApi,
   type WorkspaceEditorSelectionSnapshot,
 } from './WorkspaceEditorLayer'
+import { nodeDisplayHeight } from '../model/nodeHeight'
 
 const nodeTypes = { flowmatNode: CanvasNode }
 const edgeTypes = { flowmatEdge: CanvasEdge }
@@ -295,7 +296,8 @@ export function CanvasViewport({
 
   useEffect(() => {
     if (reactFlowInstance) {
-      onFitViewReady?.(() => reactFlowInstance.fitView({ padding: 0.15, duration: motionStill() ? 0 : 300 }))
+      // Fitting a small graph would zoom in up to the canvas maximum (300%), pushing the ports off screen; stop at 100%.
+      onFitViewReady?.(() => reactFlowInstance.fitView({ padding: 0.15, maxZoom: 1, duration: motionStill() ? 0 : 300 }))
       onSelectAllReady?.(() => {
         setLocalNodes((nds) => {
           if (nds.every((n) => n.selected)) return nds
@@ -381,7 +383,8 @@ export function CanvasViewport({
             ...nodeWithEditing,
             selected: existing.selected,
             width: existing.width ?? n.width,
-            height: existing.height ?? n.height,
+            // A height React Flow holds from a resize stays, but a step that gained ports grows to hold them.
+            height: Math.max(existing.height ?? n.height, nodeDisplayHeight({ size: { height: 0 }, inputs: n.data.inputs, outputs: n.data.outputs })),
             position: canvasNodePosition(n.position, previousServerPositions.get(n.id), existing),
           }
         }
@@ -725,7 +728,7 @@ export function CanvasViewport({
           ? { fitView: true, fitViewOptions: { nodes: initialReading.map((id) => ({ id })), padding: 0.2, maxZoom: 1 } }
           : savedViewport
             ? { defaultViewport: savedViewport }
-            : { fitView: true, fitViewOptions: { padding: 0.15 } }
+            : { fitView: true, fitViewOptions: { padding: 0.15, maxZoom: 1 } }
         )}
         minZoom={0.1}
         maxZoom={3}

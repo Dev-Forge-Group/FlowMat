@@ -351,6 +351,14 @@ jobs:
           FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
         run: npm run test:e2e -- e2e/melon-milk-journey-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
 
+      - name: Run the novice task through the Korean screens (docs/operations/novice-trial.md §2)
+        if: matrix.shard == 2
+        working-directory: flowmat_frontend
+        env:
+          REAL_API_E2E: '1'
+          FLOWMAT_FEATURE_E2E_DISPOSABLE: '1'
+        run: npm run test:e2e -- e2e/novice-task-real-api.spec.ts --pass-with-no-tests --workers=1 --retries=0 --trace=off
+
       - name: Run real worker rota browser acceptance
         if: matrix.shard == 1
         working-directory: flowmat_frontend
